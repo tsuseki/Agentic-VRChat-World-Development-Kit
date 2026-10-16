@@ -1,6 +1,7 @@
-// StaticMergeTool: reversible draw-call merges without a lighting re-bake (vrchat-world-optimization kit).
-// Install: copy to Assets/<Project>/Editor/StaticMergeTool.cs together with MeshDecimator.cs.txt (as MeshDecimator.cs),
-// set the PARAMETERS below, compile.
+// StaticMergeTool: reversible draw-call merges without a lighting re-bake, plus error-bounded far LODs
+// (vrchat-world-optimization kit). Install: copy to Assets/<Project>/Editor/StaticMergeTool.cs together with
+// MeshDecimator.cs.txt and LodBillboards.cs.txt (as MeshDecimator.cs / LodBillboards.cs, same Editor folder) and the
+// two billboard shaders (see LodBillboards.cs.txt), set the PARAMETERS below, compile.
 // Worlds baked with Bakery: keep STATIC_MERGE_BAKERY defined (merged rows are registered in ftLightmapsStorage).
 // Worlds baked with Unity's Progressive lightmapper: delete the #define. The merged renderer then relies on its own
 // serialized lightmapIndex/lightmapScaleOffset; verify they survive a save + scene reload + play mode (unproven).
@@ -34,15 +35,14 @@ namespace WorldKit.EditorTools
     //                and that hang above floor + FixtureMinHeight. Probe-lit fixtures merge within the light-probe tolerance.
     //   * "lod":     room cluster. Its lightmapped renderers are merged like "cell" (zone none; sources' renderers
     //                disabled), and an LODGroup on the container shows LOD0 = the merged pieces (exact baked lighting),
-    //                LOD1 = decimated copies (~Lod1Ratio tris) beyond farLodDistance, LOD2 (~Lod2Ratio) beyond
-    //                farLodDistance x Lod2DistanceFactor.
+    //                LOD1 / LOD2 = seam-locked decimated copies, error-bounded (MeshDecimator.LevelError: 3 mm / 12 mm).
     //   * "heavy":   every static renderer >= HeavyMinTriangles under the root (except HeavyExcludedPaths) gets its own
     //                LODGroup: LOD0 = the original renderer, untouched; LOD1 / LOD2 = decimated copies in a child container.
-    //   Far LOD distances are for lodBias 1 and a 60 degree FOV; one parameter retunes them all (SetFarLodDistance).
-    //   VRChat scales them by its quality lodBias, and a ~100 degree VR FOV roughly halves them. Decimation is gated by
-    //   MeshDecimator (scripts/MeshDecimator.cs.txt: signed volume >= 0.8, bounds kept, >= 25 % saved); a level that
-    //   fails reuses the level above it. Decimated copies keep the source's lightmap index and scale-offset. Nothing is
-    //   ever culled.
+    //   LOD switch distances follow from each level's error bound: a level starts where its error is about one pixel
+    //   (LevelDistances); ReapplyLodHeights re-derives them without a rebuild. LodBillboards appends a per-object card
+    //   level to every 3-level LODGroup. Decimation is gated by MeshDecimator (signed volume >= 0.8, bounds kept, at
+    //   least MinSaving of the triangles dropped); a level that fails reuses the level above it. Decimated copies keep the
+    //   source's lightmap index and scale-offset. Nothing is ever culled.
     //
     // Lighting without a bake: each lightmapped source's lightmapScaleOffset is baked into the merged UV2 and the merged
     // renderer gets scale-offset (1,1,0,0) and the same lightmap index (Bakery: a storage row with the source's id).
@@ -51,7 +51,8 @@ namespace WorldKit.EditorTools
     //
     // BAKES: the bake must see the originals. Before any lighting bake run "Show Originals (For Bake)"; after the bake run
     // "Rebuild All Merges" (merged UV2 copies the current charts, so "Use Merged" alone is wrong after a bake). Rebuild
-    // too after any generator recreates source objects. Re-bake occlusion culling after every rebuild.
+    // too after any generator recreates source objects. Re-bake occlusion culling after every rebuild. "Show Originals"
+    // and every rebuild remove the LOD billboards (they hold the merged state's lighting): run LodBillboards Build after.
     public static class StaticMergeTool
     {
         // ---------------------------------------------------------------- PARAMETERS
@@ -67,11 +68,18 @@ namespace WorldKit.EditorTools
         static readonly float[] FloorLevels = { 0f };                      // world floor heights (highest below a fixture wins)
         const float FixtureMinHeight = 1.4f;                               // ceiling fixtures hang above floor + this
         const float CulledHeight = 0.0005f;
-        public const float DefaultFarLodDistance = 50f;                    // LOD1 switch distance (m) at lodBias 1, FOV 60
-        const float Lod2DistanceFactor = 2f;                               // LOD2 switch = farLodDistance x this
-        const float Lod1Ratio = 0.5f, Lod2Ratio = 0.2f;                    // requested decimation (the gate may step it up)
         public const int HeavyMinTriangles = 10000;                        // "heavy" mode threshold
-        static readonly string[] HeavyExcludedPaths = { };                 // path prefixes "heavy" never touches
+        // Path prefixes "heavy" never touches, e.g. machines that get their own Blender pass at source, or enclosed rooms
+        // whose farthest reachable view never reaches a far LOD (and whose soft meshes, e.g. bed duvets, decimate badly).
+        static readonly string[] HeavyExcludedPaths = { };
+        // Far-LOD switch distances (LevelDistances), held to the worst case: VRChat Low (lodBias 1) at a 110 deg view.
+        const float PixelAngle = 0.0015f;                                  // rad: about one pixel of a 1440 px / 110 deg eye
+        const float PropCardReach = 16f;                                   // m: a prop's card starts this far beyond its half size
+        const float RoomCardReach = 25f;                                   // m: a room's card, beyond its half floor diagonal
+        const float LevelGap = 2f;                                         // m: every level starts >= this past the previous one
+        // Prop LODGroups whose card level must not start before their room's card (a Y-axis card of a long sofa reads as
+        // a dark slab from across the room): (prop LODGroup path, room LODGroup path), e.g. ("Lounge/Sofa", "Lounge/PERFMERGE_lod").
+        static readonly (string group, string room)[] CardWithRoom = { };
         const float PlaneTolerance = 0.005f;
 
         [Serializable]
@@ -107,7 +115,6 @@ namespace WorldKit.EditorTools
         public class Manifest
         {
             public string updatedUtc, state = "merged";
-            public float farLodDistance = DefaultFarLodDistance;
             public List<Spec> specs = new List<Spec>();
             public List<Cluster> clusters = new List<Cluster>();
         }
@@ -207,6 +214,7 @@ namespace WorldKit.EditorTools
 
         // Removes and rebuilds every spec (mode == null) or one mode plus every mode after it in the order ceiling, cell,
         // glass, lod, heavy: later modes claim renderers (room clusters take what the earlier merges left), so they follow.
+        // The LOD billboards go first: they extend the LODGroups this rebuilds.
         public static string Rebuild(string mode)
         {
             Guard();
@@ -214,7 +222,7 @@ namespace WorldKit.EditorTools
             int from = mode == null ? 0 : Array.IndexOf(order, mode);
             if (from < 0) throw new ArgumentException("Unknown mode " + mode);
             var modes = new HashSet<string>(order.Skip(from));
-            var log = new List<string> { RemoveWhere(c => modes.Contains(c.mode)) };
+            var log = new List<string> { LodBillboards.Remove(), RemoveWhere(c => modes.Contains(c.mode)) };
             foreach (var md in order.Skip(from))
                 foreach (var s in Load().specs.Where(x => x.mode == md).ToList())
                     log.Add(Build(s));
@@ -227,14 +235,16 @@ namespace WorldKit.EditorTools
         {
             if (EditorApplication.isPlaying) throw new InvalidOperationException("Edit mode only.");
             bool orig = state == "originals";
+            if (orig) LodBillboards.Remove(); // cards and room-extra copies hold the merged state's lighting; rebuild after
             var m = Load();
             int n = 0;
+            var replaced = LodBillboards.ReplacedLod2(); // LOD renderers a billboard build switched off stay off
             foreach (var c in m.clusters)
             {
                 var root = Find(c.root);
                 if (root == null) continue;
                 var cont = root.Find(ContainerName(c.mode));
-                if (cont != null) foreach (var r in cont.GetComponentsInChildren<Renderer>(true)) { r.enabled = !orig; n++; }
+                if (cont != null) foreach (var r in cont.GetComponentsInChildren<Renderer>(true)) { r.enabled = !orig && !replaced.Contains(PathOf(r.transform)); n++; }
                 if (c.mode == "lod" || c.mode == "heavy") { var lg = LodHost(root, cont); if (lg) lg.enabled = !orig; }
                 foreach (var s in c.disabledSources) { var t = Find(s); var mr = t ? t.GetComponent<MeshRenderer>() : null; if (mr) mr.enabled = orig; }
             }
@@ -284,6 +294,14 @@ namespace WorldKit.EditorTools
             if (res == null) res = ExclusionReason(t.parent, udonRefs, cache);
             cache[t] = res;
             return res;
+        }
+
+        // Interactive-content test shared with LodBillboards: non-null = never merge, hide or capture it.
+        public static Func<Transform, string> InteractiveExclusion()
+        {
+            var udon = UdonReferenced();
+            var cache = new Dictionary<Transform, string>();
+            return t => ExclusionReason(t, udon, cache);
         }
 
         static string ProbeSignature(Renderer r)
@@ -376,6 +394,19 @@ namespace WorldKit.EditorTools
             if (!rows.TryGetValue(mr, out int row)) return "no row " + p.path;
             return st.bakedIDs[row] != p.bakeryId ? "id " + p.path : null;
         }
+
+        // Lightmap id a copy of r must register: r's Bakery id. False when r is lightmapped without a Bakery row (a copy
+        // would load unlit).
+        static bool SourceLightmapId(Renderer r, out int id)
+        {
+            id = -1;
+            if (!Lightmapped(r)) return true;
+            var st = Storage();
+            int row = st != null ? st.bakedRenderers.IndexOf(r) : -1;
+            if (row < 0) return false;
+            id = st.bakedIDs[row];
+            return true;
+        }
 #else
         static bool BakeInProgress => Lightmapping.isRunning;
         static object Storage() => null;
@@ -386,6 +417,7 @@ namespace WorldKit.EditorTools
         static void Register(Ctx x, MeshRenderer mr, int id, Vector4 scaleOffset) { }
         static int RemoveRows(HashSet<Renderer> merged) => 0;
         static string VerifyRow(MeshRenderer mr, Piece p, Dictionary<Renderer, int> rows, object st) => null;
+        static bool SourceLightmapId(Renderer r, out int id) { id = r.lightmapIndex; return true; }
 #endif
 
         static bool Lightmapped(Renderer r) => r.lightmapIndex >= 0 && r.lightmapIndex < 0xFFFE;
@@ -857,7 +889,7 @@ namespace WorldKit.EditorTools
             string lodNote = "";
             if (mode == "lod")
             {
-                lodNote = " " + AddFarLods(container.gameObject, container, built.Select(b => b.mr).ToList(), cluster, assetPath, x, Load().farLodDistance,
+                lodNote = " " + AddFarLods(container.gameObject, container, built.Select(b => b.mr).ToList(), cluster, assetPath, x,
                     r => cluster.pieces.First(p => p.path == PathOf(r.transform)));
             }
             manifest = Load();
@@ -886,7 +918,7 @@ namespace WorldKit.EditorTools
         // LOD1 / LOD2 = gated decimated copies of each LOD0 renderer (a level that fails reuses the level above), an LODGroup
         // on host. lodPiece gives the LOD0 renderer's lighting record (lightmap id, probe-lit flag) to copy.
         static string AddFarLods(GameObject host, Transform parent, List<MeshRenderer> lod0, Cluster cluster, string assetPath, Ctx x,
-            float farDistance, Func<MeshRenderer, Piece> lodPiece)
+            Func<MeshRenderer, Piece> lodPiece)
         {
             var lod1 = new List<Renderer>(); var lod2 = new List<Renderer>();
             int t0 = 0, t1 = 0, t2 = 0, copies = 0;
@@ -895,9 +927,7 @@ namespace WorldKit.EditorTools
             {
                 var mesh = r.GetComponent<MeshFilter>().sharedMesh;
                 int tris = Enumerable.Range(0, mesh.subMeshCount).Sum(s => (int)(mesh.GetIndexCount(s) / 3));
-                var d1 = MeshDecimator.DecimateGated(mesh, Lod1Ratio);
-                var d2 = d1 != null ? MeshDecimator.DecimateGated(mesh, Lod2Ratio) : null;
-                if (d2 != null && d2.tris >= d1.tris * 0.9f) { UnityEngine.Object.DestroyImmediate(d2.mesh); d2 = null; }
+                var (d1, d2) = LevelMeshes(mesh, WorldScale(r.transform));
                 var src = lodPiece(r);
                 Renderer m1 = r, m2 = r;
                 foreach (var (res, level) in new[] { (d1, 1), (d2, 2) })
@@ -946,7 +976,7 @@ namespace WorldKit.EditorTools
             lg.animateCrossFading = false;
             lg.SetLODs(new[] { new LOD(0.5f, lod0.Cast<Renderer>().ToArray()), new LOD(0.25f, lod1.ToArray()), new LOD(CulledHeight, lod2.ToArray()) });
             lg.RecalculateBounds();
-            ApplyFarLodHeights(lg, farDistance);
+            ApplyFarLodHeights(lg);
             cluster.size = lg.size;
             var refp = host.transform.TransformPoint(lg.localReferencePoint);
             cluster.reference = new[] { refp.x, refp.y, refp.z };
@@ -954,41 +984,92 @@ namespace WorldKit.EditorTools
             return string.Format(CultureInfo.InvariantCulture, "tris LOD0/1/2 {0}/{1}/{2} copies={3}", t0, t1, t2, copies);
         }
 
-        // LOD0 shows while size / (2 d tan30) * lodBias >= height: LOD1 from farDistance, LOD2 from farDistance x Lod2DistanceFactor
-        // (lodBias 1, FOV 60). The culled level is effectively never reached.
-        static void ApplyFarLodHeights(LODGroup lg, float farDistance)
+        // Switch distances follow from each level's error bound (MeshDecimator.LevelError), held to the worst case, VRChat
+        // Low (lodBias 1) at a 110 deg view (VRChat Medium/High push them out 1.5x/2x, a 60 deg desktop view 2.5x).
+        // LODGroup distance is measured to the group centre, so every distance adds the group's half extent (room: half
+        // floor diagonal; prop: half its largest size) and the NEAREST surface is LevelError / PixelAngle away when the
+        // level starts: 3 mm at 2 m and 12 mm at 8 m, about one pixel.
+        //  - the card (LOD3, LodBillboards) of a prop starts PropCardReach beyond its half extent, a room's RoomCardReach
+        //    beyond its half diagonal (CardWithRoom props follow their room's card);
+        //  - every level starts at least LevelGap beyond the previous one.
+        // The culled level is effectively never reached.
+        public static bool IsRoomGroup(LODGroup lg) => lg.name == ContainerName("lod") || lg.name == LodBillboards.RoomHostName;
+
+        static float RoomHalfDiagonal(LODGroup lg, float s)
+        {
+            var rs = lg.GetLODs()[0].renderers.Where(r => r != null).ToList();
+            var b = rs.Count > 0 ? rs[0].bounds : new Bounds(lg.transform.position, Vector3.one * s);
+            foreach (var r in rs) b.Encapsulate(r.bounds);
+            return 0.5f * Mathf.Sqrt(b.size.x * b.size.x + b.size.z * b.size.z);
+        }
+
+        // Distances (m, lodBias 1, 110 deg) at which the group enters level k+1, k = 0 .. levels-1. With 4 LODs the last
+        // transition is into the billboard card; with 3 it is into LOD2.
+        static float[] LevelDistances(LODGroup lg, float s, int levels)
+        {
+            bool room = IsRoomGroup(lg);
+            float half = room ? RoomHalfDiagonal(lg, s) : s * 0.5f;
+            bool hasCard = levels >= 3;
+            var d = new float[levels];
+            for (int k = 0; k < levels; k++)
+            {
+                bool card = hasCard && k == levels - 1;
+                if (!card) d[k] = half + MeshDecimator.LevelError[Mathf.Min(k + 1, 2)] / PixelAngle;
+                else d[k] = half + (room ? RoomCardReach : PropCardReach);
+                if (k > 0) d[k] = Mathf.Max(d[k], d[k - 1] + LevelGap);
+            }
+            return d;
+        }
+
+        static float Size(LODGroup lg) { var t = lg.transform; return lg.size * Mathf.Max(Mathf.Abs(t.lossyScale.x), Mathf.Abs(t.lossyScale.y), Mathf.Abs(t.lossyScale.z)); }
+
+        // Sets every transition height of a 3- or 4-level LODGroup from LevelDistances (110 deg view, lodBias 1).
+        public static void ApplyFarLodHeights(LODGroup lg)
         {
             var t = lg.transform;
-            float s = lg.size * Mathf.Max(Mathf.Abs(t.lossyScale.x), Mathf.Abs(t.lossyScale.y), Mathf.Abs(t.lossyScale.z));
-            float k = 2f * Mathf.Tan(30f * Mathf.Deg2Rad);
-            float h1 = Mathf.Clamp(s / (k * farDistance), CulledHeight * 4f, 0.99f);
-            float h2 = Mathf.Clamp(s / (k * farDistance * Lod2DistanceFactor), CulledHeight * 2f, h1 * 0.99f);
+            float s = Size(lg);
+            float k110 = 2f * Mathf.Tan(55f * Mathf.Deg2Rad);
             var lods = lg.GetLODs();
-            lods[0].screenRelativeTransitionHeight = h1;
-            lods[1].screenRelativeTransitionHeight = h2;
-            lods[2].screenRelativeTransitionHeight = CulledHeight;
+            int levels = lods.Length - 1; // transitions out of LOD0 .. LOD(n-2); the last level is never culled in practice
+            var d = LevelDistances(lg, s, levels);
+            string path = PathOf(t);
+            foreach (var (g, room) in CardWithRoom)
+            {
+                if (g != path || levels < 3) continue;
+                var roomGo = GameObject.Find("/" + room);
+                var rlg = roomGo ? roomGo.GetComponent<LODGroup>() : null;
+                if (rlg == null) continue;
+                var rd = LevelDistances(rlg, Size(rlg), rlg.lodCount - 1);
+                d[levels - 1] = Mathf.Max(d[levels - 1], rd[rd.Length - 1]);
+            }
+            float prev = 0.99f;
+            for (int k = 0; k < levels; k++)
+            {
+                float h = Mathf.Clamp(s / (k110 * d[k]), CulledHeight * (2f + 2f * (levels - k)), k == 0 ? prev : prev * 0.99f);
+                lods[k].screenRelativeTransitionHeight = h;
+                prev = h;
+            }
+            lods[levels].screenRelativeTransitionHeight = CulledHeight;
             lg.SetLODs(lods);
         }
 
-        // Sets the far-LOD switch distance (m, lodBias 1, FOV 60) of every lod / heavy LODGroup without rebuilding.
-        public static string SetFarLodDistance(float distance)
+        // Re-derives the switch heights of every lod / heavy LODGroup without rebuilding.
+        public static string ReapplyLodHeights()
         {
             Guard();
             var m = Load();
-            m.farLodDistance = distance;
             int n = 0;
             foreach (var c in m.clusters.Where(c => c.mode == "lod" || c.mode == "heavy"))
             {
                 var root = Find(c.root);
                 if (root == null) continue;
                 var lg = LodHost(root, root.Find(ContainerName(c.mode)));
-                if (lg == null || lg.lodCount != 3) continue;
-                ApplyFarLodHeights(lg, distance);
+                if (lg == null || lg.lodCount < 3) continue;
+                ApplyFarLodHeights(lg);
                 n++;
             }
-            Save(m);
             EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
-            return "farLodDistance=" + distance.ToString("0.0", CultureInfo.InvariantCulture) + " lodGroups=" + n;
+            return "lodHeights lodGroups=" + n;
         }
 
         // One LODGroup per heavy static renderer under the root (LOD0 = the original, untouched).
@@ -1033,11 +1114,11 @@ namespace WorldKit.EditorTools
                 var src = new Piece { probeLit = !Lightmapped(r) };
                 if (!src.probeLit) src.bakeryId = LightmapId(r, x);
                 string assetPath = NewAsset(path, "heavy");
-                string note = AddFarLods(r.gameObject, container, new List<MeshRenderer> { r }, cluster, assetPath, x, manifest.farLodDistance, _ => src);
+                string note = AddFarLods(r.gameObject, container, new List<MeshRenderer> { r }, cluster, assetPath, x, _ => src);
                 if (note == "farLods=none")
                 {
                     UnityEngine.Object.DestroyImmediate(container.gameObject);
-                    log.Add("SKIP " + path + " (" + tris + " tris) decimation gate failed at every budget");
+                    log.Add("SKIP " + path + " (" + tris + " tris) decimation gate failed at every level");
                     continue;
                 }
                 cluster.addedLodGroup = true;
@@ -1192,7 +1273,101 @@ namespace WorldKit.EditorTools
             return "REMOVED clusters=" + removed + " sourcesReenabled=" + restored + " storageRowsRemoved=" + rowsRemoved;
         }
 
-        static void EnsureFolder(string assetPath)
+        // Gated LOD1 / LOD2 copies of one renderer under `parent`, for LodBillboards' room extras. A level that fails the
+        // gate reuses the level above (or r itself). Lightmapped copies get r's index, scale-offset and (Bakery) a storage
+        // row with r's id, so they stay lit after a scene load. Returns the created copies.
+        public static List<MeshRenderer> DecimatedCopies(MeshRenderer r, Transform parent, string assetPath, out Renderer lod1, out Renderer lod2)
+        {
+            var made = new List<MeshRenderer>();
+            lod1 = r; lod2 = r;
+            var mf = r.GetComponent<MeshFilter>();
+            var mesh = mf ? mf.sharedMesh : null;
+            if (mesh == null || !SourceLightmapId(r, out int id)) return made;
+            var (d1, d2) = LevelMeshes(mesh, WorldScale(r.transform));
+            foreach (var (res, level) in new[] { (d1, 1), (d2, 2) })
+            {
+                if (res == null) continue;
+                res.mesh.name = mesh.name + "_LOD" + level;
+                var mr = MakeCopy(r, res.mesh, true, r.name + "_LOD" + level, parent, assetPath, id);
+                made.Add(mr);
+                if (level == 1) lod1 = mr; else lod2 = mr;
+            }
+            if (d2 == null) lod2 = lod1;
+            return made;
+        }
+
+        // Error-bounded LOD1 / LOD2 meshes of a source (MeshDecimator.LevelError). Either may be null (that level reuses
+        // the one above); LOD2 is dropped when it saves under 15 % more than LOD1.
+        static (MeshDecimator.Result d1, MeshDecimator.Result d2) LevelMeshes(Mesh mesh, float worldScale)
+        {
+            var d1 = MeshDecimator.DecimateLevel(mesh, 1, worldScale);
+            var d2 = MeshDecimator.DecimateLevel(mesh, 2, worldScale);
+            if (d1 != null && d2 != null && d2.tris >= d1.tris * 0.85f) { UnityEngine.Object.DestroyImmediate(d2.mesh); d2 = null; }
+            return (d1, d2);
+        }
+
+        // Mesh-to-world length factor for the decimation error bound: the largest |lossyScale| component.
+        static float WorldScale(Transform t)
+        {
+            var s = t.lossyScale;
+            return Mathf.Max(Mathf.Abs(s.x), Mathf.Max(Mathf.Abs(s.y), Mathf.Abs(s.z)));
+        }
+
+        // One enabled copy of r (also of a disabled merge source) for a billboard group's LOD3: the LOD2 error bound, or
+        // r's own mesh when the gate fails. Lighting record copied as in DecimatedCopies. Null when r has no mesh or is
+        // lightmapped without a lightmap record.
+        public static MeshRenderer FarCopy(MeshRenderer r, Transform parent, string assetPath)
+        {
+            var mf = r.GetComponent<MeshFilter>();
+            var mesh = mf ? mf.sharedMesh : null;
+            if (mesh == null || !SourceLightmapId(r, out int id)) return null;
+            var d = MeshDecimator.DecimateLevel(mesh, 2, WorldScale(r.transform));
+            if (d != null) d.mesh.name = mesh.name + "_LOD3";
+            var mr = MakeCopy(r, d != null ? d.mesh : mesh, d != null, r.name + "_LOD3", parent, assetPath, id);
+            mr.enabled = true;
+            return mr;
+        }
+
+        static MeshRenderer MakeCopy(MeshRenderer r, Mesh mesh, bool saveMesh, string name, Transform parent, string assetPath, int lightmapId)
+        {
+            if (saveMesh)
+            {
+                EnsureFolder(Path.GetDirectoryName(assetPath).Replace('\\', '/'));
+                if (AssetDatabase.LoadMainAssetAtPath(assetPath) == null) AssetDatabase.CreateAsset(mesh, assetPath);
+                else AssetDatabase.AddObjectToAsset(mesh, assetPath);
+            }
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            go.transform.SetPositionAndRotation(r.transform.position, r.transform.rotation);
+            var ps = parent.lossyScale; var rs = r.transform.lossyScale;
+            go.transform.localScale = new Vector3(rs.x / ps.x, rs.y / ps.y, rs.z / ps.z);
+            go.layer = r.gameObject.layer;
+            GameObjectUtility.SetStaticEditorFlags(go, GameObjectUtility.GetStaticEditorFlags(r.gameObject)
+                & ~(StaticEditorFlags.ContributeGI | StaticEditorFlags.ReflectionProbeStatic | StaticEditorFlags.OccluderStatic));
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            CopySettings(r, mr, r.sharedMaterial);
+            mr.sharedMaterials = r.sharedMaterials;
+            mr.probeAnchor = r.probeAnchor;
+            if (Lightmapped(r))
+            {
+                mr.lightmapIndex = r.lightmapIndex; mr.lightmapScaleOffset = r.lightmapScaleOffset;
+                Register(new Ctx { st = Storage() }, mr, lightmapId, r.lightmapScaleOffset);
+            }
+            return mr;
+        }
+
+        // Destroys copies made by DecimatedCopies / FarCopy and drops their lightmap storage rows.
+        public static int RemoveCopies(IEnumerable<Renderer> copies)
+        {
+            var set = new HashSet<Renderer>(copies.Where(c => c != null));
+            if (set.Count == 0) return 0;
+            RemoveRows(set);
+            foreach (var r in set) UnityEngine.Object.DestroyImmediate(r.gameObject);
+            return set.Count;
+        }
+
+        public static void EnsureFolder(string assetPath)
         {
             if (AssetDatabase.IsValidFolder(assetPath)) return;
             string parent = Path.GetDirectoryName(assetPath).Replace('\\', '/');
@@ -1207,6 +1382,7 @@ namespace WorldKit.EditorTools
             var st = Storage();
             var rows = StorageRows(st);
             var problems = new List<string>();
+            var replaced = LodBillboards.ReplacedLod2();
             int pieces = 0;
             foreach (var c in manifest.clusters)
             {
@@ -1226,7 +1402,7 @@ namespace WorldKit.EditorTools
                     }
                     string probes = c.mode == "glass" ? EffectiveProbe(mr) : ProbeSignature(mr);
                     if (probes != p.probes) problems.Add("probes " + p.path + " " + probes + " != " + p.probes);
-                    if (manifest.state == "merged" && !mr.enabled) problems.Add("merged off " + p.path);
+                    if (manifest.state == "merged" && !mr.enabled && !replaced.Contains(p.path)) problems.Add("merged off " + p.path);
                 }
                 foreach (var s in c.disabledSources)
                 {

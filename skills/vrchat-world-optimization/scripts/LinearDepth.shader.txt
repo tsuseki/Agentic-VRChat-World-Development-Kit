@@ -1,0 +1,28 @@
+// LinearDepth (vrchat-world-optimization kit): editor-only helper of LodBillboards.cs.txt. Install: copy anywhere under
+// Assets, e.g. Assets/<Project>/Editor/LinearDepth.shader. Converts a camera depth buffer to linear eye depth (metres)
+// for the billboard capture (coverage = depth nearer than the far plane).
+// The depth RT is the Blit source (_MainTex), so Graphics.Blit applies the same render-texture flip as the colour copy.
+// _ZB = (x, y, z, w) as Unity's _ZBufferParams of the capture camera; eye depth = 1 / (z * d + w).
+Shader "Hidden/WorldKit/LinearDepth"
+{
+    Properties { _MainTex ("Depth", 2D) = "white" {} }
+    SubShader
+    {
+        Cull Off ZWrite Off ZTest Always
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+            #include "UnityCG.cginc"
+            sampler2D _MainTex;
+            float4 _ZB;
+            float4 frag(v2f_img i) : SV_Target
+            {
+                float d = tex2D(_MainTex, i.uv).r;
+                return 1.0 / (_ZB.z * d + _ZB.w);
+            }
+            ENDCG
+        }
+    }
+}

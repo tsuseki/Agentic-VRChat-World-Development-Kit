@@ -1,5 +1,6 @@
-// MeshDecimator: seam-locked quadric decimation for far LODs (vrchat-world-optimization kit). Used by StaticMergeTool's
-// "lod" and "heavy" modes. Install: copy to Assets/<Project>/Editor/MeshDecimator.cs next to StaticMergeTool.cs.
+// MeshDecimator: seam-locked, error-bounded quadric decimation for far LODs (vrchat-world-optimization kit). Used by
+// StaticMergeTool's "lod" and "heavy" modes and by LodBillboards. Install: copy to Assets/<Project>/Editor/MeshDecimator.cs
+// next to StaticMergeTool.cs.
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,13 +13,34 @@ namespace WorldKit.EditorTools
     // one attribute vertex (UV0/UV2/normal/tangent/colour seam), touches more than one submesh, or lies on an open or
     // non-manifold border is locked: it never moves and is never removed. Lightmap (UV2) charts therefore keep their
     // borders, and interior vertices are re-interpolated along the collapsed edge (UVs, normals, colours).
-    // Gate (vrchat-world-optimization "Decimation gate"): signed volume ratio within VolumeTolerance of the source,
-    // bounds kept, zero-length normals repaired. DecimateGated steps the triangle budget up until the gate holds.
+    // LOD levels are ERROR-BOUNDED, not ratio-driven (on a penthouse world the old 50 %/20 % ratio LODs shredded thin coves
+    // and panel edges into saw teeth at the first level). Quadrics use unit plane weights, so sqrt(error) bounds the
+    // largest distance of a vertex from every original face plane it absorbed: a level never moves a surface by more than
+    // its LevelError. Collapses stop at that bound, whatever triangle count it leaves. Collapses that fold a UV0 or UV2
+    // triangle are rejected too (lightmap blotches). Gate: signed volume ratio within VolumeTolerance of the source,
+    // bounds kept, zero-length normals repaired.
     public static class MeshDecimator
     {
         public const float VolumeTolerance = 0.2f;  // |decimated/source signed volume - 1| <= this (>= 0.8)
         public const float BoundsTolerance = 0.05f; // every bounds extent keeps >= 95 %
-        const float FlipDot = 0.2f;                 // reject collapses that turn a face normal by more than ~78 deg
+        const float FlipDot = 0.2f;                 // ratio mode: reject collapses that turn a face normal by more than ~78 deg
+
+        // Max surface deviation (m) and max face-normal turn (dot) per LOD level. Switch distances follow from these:
+        // StaticMergeTool puts level k at (nearest surface) LevelError[k] / PixelAngle away, i.e. about one pixel.
+        public static readonly float[] LevelError = { 0f, 0.003f, 0.012f };
+        static readonly float[] LevelFlipDot = { 1f, 0.8f, 0.6f };
+
+        // Error-bounded decimation for LOD level 1 or 2. Null when the gate fails or the level saves less than MinSaving.
+        // worldScale: largest |lossyScale| component of the renderer. Decimation runs on positions scaled to metres, so the
+        // error bound and every length/area epsilon hold for 100x-scaled FBX meshes too (in local units a 1 cm couch mesh
+        // fell under Vector3.normalized's 1e-5 cut-off: zero plane normals, zero cost, unbounded collapses).
+        public static Result DecimateLevel(Mesh src, int level, float worldScale)
+        {
+            var res = Decimate(src, 0.02f, LevelError[level], LevelFlipDot[level], worldScale);
+            if (res.passed && res.achieved <= 1f - MinSaving) return res;
+            if (res.mesh != null) UnityEngine.Object.DestroyImmediate(res.mesh);
+            return null;
+        }
 
         public class Result
         {
@@ -31,23 +53,9 @@ namespace WorldKit.EditorTools
                 sourceTris, tris, achieved, requested, volumeRatio, boundsRatio, lockedVertices, vertices, normalsRepaired, passed ? "PASS" : "FAIL");
         }
 
-        // A level must drop at least this share of the triangles. Seam-locked meshes that only reach ~0.8 (Penthouse bar
-        // millwork, 2026-10-12) lost visible fluting at the switch for an 18 % saving, so such levels are not worth the pop.
-        public const float MinSaving = 0.25f;
-
-        // Tries targetRatio, then steps up by 0.1 until the gate passes or maxRatio is reached. Returns null if nothing passes
-        // or if the best passing result does not save at least MinSaving of the triangles.
-        public static Result DecimateGated(Mesh src, float targetRatio, float maxRatio = 1f - MinSaving)
-        {
-            for (float r = targetRatio; r <= maxRatio + 1e-4f; r += 0.1f)
-            {
-                var res = Decimate(src, r);
-                if (res.passed && res.achieved <= 1f - MinSaving) return res;
-                if (res.mesh != null) UnityEngine.Object.DestroyImmediate(res.mesh);
-                if (res.passed) return null; // passes but saves too little: higher budgets save even less
-            }
-            return null;
-        }
+        // A level must drop at least this share of the triangles, else it reuses the level above (a copy that saves less
+        // costs more memory than it saves in vertex work).
+        public const float MinSaving = 0.2f;
 
         struct Key : IEquatable<Key>
         {
@@ -61,10 +69,14 @@ namespace WorldKit.EditorTools
 
         struct Cand { public double cost; public int u, v, su, sv; public Vector3 p; public float t; }
 
-        public static Result Decimate(Mesh src, float targetRatio)
+        // targetRatio: stop at this share of the triangles. maxError (m): stop before any vertex would leave one of its
+        // original face planes by more than this (unit plane weights; infinity = area-weighted ratio mode). posScale: mesh
+        // units to metres; positions are scaled for the whole run and divided back on output.
+        public static Result Decimate(Mesh src, float targetRatio, float maxError = float.PositiveInfinity, float flipDot = FlipDot, float posScale = 1f)
         {
             // ---- read attributes
             var srcPos = src.vertices;
+            if (posScale != 1f) for (int i = 0; i < srcPos.Length; i++) srcPos[i] *= posScale;
             int n0 = srcPos.Length;
             bool hasN = src.HasVertexAttribute(VertexAttribute.Normal), hasT = src.HasVertexAttribute(VertexAttribute.Tangent), hasC = src.HasVertexAttribute(VertexAttribute.Color);
             var srcN = hasN ? src.normals : null; var srcT = hasT ? src.tangents : null; var srcC = hasC ? src.colors : null;
@@ -150,6 +162,8 @@ namespace WorldKit.EditorTools
             // ---- adjacency and quadrics
             var vt = new List<int>[n0];
             for (int i = 0; i < n0; i++) if (used[i]) vt[i] = new List<int>(6);
+            bool errorBounded = !float.IsInfinity(maxError);
+            double maxCost = errorBounded ? (double)maxError * maxError : double.MaxValue;
             var q = new double[n0 * 10];
             var triAlive = new bool[T];
             for (int t = 0; t < T; t++)
@@ -161,7 +175,8 @@ namespace WorldKit.EditorTools
                 double area = cr.magnitude * 0.5;
                 if (area < 1e-12) continue;
                 var nn = cr.normalized; double d = -Vector3.Dot(nn, pos[a]);
-                AddPlane(q, a, nn, d, area); AddPlane(q, b, nn, d, area); AddPlane(q, c, nn, d, area);
+                double w = errorBounded ? 1.0 : area;
+                AddPlane(q, a, nn, d, w); AddPlane(q, b, nn, d, w); AddPlane(q, c, nn, d, w);
             }
             var stamp = new int[n0]; var vAlive = new bool[n0];
             for (int i = 0; i < n0; i++) vAlive[i] = used[i];
@@ -181,10 +196,12 @@ namespace WorldKit.EditorTools
             {
                 var c = Pop(heap);
                 if (c.u < 0 || !vAlive[c.u] || !vAlive[c.v] || stamp[c.u] != c.su || stamp[c.v] != c.sv) continue;
+                if (c.cost > maxCost) break; // min-heap: every remaining valid collapse costs at least this much
                 if (!LinkOk(c.u, c.v, vt, tri, triAlive, scratch)) continue;
                 bool vMoves = !locked[c.v];
-                if (FlipsOrDegenerates(c.u, c.v, c.p, vt, tri, triAlive, pos)) continue;
-                if (vMoves && FlipsOrDegenerates(c.v, c.u, c.p, vt, tri, triAlive, pos)) continue;
+                if (FlipsOrDegenerates(c.u, c.v, c.p, vt, tri, triAlive, pos, flipDot)) continue;
+                if (vMoves && FlipsOrDegenerates(c.v, c.u, c.p, vt, tri, triAlive, pos, flipDot)) continue;
+                if (errorBounded && (FoldsUV(c, uv, dims, 0, vt, tri, triAlive) || FoldsUV(c, uv, dims, 1, vt, tri, triAlive))) continue;
 
                 // apply: u disappears into v
                 if (vMoves)
@@ -240,6 +257,7 @@ namespace WorldKit.EditorTools
                 }
             }
             if (hasN) res.normalsRepaired = RepairNormals(oPos, oN, subTris);
+            if (posScale != 1f) for (int i = 0; i < oPos.Count; i++) oPos[i] /= posScale;
             var m = new Mesh { name = src.name + "_dec" };
             if (oPos.Count > 65535) m.indexFormat = IndexFormat.UInt32;
             m.SetVertices(oPos);
@@ -258,7 +276,7 @@ namespace WorldKit.EditorTools
 
             // ---- gate
             var centre = src.bounds.center;
-            double v0 = SignedVolume(srcPos, src, centre), v1 = SignedVolume(m.vertices, m, centre);
+            double v0 = SignedVolume(src.vertices, src, centre), v1 = SignedVolume(m.vertices, m, centre);
             res.volumeRatio = Math.Abs(v0) > 1e-9 ? (float)(v1 / v0) : 1f;
             var s0 = src.bounds.size; var s1 = m.bounds.size;
             res.boundsRatio = Mathf.Min(Ratio(s1.x, s0.x), Mathf.Min(Ratio(s1.y, s0.y), Ratio(s1.z, s0.z)));
@@ -332,7 +350,7 @@ namespace WorldKit.EditorTools
             return shared > 0 && common <= shared;
         }
 
-        static bool FlipsOrDegenerates(int moving, int other, Vector3 p, List<int>[] vt, int[] tri, bool[] triAlive, Vector3[] pos)
+        static bool FlipsOrDegenerates(int moving, int other, Vector3 p, List<int>[] vt, int[] tri, bool[] triAlive, Vector3[] pos, float flipDot)
         {
             foreach (int t in vt[moving])
             {
@@ -345,7 +363,32 @@ namespace WorldKit.EditorTools
                 var after = Vector3.Cross(pb - pa, pc - pa);
                 float la = after.magnitude, lb = before.magnitude;
                 if (la < 1e-10f) return true;
-                if (lb > 1e-10f && Vector3.Dot(before / lb, after / la) < FlipDot) return true;
+                if (lb > 1e-10f && Vector3.Dot(before / lb, after / la) < flipDot) return true;
+            }
+            return false;
+        }
+
+        // True when the collapse would flip or collapse a triangle in UV channel ch (both endpoints take lerp(u, v, t)).
+        static bool FoldsUV(Cand c, Vector4[][] uv, int[] dims, int ch, List<int>[] vt, int[] tri, bool[] triAlive)
+        {
+            if (dims[ch] == 0) return false;
+            var a = uv[ch];
+            var nu = Vector4.Lerp(a[c.u], a[c.v], c.t);
+            for (int s = 0; s < 2; s++)
+            {
+                int moving = s == 0 ? c.u : c.v, other = s == 0 ? c.v : c.u;
+                foreach (int t in vt[moving])
+                {
+                    if (!triAlive[t]) continue;
+                    int i0 = tri[3 * t], i1 = tri[3 * t + 1], i2 = tri[3 * t + 2];
+                    if (i0 == other || i1 == other || i2 == other) continue;
+                    Vector2 p0 = a[i0], p1 = a[i1], p2 = a[i2];
+                    float before = (p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x);
+                    if (i0 == moving) p0 = nu; else if (i1 == moving) p1 = nu; else p2 = nu;
+                    float after = (p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x);
+                    if (Mathf.Abs(before) < 1e-14f) continue; // already degenerate in UV: nothing to fold
+                    if (after * before <= 0f || Mathf.Abs(after) < Mathf.Abs(before) * 0.05f) return true;
+                }
             }
             return false;
         }

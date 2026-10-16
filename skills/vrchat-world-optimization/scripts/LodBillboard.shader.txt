@@ -1,0 +1,91 @@
+// LodBillboard (vrchat-world-optimization kit): the card shader of LodBillboards.cs.txt. Install: copy to a NON-Editor
+// folder, e.g. Assets/<Project>/Shaders/LodBillboard.shader (the card materials ship with the world).
+// Lowest-LOD billboards: per-object Y-axis cards, textured from an 8-direction capture atlas page. Many
+// cards share one mesh and one page material; everything a card needs is in its vertex data, never the object matrix,
+// so static batching can merge every card of a page into one draw:
+//   TEXCOORD0 = card corner (-1..1, -1..1)
+//   TEXCOORD2 = (pivot world xyz, tile size in page UV)
+//   TEXCOORD3 = (half width, half height, strip origin u, strip origin v)
+// The 8 frames of a card are a horizontal strip of square tiles starting at the strip origin.
+// POSITION only sizes the renderer bounds (a box around every orientation of the card).
+// Frame k was captured from pivot + (sin k*45deg, 0, cos k*45deg), looking at the pivot; the card shows the frame
+// nearest to the viewer's direction. Unlit: the capture holds the baked lighting.
+Shader "WorldKit/LodBillboard"
+{
+    Properties
+    {
+        _MainTex ("Frame atlas page (sRGB, alpha = coverage)", 2D) = "black" {}
+        _Cutoff ("Alpha cutoff", Range(0, 1)) = 0.5
+        _Frames ("Frames per billboard", Float) = 8
+    }
+    SubShader
+    {
+        Tags { "RenderType"="TransparentCutout" "Queue"="AlphaTest" "IgnoreProjector"="True" }
+        Pass
+        {
+            Cull Off
+            ZWrite On
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile_instancing
+            #pragma multi_compile_fog
+            #include "UnityCG.cginc"
+
+            sampler2D _MainTex;
+            float _Cutoff, _Frames;
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 corner : TEXCOORD0;
+                float4 pivot : TEXCOORD2;
+                float4 size : TEXCOORD3;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                UNITY_FOG_COORDS(1)
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+                float3 pivot = v.pivot.xyz;
+                float3 toCam = _WorldSpaceCameraPos - pivot;
+                toCam.y = 0;
+                float3 dir = length(toCam) > 1e-4 ? normalize(toCam) : float3(0, 0, 1);
+                // right as the capture camera saw it: camera looks along -dir, right = up x forward
+                float3 right = normalize(cross(float3(0, 1, 0), -dir));
+                float3 world = pivot + right * (v.corner.x * v.size.x) + float3(0, 1, 0) * (v.corner.y * v.size.y);
+                o.pos = mul(UNITY_MATRIX_VP, float4(world, 1));
+
+                float step = 6.2831853 / _Frames;
+                float k = fmod(round(atan2(dir.x, dir.z) / step) + _Frames, _Frames);
+                float tile = v.pivot.w;
+                float2 local = v.corner * 0.5 + 0.5;
+                // half-texel inset keeps bilinear taps inside the tile
+                local = lerp(0.004, 0.996, local);
+                o.uv = float2(v.size.z + (k + local.x) * tile, v.size.w + local.y * tile);
+                UNITY_TRANSFER_FOG(o, o.pos);
+                return o;
+            }
+
+            fixed4 frag(v2f i) : SV_Target
+            {
+                fixed4 c = tex2D(_MainTex, i.uv);
+                clip(c.a - _Cutoff);
+                UNITY_APPLY_FOG(i.fogCoord, c);
+                return fixed4(c.rgb, 1);
+            }
+            ENDCG
+        }
+    }
+    Fallback Off
+}

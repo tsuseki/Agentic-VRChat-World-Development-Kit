@@ -1,0 +1,668 @@
+// LodBillboards: appends a per-object Y-axis billboard card level (LOD3) to every 3-level LODGroup, captured from the
+// baked scene in 8 directions (vrchat-world-optimization kit). Builds on StaticMergeTool's "lod" / "heavy" LODGroups.
+// Install: copy to Assets/<Project>/Editor/LodBillboards.cs next to StaticMergeTool.cs and MeshDecimator.cs; copy
+// LodBillboard.shader.txt to a NON-Editor folder as LodBillboard.shader (the cards render in the world) and
+// LinearDepth.shader.txt anywhere as LinearDepth.shader (capture only); set the PARAMETERS below, compile.
+// Run "Tools/Static Merge/LOD Billboards/Build" (or LodBillboards.BuildAsync from a script) after every merge rebuild or bake.
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace WorldKit.EditorTools
+{
+    // Four LOD levels: LOD0 full, LOD1 / LOD2 error-bounded decimated copies (StaticMergeTool), LOD3 billboards. LOD3 is
+    // appended to every 3-level LODGroup in the scene and holds PER-OBJECT cards (whole-room cards looked flat from
+    // outside): every object of the group gets its own Y-axis card (WorldKit/LodBillboard) captured from Frames
+    // horizontal directions. Merged pieces are expanded back to their source objects for the capture. An object ("unit")
+    // is the highest hierarchy node under the room whose renderers fit in UnitMaxWidth x UnitMaxHeight; units under
+    // UnitMinSize are dropped at LOD3; single renderers bigger than a unit that are loose room renderers stay as geometry.
+    // All cards of a group on one atlas page are one mesh (each quad turns about its own pivot), and every card shares
+    // the page material, so static batching draws one batch per visible page.
+    // Re-run Build() after StaticMergeTool "Rebuild All Merges", any SetState, or a lighting bake (the capture holds the
+    // baked lighting; rebuilds and "Show Originals" remove the cards), then re-bake occlusion.
+    public static class LodBillboards
+    {
+        // ---------------------------------------------------------------- PARAMETERS
+        public const string AssetDir = "Assets/PerfMerge/Billboards";            // atlas pages, materials, card meshes
+        public const string ManifestPath = AssetDir + "/billboard_manifest.json"; // rollback record
+        public const string MenuRoot = StaticMergeTool.MenuRoot + "LOD Billboards/";
+        public const string ShaderName = "WorldKit/LodBillboard", DepthShaderName = "Hidden/WorldKit/LinearDepth";
+        const string ChildName = "LOD_Billboard";
+        const string ContainerPrefix = "LODBB_";
+        const int Frames = 8, Page = 4096;
+        const float Near = 0.05f;
+        const float UnitMaxWidth = 3.6f, UnitMaxHeight = 3.2f, UnitMinSize = 0.25f;
+        // Room extras (loose renderers that join a room group) get their own gated LOD1 / LOD2 copies.
+        const int ExtraMinTris = 300;
+        const string ExtraLodContainer = ContainerPrefix + "extralods";
+        const string ExtraLodAsset = AssetDir + "/RoomExtraLods.asset";
+        // Objects a Y-axis card misrepresents keep a mesh at LOD3: lit fixtures (emissive or Unlit materials, else
+        // pendants vanish), flat objects under FlatHeight (a mat card is a slanted sliver) and wall panels thinner than
+        // PanelDepth and wider than PanelWidth (a turning card of a wall bay sticks out of the wall as a dark slab).
+        const float FlatHeight = 0.25f, PanelDepth = 0.5f, PanelWidth = 1f;
+        // LODGroup paths whose decimated LOD1 shows lightmap blotches (UV2 charts moved by decimation): LOD1 and LOD2
+        // reuse the LOD0 renderers, the card stays.
+        static readonly string[] Lod1UsesLod0 = { };
+        // Furnished room roots without a "lod" merge cluster that should still switch to cards: each gets a host LODGroup
+        // (RoomHostName) with LOD0 = LOD1 = LOD2 = the room's renderers and LOD3 = the cards. Leave out open areas, rooms
+        // of mostly interactive content and enclosed rooms no far view reaches. Scene paths, e.g. "Floor1/Bathroom".
+        public static readonly string[] RoomHostPaths = { };
+        public const string RoomHostName = ContainerPrefix + "roomlod";
+
+        static bool Emissive(Material m) => m != null && (m.shader.name.StartsWith("Unlit", StringComparison.Ordinal)
+            || m.IsKeywordEnabled("_EMISSION") && m.HasProperty("_EmissionColor") && m.GetColor("_EmissionColor").maxColorComponent > 0.01f);
+
+        static bool KeepMesh(List<Renderer> rs, Bounds b)
+        {
+            if (rs.Any(r => r.sharedMaterials.Any(Emissive))) return true;
+            float wide = Mathf.Max(b.size.x, b.size.z), thin = Mathf.Min(b.size.x, b.size.z);
+            if (b.size.y < FlatHeight && wide >= UnitMinSize) return true;
+            return b.size.y >= FlatHeight && thin < PanelDepth && wide > PanelWidth;
+        }
+
+        [Serializable] public class Unit { public string name; public List<string> renderers = new List<string>(); public float[] pivot; public float halfWidth, halfHeight; public int page, tile, x, y; }
+        [Serializable] public class Entry { public string lodGroup; public float cardDistance; public int keptMesh; public List<Unit> units = new List<Unit>(); public List<string> lod3Geometry = new List<string>(); public int dropped; public List<string> lod2 = new List<string>(); public List<string> disabledLod2 = new List<string>(); public List<string> roomExtras = new List<string>(); public List<string> extraCopies = new List<string>(); public List<string> lod1 = new List<string>(); public List<string> disabledLod1 = new List<string>(); }
+        [Serializable] public class Manifest { public string updatedUtc; public int pages; public List<Entry> entries = new List<Entry>(); }
+
+        static Manifest Load() => File.Exists(ManifestPath) ? JsonUtility.FromJson<Manifest>(File.ReadAllText(ManifestPath)) : new Manifest();
+
+        // Paths of the renderers the billboard build switched off (StaticMergeTool.SetState/Verify honour it).
+        public static HashSet<string> ReplacedLod2() => new HashSet<string>(Load().entries.SelectMany(e => (e.disabledLod2 ?? new List<string>()).Concat(e.disabledLod1 ?? new List<string>())));
+        static void Save(Manifest m) { m.updatedUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture); Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath)); File.WriteAllText(ManifestPath, JsonUtility.ToJson(m, true)); }
+        static string PathOf(Transform t) => StaticMergeTool.PathOf(t);
+        static Renderer FindRenderer(string path) { var go = GameObject.Find("/" + path); return go ? go.GetComponent<Renderer>() : null; }
+
+        static bool IsRoom(LODGroup lg) => StaticMergeTool.IsRoomGroup(lg) && lg.transform.parent != null;
+
+        static void EnsureRoomHosts()
+        {
+            foreach (var path in RoomHostPaths)
+            {
+                var room = GameObject.Find("/" + path);
+                if (room == null || room.transform.Find(RoomHostName) != null) continue;
+                var go = new GameObject(RoomHostName);
+                go.transform.SetParent(room.transform, false);
+                var lg = go.AddComponent<LODGroup>();
+                lg.fadeMode = LODFadeMode.None;
+                lg.SetLODs(new[] { new LOD(0.5f, new Renderer[0]), new LOD(0.25f, new Renderer[0]), new LOD(0.01f, new Renderer[0]) });
+            }
+        }
+
+        static IEnumerable<LODGroup> Targets() =>
+            UnityEngine.Object.FindObjectsOfType<LODGroup>().Where(lg => lg.lodCount == 3).OrderBy(lg => PathOf(lg.transform), StringComparer.Ordinal);
+
+        static Camera CaptureCamera()
+        {
+            var go = GameObject.Find("__LodBillboardCam__");
+            if (go == null) { go = new GameObject("__LodBillboardCam__") { hideFlags = HideFlags.HideAndDontSave }; go.AddComponent<Camera>(); }
+            var cam = go.GetComponent<Camera>(); // never destroyed after Render(): reused
+            cam.enabled = false; cam.orthographic = true; cam.allowHDR = true; cam.allowMSAA = false; cam.useOcclusionCulling = false;
+            cam.clearFlags = CameraClearFlags.SolidColor; cam.backgroundColor = new Color(0, 0, 0, 0);
+            return cam;
+        }
+
+        // World bounds from the mesh, valid for disabled renderers too (merge sources are disabled).
+        static Bounds WorldBounds(Renderer r)
+        {
+            var mf = r.GetComponent<MeshFilter>();
+            if (mf == null || mf.sharedMesh == null) return r.bounds;
+            var lb = mf.sharedMesh.bounds; var m = r.transform.localToWorldMatrix;
+            var b = new Bounds(m.MultiplyPoint3x4(lb.min), Vector3.zero);
+            for (int i = 0; i < 8; i++)
+                b.Encapsulate(m.MultiplyPoint3x4(new Vector3((i & 1) == 0 ? lb.min.x : lb.max.x, (i & 2) == 0 ? lb.min.y : lb.max.y, (i & 4) == 0 ? lb.min.z : lb.max.z)));
+            return b;
+        }
+        static Bounds WorldBounds(IEnumerable<Renderer> rs) { Bounds? b = null; foreach (var r in rs) { var w = WorldBounds(r); if (b == null) b = w; else { var x = b.Value; x.Encapsulate(w); b = x; } } return b ?? new Bounds(); }
+        static bool Fits(Bounds b) => Mathf.Max(b.size.x, b.size.z) <= UnitMaxWidth && b.size.y <= UnitMaxHeight;
+
+        [MenuItem(MenuRoot + "Build")]
+        static void MenuBuild() { Debug.Log("[LodBillboards] " + Build()); }
+
+        // Tile = the pixels the object covers where its card first appears: a 1440 px wide eye across 110 deg sees
+        // 1440 / (2 tan 55) = 504 px per metre at 1 m. Never above 128, never below 16.
+        static int TileFor(Bounds b, float cardDistance)
+        {
+            float px = Mathf.Max(b.size.x, b.size.y, b.size.z) * 504f / Mathf.Max(1f, cardDistance);
+            return Mathf.Clamp(Mathf.NextPowerOfTwo(Mathf.CeilToInt(px)), 16, 128);
+        }
+
+        // Distance (m, lodBias 1, 110 deg) where the card level will start: the far-LOD rules with a 4th level appended.
+        static float CardDistance(LODGroup lg)
+        {
+            var orig = lg.GetLODs();
+            lg.SetLODs(orig.Concat(new[] { new LOD(0.0001f, new Renderer[0]) }).ToArray());
+            StaticMergeTool.ApplyFarLodHeights(lg);
+            float h = lg.GetLODs()[orig.Length - 1].screenRelativeTransitionHeight;
+            lg.SetLODs(orig);
+            var t = lg.transform;
+            float s = lg.size * Mathf.Max(Mathf.Abs(t.lossyScale.x), Mathf.Abs(t.lossyScale.y), Mathf.Abs(t.lossyScale.z));
+            return s / (2f * Mathf.Tan(55f * Mathf.Deg2Rad) * h);
+        }
+
+        [MenuItem(MenuRoot + "Remove (Rollback)")]
+        static void MenuRemove() { Debug.Log("[LodBillboards] " + Remove()); }
+
+        // ------------------------------------------------------------------ build job
+        class Work { public Entry entry; public Unit unit; public List<Renderer> renderers; }
+        class Job
+        {
+            public Manifest m; public List<Work> work = new List<Work>(); public int next;
+            public List<(Entry e, LODGroup lg, MeshRenderer r)> decim = new List<(Entry, LODGroup, MeshRenderer)>(); public int nextDecim;
+            public List<(Entry e, LODGroup lg, MeshRenderer r)> far = new List<(Entry, LODGroup, MeshRenderer)>(); public int nextFar;
+            public Dictionary<Renderer, Renderer> lod2Of = new Dictionary<Renderer, Renderer>();
+            public Dictionary<Entry, List<Renderer>> lod3Copies = new Dictionary<Entry, List<Renderer>>();
+            public List<Texture2D> pages = new List<Texture2D>(); public List<int> pageSize = new List<int>();
+            public Camera cam; public Material depthMat; public float lodBias; public int layer;
+            public Dictionary<int, RenderTexture> color = new Dictionary<int, RenderTexture>(), depth = new Dictionary<int, RenderTexture>(), lin = new Dictionary<int, RenderTexture>();
+            public Dictionary<int, Texture2D> colTex = new Dictionary<int, Texture2D>(), depTex = new Dictionary<int, Texture2D>();
+        }
+        static Job job;
+
+        // Synchronous build (menu). Scripted callers (e.g. over an editor bridge) use BuildAsync to keep the editor responsive.
+        public static string Build()
+        {
+            string s = Begin();
+            if (s != null) return s;
+            while (!Step(1e9)) { }
+            return Finish();
+        }
+
+        // Progress and result in SessionState "LodBB" ("RUN i/n", then "DONE ..." or "ERR ...").
+        // A second start while one runs is refused: it would replace the live job, which then dies on a null job and
+        // records the running job's temporary lodBias (1000) as the value to restore (seen on a retried bridge call).
+        static bool running;
+        public static void BuildAsync()
+        {
+            if (running) return;
+            string s = Begin();
+            if (s != null) { SessionState.SetString("LodBB", "ERR " + s); return; }
+            running = true;
+            SessionState.SetString("LodBB", "RUN 0/" + job.work.Count);
+            EditorApplication.CallbackFunction cb = null;
+            cb = () =>
+            {
+                try
+                {
+                    if (!Step(0.25)) { SessionState.SetString("LodBB", "RUN decimate " + job.nextDecim + "/" + job.decim.Count + " far " + job.nextFar + "/" + job.far.Count + " capture " + job.next + "/" + job.work.Count); return; }
+                    EditorApplication.update -= cb;
+                    running = false;
+                    SessionState.SetString("LodBB", "DONE " + Finish());
+                }
+                catch (Exception e) { EditorApplication.update -= cb; running = false; Cleanup(); SessionState.SetString("LodBB", "ERR " + e); }
+            };
+            EditorApplication.update += cb;
+        }
+
+        static string Begin()
+        {
+            if (EditorApplication.isPlaying) return "ERROR edit mode only";
+            var depthShader = Shader.Find(DepthShaderName);
+            if (Shader.Find(ShaderName) == null || depthShader == null) return "ERROR install the shaders " + ShaderName + " and " + DepthShaderName + " (LodBillboard.shader.txt, LinearDepth.shader.txt)";
+            Remove();
+            if (AssetDatabase.IsValidFolder(AssetDir))
+                foreach (var p in AssetDatabase.FindAssets("LodBillboard", new[] { AssetDir }).Select(AssetDatabase.GUIDToAssetPath).ToList()) AssetDatabase.DeleteAsset(p);
+            AssetDatabase.DeleteAsset(ExtraLodAsset);
+            StaticMergeTool.EnsureFolder(AssetDir);
+            EnsureRoomHosts();
+            var groups = Targets().ToList();
+            var excl = StaticMergeTool.InteractiveExclusion();
+            var inGroups = new HashSet<Renderer>(UnityEngine.Object.FindObjectsOfType<LODGroup>().SelectMany(g => g.GetLODs().SelectMany(l => l.renderers)).Where(r => r != null));
+            var pieceSources = new Dictionary<string, List<string>>();
+            foreach (var c in StaticMergeTool.Load().clusters)
+                foreach (var p in c.pieces)
+                    pieceSources[p.path] = p.sources.Select(s => s.Split('#')[0]).Distinct().ToList();
+
+            int layer = -1;
+            for (int i = 31; i >= 8 && layer < 0; i--) if (string.IsNullOrEmpty(LayerMask.LayerToName(i))) layer = i;
+            if (layer < 0) return "ERROR no free layer for the capture";
+
+            job = new Job { m = new Manifest(), layer = layer, lodBias = QualitySettings.lodBias };
+            var units = new List<Work>();
+            foreach (var lg in groups)
+            {
+                var e = new Entry { lodGroup = PathOf(lg.transform) };
+                e.lod2 = lg.GetLODs()[2].renderers.Where(r => r != null).Select(r => PathOf(r.transform)).ToList();
+                var extras = RoomExtras(lg, excl, inGroups);
+                if (extras.Count > 0)
+                {
+                    var lv = lg.GetLODs();
+                    for (int k = 0; k < 3; k++) lv[k].renderers = lv[k].renderers.Concat(extras).ToArray();
+                    lg.SetLODs(lv);
+                    lg.RecalculateBounds();
+                }
+                e.roomExtras = extras.Select(r => PathOf(r.transform)).ToList();
+                foreach (var r in extras.OfType<MeshRenderer>())
+                {
+                    var mf = r.GetComponent<MeshFilter>();
+                    if (mf != null && mf.sharedMesh != null && mf.sharedMesh.triangles.Length / 3 >= ExtraMinTris) job.decim.Add((e, lg, r));
+                }
+                if (Lod1UsesLod0.Contains(PathOf(lg.transform)))
+                {
+                    var lv = lg.GetLODs();
+                    e.lod1 = lv[1].renderers.Where(r => r != null).Select(r => PathOf(r.transform)).ToList();
+                    foreach (var r in lv[1].renderers.Concat(lv[2].renderers).Distinct().Where(r => r != null && r.enabled && !lv[0].renderers.Contains(r))) { r.enabled = false; e.disabledLod1.Add(PathOf(r.transform)); }
+                    lv[1].renderers = lv[0].renderers.ToArray();
+                    lv[2].renderers = lv[0].renderers.ToArray();
+                    lg.SetLODs(lv);
+                }
+                var lod0 = lg.GetLODs()[0].renderers.Where(r => r != null && r.enabled && !r.name.StartsWith(ChildName, StringComparison.Ordinal)).ToList();
+                if (lod0.Count == 0) continue;
+                float cardDistance = e.cardDistance = CardDistance(lg);
+
+                // leaves: the objects as authored (merged pieces expanded to their sources)
+                var leaves = new List<Renderer>(); var direct = new HashSet<Renderer>();
+                foreach (var r in lod0)
+                {
+                    if (pieceSources.TryGetValue(PathOf(r.transform), out var srcs))
+                    {
+                        foreach (var s in srcs) { var sr = FindRenderer(s); if (sr != null && !(sr is SkinnedMeshRenderer) && excl(sr.transform) == null) leaves.Add(sr); }
+                    }
+                    else { leaves.Add(r); direct.Add(r); }
+                }
+                leaves = leaves.Distinct().ToList();
+
+                var groupsOf = new Dictionary<Transform, List<Renderer>>();
+                if (!IsRoom(lg)) groupsOf[lg.transform] = leaves; // a single prop: one card
+                else
+                {
+                    var room = lg.transform.parent;
+                    var under = new Dictionary<Transform, List<Renderer>>();
+                    foreach (var r in leaves)
+                        for (var t = r.transform; t != null && t != room; t = t.parent)
+                        {
+                            if (!under.TryGetValue(t, out var l)) under[t] = l = new List<Renderer>();
+                            l.Add(r);
+                        }
+                    var fitCache = new Dictionary<Transform, bool>();
+                    foreach (var r in leaves)
+                    {
+                        Transform pick = null;
+                        for (var t = r.transform; t != null && t != room; t = t.parent)
+                        {
+                            if (t.name.StartsWith(StaticMergeTool.ContainerPrefix, StringComparison.Ordinal) || t.name.StartsWith(ContainerPrefix, StringComparison.Ordinal)) continue;
+                            if (!fitCache.TryGetValue(t, out bool fit)) fitCache[t] = fit = Fits(WorldBounds(under[t]));
+                            if (fit) pick = t;
+                        }
+                        if (pick == null) pick = r.transform; // bigger than a unit on its own
+                        if (!groupsOf.TryGetValue(pick, out var l)) groupsOf[pick] = l = new List<Renderer>();
+                        l.Add(r);
+                    }
+                }
+                bool propNoCard = false;
+                foreach (var kv in groupsOf.OrderBy(k => PathOf(k.Key), StringComparer.Ordinal))
+                {
+                    var b = WorldBounds(kv.Value);
+                    // A room piece bigger than a unit (ceiling, soffit, long counter) has no sensible Y-axis card: it keeps a
+                    // mesh at LOD3, a direct renderer its LOD2 copy, a merge source its own copy (in a card a merged ceiling
+                    // vanished at LOD3 while its kept emissive cove LEDs floated).
+                    if (IsRoom(lg) && kv.Value.Count == 1 && !Fits(b))
+                    {
+                        var r0 = kv.Value[0];
+                        if (direct.Contains(r0)) e.lod3Geometry.Add(PathOf(r0.transform));
+                        else if (r0 is MeshRenderer mr0) job.far.Add((e, lg, mr0));
+                        continue;
+                    }
+                    if (KeepMesh(kv.Value, b))
+                    {
+                        e.keptMesh++;
+                        if (!IsRoom(lg)) { propNoCard = true; continue; }
+                        foreach (var r in kv.Value)
+                        {
+                            if (direct.Contains(r)) e.lod3Geometry.Add(PathOf(r.transform)); // its LOD2 copy once decimated
+                            else if (r is MeshRenderer mr) job.far.Add((e, lg, mr));       // a merge source: its own copy
+                        }
+                        continue;
+                    }
+                    if (Mathf.Max(b.size.x, b.size.y, b.size.z) < UnitMinSize) { e.dropped++; continue; }
+                    var u = new Unit
+                    {
+                        name = PathOf(kv.Key), renderers = kv.Value.Select(r => PathOf(r.transform)).ToList(),
+                        pivot = new[] { b.center.x, b.center.y, b.center.z },
+                        halfWidth = Mathf.Max(0.05f, 0.5f * Mathf.Sqrt(b.size.x * b.size.x + b.size.z * b.size.z)), halfHeight = Mathf.Max(0.05f, b.extents.y),
+                        tile = TileFor(b, cardDistance)
+                    };
+                    e.units.Add(u);
+                    units.Add(new Work { entry = e, unit = u, renderers = kv.Value });
+                }
+                if (propNoCard) { e.units.Clear(); units.RemoveAll(w => w.entry == e); e.lod3Geometry = lg.GetLODs()[2].renderers.Where(r => r != null).Select(r => PathOf(r.transform)).ToList(); }
+                job.m.entries.Add(e);
+            }
+
+            // shelf-pack the 8-frame strips, biggest tiles first; the last page shrinks to the smallest square that fits
+            units = units.OrderByDescending(w => w.unit.tile).ToList();
+            int page = 0, x = 0, y = 0, shelf = 0;
+            var pageUnits = new List<List<Work>> { new List<Work>() };
+            foreach (var w in units)
+            {
+                int sw = w.unit.tile * Frames, sh = w.unit.tile;
+                if (x + sw > Page) { x = 0; y += shelf; shelf = 0; }
+                if (y + sh > Page) { page++; x = 0; y = 0; shelf = 0; pageUnits.Add(new List<Work>()); }
+                w.unit.page = page; w.unit.x = x; w.unit.y = y;
+                pageUnits[page].Add(w);
+                x += sw; shelf = Mathf.Max(shelf, sh);
+            }
+            for (int p = 0; p <= page; p++) job.pageSize.Add(Page);
+            for (int s = 1024; s < Page; s *= 2)
+                if (PackInto(pageUnits[page], s)) { job.pageSize[page] = s; break; }
+            foreach (var size in job.pageSize)
+            {
+                var t = new Texture2D(size, size, TextureFormat.RGBA32, false, false);
+                t.SetPixels32(new Color32[size * size]);
+                job.pages.Add(t);
+            }
+            job.m.pages = job.pages.Count;
+            job.work = units;
+            job.cam = CaptureCamera();
+            job.depthMat = new Material(depthShader);
+            QualitySettings.lodBias = 1000f; // LOD0 everywhere
+            return null;
+        }
+
+        static bool PackInto(List<Work> ws, int size)
+        {
+            int x = 0, y = 0, shelf = 0;
+            var pos = new List<(int, int)>();
+            foreach (var w in ws)
+            {
+                int sw = w.unit.tile * Frames, sh = w.unit.tile;
+                if (sw > size) return false;
+                if (x + sw > size) { x = 0; y += shelf; shelf = 0; }
+                if (y + sh > size) return false;
+                pos.Add((x, y)); x += sw; shelf = Mathf.Max(shelf, sh);
+            }
+            for (int i = 0; i < ws.Count; i++) { ws[i].unit.x = pos[i].Item1; ws[i].unit.y = pos[i].Item2; }
+            return true;
+        }
+
+        // Captures units until `budget` seconds pass; true when every unit is done.
+        static bool Step(double budget)
+        {
+            double until = EditorApplication.timeSinceStartup + budget;
+            var old = RenderTexture.active;
+            while (job.nextDecim < job.decim.Count && EditorApplication.timeSinceStartup < until)
+            {
+                var (e, lg, r) = job.decim[job.nextDecim++];
+                var host = lg.transform.parent.Find(ExtraLodContainer);
+                if (host == null) { host = new GameObject(ExtraLodContainer).transform; host.SetParent(lg.transform.parent, false); }
+                var made = StaticMergeTool.DecimatedCopies(r, host, ExtraLodAsset, out var l1, out var l2);
+                if (made.Count == 0) continue;
+                e.extraCopies.AddRange(made.Select(c => PathOf(c.transform)));
+                var lv = lg.GetLODs();
+                lv[1].renderers = lv[1].renderers.Select(x => x == r ? l1 : x).ToArray();
+                lv[2].renderers = lv[2].renderers.Select(x => x == r ? l2 : x).ToArray();
+                lg.SetLODs(lv);
+                job.lod2Of[r] = l2;
+            }
+            if (job.nextDecim < job.decim.Count) return false;
+            while (job.nextFar < job.far.Count && EditorApplication.timeSinceStartup < until)
+            {
+                var (e, lg, r) = job.far[job.nextFar++];
+                var host = lg.transform.parent.Find(ExtraLodContainer);
+                if (host == null) { host = new GameObject(ExtraLodContainer).transform; host.SetParent(lg.transform.parent, false); }
+                var c = StaticMergeTool.FarCopy(r, host, ExtraLodAsset);
+                if (c == null) continue;
+                e.extraCopies.Add(PathOf(c.transform));
+                if (!job.lod3Copies.TryGetValue(e, out var l)) job.lod3Copies[e] = l = new List<Renderer>();
+                l.Add(c);
+            }
+            if (job.nextFar < job.far.Count) return false;
+            while (job.next < job.work.Count && EditorApplication.timeSinceStartup < until)
+            {
+                var w = job.work[job.next++];
+                var saved = w.renderers.Select(r => (r, r.gameObject.layer, r.enabled, r.forceRenderingOff)).ToList();
+                try
+                {
+                    foreach (var r in w.renderers) { r.gameObject.layer = job.layer; r.enabled = true; r.forceRenderingOff = false; }
+                    Capture(w.unit, job.pages[w.unit.page]);
+                }
+                finally
+                {
+                    foreach (var s in saved) { s.r.gameObject.layer = s.Item2; s.r.enabled = s.Item3; s.r.forceRenderingOff = s.Item4; }
+                    RenderTexture.active = old;
+                }
+            }
+            return job.next >= job.work.Count;
+        }
+
+        static void Capture(Unit u, Texture2D page)
+        {
+            int T = u.tile;
+            if (!job.color.ContainsKey(T))
+            {
+                job.color[T] = new RenderTexture(T, T, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+                job.depth[T] = new RenderTexture(T, T, 24, RenderTextureFormat.Depth);
+                job.lin[T] = new RenderTexture(T, T, 0, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+                job.colTex[T] = new Texture2D(T, T, TextureFormat.RGBAHalf, false, true);
+                job.depTex[T] = new Texture2D(T, T, TextureFormat.RFloat, false, true);
+            }
+            var cam = job.cam;
+            var center = new Vector3(u.pivot[0], u.pivot[1], u.pivot[2]);
+            cam.cullingMask = 1 << job.layer;
+            cam.orthographicSize = u.halfHeight; cam.aspect = u.halfWidth / u.halfHeight;
+            cam.nearClipPlane = Near; cam.farClipPlane = 2f * u.halfWidth + 10f;
+            float n = cam.nearClipPlane, f = cam.farClipPlane;
+            float zx = SystemInfo.usesReversedZBuffer ? -1f + f / n : 1f - f / n, zy = SystemInfo.usesReversedZBuffer ? 1f : f / n;
+            job.depthMat.SetVector("_ZB", new Vector4(zx, zy, zx / f, zy / f));
+            for (int k = 0; k < Frames; k++)
+            {
+                float a = k * 2f * Mathf.PI / Frames;
+                var dir = new Vector3(Mathf.Sin(a), 0f, Mathf.Cos(a));
+                cam.transform.SetPositionAndRotation(center + dir * (u.halfWidth + 5f), Quaternion.LookRotation(-dir));
+                cam.SetTargetBuffers(job.color[T].colorBuffer, job.depth[T].depthBuffer);
+                cam.Render();
+                cam.targetTexture = null;
+                Graphics.Blit(job.depth[T], job.lin[T], job.depthMat);
+                RenderTexture.active = job.color[T]; job.colTex[T].ReadPixels(new Rect(0, 0, T, T), 0, 0); job.colTex[T].Apply();
+                RenderTexture.active = job.lin[T]; job.depTex[T].ReadPixels(new Rect(0, 0, T, T), 0, 0); job.depTex[T].Apply();
+                var px = job.colTex[T].GetPixels(); var dz = job.depTex[T].GetPixelData<float>(0).ToArray();
+                var tile = new Color[T * T]; var cov = new bool[T * T];
+                for (int i = 0; i < px.Length; i++)
+                {
+                    cov[i] = dz[i] < f * 0.98f;
+                    var c = px[i]; c.r = Mathf.Clamp01(c.r); c.g = Mathf.Clamp01(c.g); c.b = Mathf.Clamp01(c.b);
+                    c = c.gamma; c.a = cov[i] ? 1f : 0f; tile[i] = c;
+                }
+                Dilate(tile, cov, T, 4); // bleed edge colour into the background so mips keep no dark halo
+                page.SetPixels(u.x + k * T, u.y, T, T, tile);
+            }
+        }
+
+        static void Cleanup()
+        {
+            if (job == null) return;
+            QualitySettings.lodBias = job.lodBias;
+            if (job.cam) job.cam.targetTexture = null;
+            foreach (var rt in job.color.Values.Concat(job.depth.Values).Concat(job.lin.Values)) rt.Release();
+            foreach (var t in job.colTex.Values.Concat(job.depTex.Values)) UnityEngine.Object.DestroyImmediate(t);
+            foreach (var t in job.pages) if (t) UnityEngine.Object.DestroyImmediate(t);
+            if (job.depthMat) UnityEngine.Object.DestroyImmediate(job.depthMat);
+            job = null;
+        }
+
+        static string Finish()
+        {
+            var m = job.m;
+            var mats = new List<Material>();
+            for (int p = 0; p < job.pages.Count; p++)
+            {
+                string texPath = AssetDir + "/LodBillboardAtlas_p" + p + ".png";
+                job.pages[p].Apply();
+                File.WriteAllBytes(texPath, job.pages[p].EncodeToPNG());
+                AssetDatabase.ImportAsset(texPath, ImportAssetOptions.ForceSynchronousImport);
+                var ti = (TextureImporter)AssetImporter.GetAtPath(texPath);
+                ti.textureType = TextureImporterType.Default; ti.sRGBTexture = true; ti.alphaSource = TextureImporterAlphaSource.FromInput;
+                ti.alphaIsTransparency = true; ti.mipmapEnabled = true; ti.mipMapsPreserveCoverage = true; ti.alphaTestReferenceValue = 0.5f;
+                ti.wrapMode = TextureWrapMode.Clamp; ti.filterMode = FilterMode.Trilinear; ti.maxTextureSize = job.pageSize[p];
+                ti.textureCompression = TextureImporterCompression.CompressedHQ;
+                ti.SaveAndReimport();
+                string matPath = AssetDir + "/LodBillboard_p" + p + ".mat";
+                var mat = new Material(Shader.Find(ShaderName));
+                AssetDatabase.CreateAsset(mat, matPath);
+                mat.mainTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(texPath);
+                mat.SetFloat("_Frames", Frames);
+                mat.enableInstancing = false;
+                EditorUtility.SetDirty(mat);
+                mats.Add(mat);
+            }
+
+            string meshPath = AssetDir + "/LodBillboardCards.asset";
+            Mesh firstMesh = null;
+            int cards = 0;
+            foreach (var e in m.entries)
+            {
+                var lg = GameObject.Find("/" + e.lodGroup).GetComponent<LODGroup>();
+                var t = lg.transform;
+                var lod3 = new List<Renderer>();
+                foreach (var pg in e.units.GroupBy(u => u.page).OrderBy(g => g.Key))
+                {
+                    float inv = 1f / job.pageSize[pg.Key];
+                    var verts = new List<Vector3>(); var corner = new List<Vector2>(); var pv = new List<Vector4>(); var sz = new List<Vector4>(); var tris = new List<int>();
+                    foreach (var u in pg)
+                    {
+                        var pivot = new Vector3(u.pivot[0], u.pivot[1], u.pivot[2]);
+                        // positions only size the bounds: a box around every orientation of the card
+                        var lo = pivot - new Vector3(u.halfWidth, u.halfHeight, u.halfWidth);
+                        var hi = pivot + new Vector3(u.halfWidth, u.halfHeight, u.halfWidth);
+                        int v0 = verts.Count;
+                        verts.AddRange(new[] { t.InverseTransformPoint(lo), t.InverseTransformPoint(new Vector3(hi.x, lo.y, lo.z)), t.InverseTransformPoint(new Vector3(lo.x, hi.y, hi.z)), t.InverseTransformPoint(hi) });
+                        corner.AddRange(new[] { new Vector2(-1, -1), new Vector2(1, -1), new Vector2(-1, 1), new Vector2(1, 1) });
+                        var a = new Vector4(pivot.x, pivot.y, pivot.z, u.tile * inv);
+                        var c = new Vector4(u.halfWidth, u.halfHeight, u.x * inv, u.y * inv);
+                        for (int i = 0; i < 4; i++) { pv.Add(a); sz.Add(c); }
+                        tris.AddRange(new[] { v0, v0 + 2, v0 + 1, v0 + 1, v0 + 2, v0 + 3 });
+                        cards++;
+                    }
+                    var mesh = new Mesh { name = "Billboard_" + e.lodGroup.Replace('/', '_') + "_p" + pg.Key };
+                    if (verts.Count > 65000) mesh.indexFormat = IndexFormat.UInt32;
+                    mesh.SetVertices(verts); mesh.SetUVs(0, corner); mesh.SetUVs(2, pv); mesh.SetUVs(3, sz);
+                    mesh.SetTriangles(tris, 0);
+                    mesh.RecalculateBounds();
+                    if (firstMesh == null) { firstMesh = mesh; AssetDatabase.CreateAsset(mesh, meshPath); }
+                    else AssetDatabase.AddObjectToAsset(mesh, firstMesh);
+
+                    var go = new GameObject(ChildName + "_p" + pg.Key);
+                    go.transform.SetParent(t, false);
+                    go.layer = lg.gameObject.layer;
+                    GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.BatchingStatic | StaticEditorFlags.OccludeeStatic);
+                    go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                    var mr = go.AddComponent<MeshRenderer>();
+                    mr.sharedMaterial = mats[pg.Key];
+                    mr.shadowCastingMode = ShadowCastingMode.Off; mr.receiveShadows = false; mr.lightProbeUsage = LightProbeUsage.Off;
+                    mr.reflectionProbeUsage = ReflectionProbeUsage.Off; mr.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+                    mr.receiveGI = ReceiveGI.LightProbes;
+                    lod3.Add(mr);
+                }
+                foreach (var g in e.lod3Geometry.Select(FindRenderer).Where(r => r != null))
+                    lod3.Add(job.lod2Of.TryGetValue(g, out var d) ? d : g);
+                if (job.lod3Copies.TryGetValue(e, out var copies)) lod3.AddRange(copies);
+                lod3 = lod3.Distinct().ToList();
+                var lods = lg.GetLODs().ToList();
+                lods.Add(new LOD(0.0001f, lod3.ToArray()));
+                lg.SetLODs(lods.ToArray());
+            }
+            AssetDatabase.SaveAssets();
+            Save(m);
+            int pages = job.pages.Count, farCopies = job.lod3Copies.Values.Sum(l => l.Count); string sizes = string.Join(",", job.pageSize);
+            Cleanup();
+            // the room groups grew: re-derive every switch height
+            string dist = StaticMergeTool.ReapplyLodHeights();
+            foreach (var lg in UnityEngine.Object.FindObjectsOfType<LODGroup>().Where(g => g.name == RoomHostName)) StaticMergeTool.ApplyFarLodHeights(lg);
+            EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            return "BUILT groups=" + m.entries.Count + " cards=" + cards + " pages=" + pages + " (" + sizes + ") lod3Geometry=" + m.entries.Sum(e => e.lod3Geometry.Count) + " keptMesh=" + m.entries.Sum(e => e.keptMesh) + " farCopies=" + farCopies + " dropped=" + m.entries.Sum(e => e.dropped) + " roomExtras=" + m.entries.Sum(e => e.roomExtras.Count) + " " + dist;
+        }
+
+        // Room clusters (StaticMergeTool "lod" containers) and room hosts: every other visible renderer of the room joins LOD0-LOD2
+        // unchanged, so the whole room (ceiling strips, dress merges, loose furniture) switches to cards together.
+        // Skipped: interactive content, renderers of any other LODGroup, particles/skinned/lines.
+        static List<Renderer> RoomExtras(LODGroup lg, Func<Transform, string> excl, HashSet<Renderer> inGroups)
+        {
+            var list = new List<Renderer>();
+            if (!IsRoom(lg)) return list;
+            foreach (var r in lg.transform.parent.GetComponentsInChildren<MeshRenderer>(false))
+            {
+                if (!r.enabled || inGroups.Contains(r) || r.name.StartsWith(ChildName, StringComparison.Ordinal)) continue;
+                if (excl(r.transform) != null) continue;
+                list.Add(r);
+            }
+            return list;
+        }
+
+        // Bleeds covered colours into uncovered pixels (alpha stays 0) for `passes` 1-pixel rings.
+        static void Dilate(Color[] px, bool[] cov, int size, int passes)
+        {
+            var filled = (bool[])cov.Clone();
+            for (int p = 0; p < passes; p++)
+            {
+                var next = (bool[])filled.Clone();
+                for (int y = 0; y < size; y++)
+                    for (int x = 0; x < size; x++)
+                    {
+                        int i = y * size + x;
+                        if (filled[i]) continue;
+                        Color s = Color.clear; int c = 0;
+                        for (int d = 0; d < 4; d++)
+                        {
+                            int nx = x + (d == 0 ? 1 : d == 1 ? -1 : 0), ny = y + (d == 2 ? 1 : d == 3 ? -1 : 0);
+                            if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+                            int j = ny * size + nx;
+                            if (!filled[j]) continue;
+                            s += px[j]; c++;
+                        }
+                        if (c == 0) continue;
+                        s /= c; s.a = 0f; px[i] = s; next[i] = true;
+                    }
+                filled = next;
+            }
+        }
+
+        public static string Remove()
+        {
+            if (EditorApplication.isPlaying) return "ERROR edit mode only";
+            var m = Load();
+            int restored = 0, removed = 0;
+            // every copy lives in an ExtraLodContainer (paths can repeat, so never look copies up by path)
+            foreach (var t in UnityEngine.Object.FindObjectsOfType<Transform>(true).Where(t => t.name == ExtraLodContainer).ToList())
+            {
+                StaticMergeTool.RemoveCopies(t.GetComponentsInChildren<Renderer>(true));
+                if (t) UnityEngine.Object.DestroyImmediate(t.gameObject);
+            }
+            foreach (var e in m.entries)
+            {
+                var g = GameObject.Find("/" + e.lodGroup);
+                if (g == null) continue;
+                var lg = g.GetComponent<LODGroup>();
+                foreach (var p in (e.disabledLod2 ?? new List<string>()).Concat(e.disabledLod1 ?? new List<string>()))
+                {
+                    var r = FindRenderer(p);
+                    if (r != null) { r.enabled = true; restored++; }
+                }
+                if (lg != null)
+                {
+                    var all = lg.GetLODs();
+                    var lods = all.Length > 3 ? all.Take(3).ToArray() : all; // drop the card level
+                    lods[2].renderers = (e.lod2 ?? new List<string>()).Select(FindRenderer).Where(r => r != null).ToArray();
+                    if (e.lod1 != null && e.lod1.Count > 0)
+                        lods[1].renderers = e.lod1.Select(FindRenderer).Where(r => r != null).ToArray();
+                    var extras = new HashSet<string>(e.roomExtras ?? new List<string>());
+                    for (int k = 0; k < 3; k++) // destroyed copies leave nulls
+                        lods[k].renderers = lods[k].renderers.Where(r => r != null && !extras.Contains(PathOf(r.transform))).ToArray();
+                    lg.SetLODs(lods);
+                    if (extras.Count > 0) lg.RecalculateBounds();
+                }
+                foreach (Transform c in g.transform.Cast<Transform>().ToList())
+                    if (c.name.StartsWith(ChildName, StringComparison.Ordinal)) { UnityEngine.Object.DestroyImmediate(c.gameObject); removed++; }
+            }
+            foreach (var host in UnityEngine.Object.FindObjectsOfType<LODGroup>(true).Where(g => g.name == RoomHostName).ToList())
+                UnityEngine.Object.DestroyImmediate(host.gameObject);
+            if (File.Exists(ManifestPath)) Save(new Manifest()); // never creates the folder for a world without billboards
+            EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            return "REMOVED cards=" + removed + " restored=" + restored;
+        }
+    }
+}
