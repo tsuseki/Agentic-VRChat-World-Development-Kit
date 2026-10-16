@@ -11,6 +11,6 @@ summary: Colliders on VRChat custom layers block players by default, and the pro
 **Fix / rule:**
 - Do not fix it by unchecking the layer pair in Project Settings > Physics: project settings are not in the world bundle, and the VRChat client uses its own matrix for layers 22-31. The fix will not survive Build & Test.
 - Fix the geometry or use a trigger. When proxying a curved shape for particles, only the face the particles strike matters (rain only hits the top), so pull every other face out of player space.
-- Particle world collision is skipped by edit-mode `Simulate()`; verify particle behaviour in play mode.
+- Particle world collision is skipped by edit-mode `Simulate()`; verify in play mode (method: [particle-collision-verify-in-play-mode](particle-collision-verify-in-play-mode.md)).
 
 **Verify:** Overlap-test a player capsule (radius 0.2, heights 1.6/1.8/2.0) at the spawn point and along walk paths against all layers (`~0`). Test several avatar heights; do not reason from `bounds`.

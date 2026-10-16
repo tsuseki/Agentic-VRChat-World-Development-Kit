@@ -2,9 +2,9 @@
 title: Headless Blender export flags and modeling recipes for Unity assets
 topic: blender-modeling
 tags: [Blender, headless, FBX export, bake_space_transform, axis, normals, submesh order, colorspace, cloth, bisect]
-summary: Recipes and traps for building Unity assets in Blender (headless or via MCP): FBX export flags, mirrored bakes, material slot order, two-sheet panels, image colorspace round-trips, cloth drapes and cutting an FBX.
+summary: Recipes and traps for building Unity assets in headless Blender: FBX export flags, mirrored bakes, material slot order, two-sheet panels, image colorspace round-trips, cloth drapes and cutting an FBX.
 ---
-**Headless build:** when the Blender MCP socket is down, run `blender -b --factory-startup -P script.py`. Without `--factory-startup`, broken third-party add-ons spam harmless tracebacks; print your own OK marker and grep stdout for it.
+**Headless build:** all Blender work runs headless (project rule in the `blender-modeler` agent): `blender -b --factory-startup -P script.py` from bash, or the MCP `execute_blender_code_for_cli` tool; never drive the GUI window. Without `--factory-startup`, broken third-party add-ons spam harmless tracebacks; print your own OK marker and grep stdout for it.
 
 **FBX export flags that import into Unity with correct scale/rotation (no -90 deg / x100):**
 `apply_unit_scale=True, apply_scale_options='FBX_SCALE_ALL', bake_space_transform=True, object_types={'MESH'}`. Blender front (-Y) maps to Unity -Z. (`FBX_SCALE_NONE` imports at 1/100: see [blender-fbx-export-scale-all-not-scale-none](blender-fbx-export-scale-all-not-scale-none.md).) Curve/text objects are silently skipped: `bpy.ops.object.convert(target='MESH')` first.

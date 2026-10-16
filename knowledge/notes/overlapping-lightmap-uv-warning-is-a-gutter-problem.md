@@ -27,6 +27,6 @@ float ns = Mathf.Clamp(needed, 1.0f, currentScale);   // never raise, never go u
 
 That trimmed 165 objects, 19.17 -> 13.77 Mtexel, worst gutter still 5.03 texels.
 
-**Guards:** if the middle dimension is under ~0.12 m or `T < 12`, no margin helps; use light probes ([probe-light-small-objects-instead-of-lightmapping](probe-light-small-objects-instead-of-lightmapping.md)). Check `T` for absurd atlas claims first: two 60 m x 0.05 m skirtings each demanded a 2970-texel region against a 2048 atlas, starving everything else.
+**Scope / guards:** this fix is for renderers of ~1.3 m largest dimension and up; anything smaller goes to light probes first ([probe-light-small-objects-instead-of-lightmapping](probe-light-small-objects-instead-of-lightmapping.md)). Even on larger renderers, if the middle dimension is under ~0.12 m or `T < 12`, no margin helps; probe-light those too. Check `T` for absurd atlas claims first: two 60 m x 0.05 m skirtings each demanded a 2970-texel region against a 2048 atlas, starving everything else.
 
 **Verify:** Measure `gapTexels` across **every** lightmapped renderer, not just those named (the console named 98, measurement found 261), and re-run the sweep after fixing instead of trusting the algebra.

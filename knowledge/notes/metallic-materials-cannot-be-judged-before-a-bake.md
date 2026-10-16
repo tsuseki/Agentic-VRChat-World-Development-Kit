@@ -8,7 +8,7 @@ summary: In an unbaked scene a high-metallic material has nothing to reflect and
 
 **Cause:** A metallic surface has almost no diffuse response; its look is the reflection probe / lighting it samples. With no bake and only flat skybox ambient, every facet returns the same constant and normals stop reading. Higher metallic = flatter.
 
-**Fix / rule:**
+**Fix / rule** (scope: unbaked scenes only; these are interim values, and once the bake and probes exist the probe-dependent rule in the related note replaces them):
 - Until the bake exists, author metals as dark albedo + moderate metallic (about albedo 0.40, metallic 0.55, smoothness 0.45), or split the object into contrasting parts so silhouette does the work. Revisit after the bake.
 - Never sign off a metal from inspector numbers - render it in context.
 

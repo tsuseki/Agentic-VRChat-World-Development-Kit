@@ -8,7 +8,7 @@ summary: Standard metals have no diffuse term, so whether high metallic rescues 
 
 **Cause:** Metals in Unity Standard get all brightness from reflected environment. In a sealed dim room the probe is nearly black → `_Metallic 1.0` is black regardless of albedo. In a room whose probe sees a bright environment (curtain wall onto a lit city, big window, fire), metallic is what catches an edge highlight; at metallic 0.0 the same 0.075 albedo reads ~0.01–0.02 sRGB, while metallic 0.85 / smoothness 0.62 reads correctly as anodised metal.
 
-**Fix / rule:**
+**Fix / rule** (scope: scenes already baked with probes captured; before the bake use the interim values in [metallic-materials-cannot-be-judged-before-a-bake](metallic-materials-cannot-be-judged-before-a-bake.md)):
 - Sealed dark room: readable brass/gold ≈ **metallic ~0.3 + saturated warm albedo + smoothness ~0.6** — fake the metal with diffuse colour. Treat advice to raise metallic in a dim room as suspect, even from a reviewer.
 - Bright probe: metallic is the fix. Ask what the probe captures first; anchor to a known-good material already reading correctly in that room.
 - Energy conservation: diffuse ≈ `albedo * (1 - metallic)`. Raising metallic to 0.5 halves diffuse and can cancel an albedo lift made in the same edit. Change one at a time; decide whether the surface is carried by diffuse (bounce-lit) or reflection (facing the bright source).

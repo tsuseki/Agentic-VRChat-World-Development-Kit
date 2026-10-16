@@ -86,7 +86,7 @@ The builder checks every row that applies to the pass; the reviewer can verify e
 | Dark tone erases grain and relief | Dominant `_Color` channel ≥ ~0.25; darkness goes into the albedo; untextured darks need ~⅔ the value of textured ones |
 | One class in a shared atlas needs a new colour | HSV saturation mask, remap the masked mean to the target albedo's mean; sample the file, not an unbaked render |
 | Metal renders as a flat slab before the bake | Unbaked, metals have nothing to reflect. Until the bake: albedo ~0.40, metallic ~0.55, smoothness ~0.45, or contrasting parts; revisit after |
-| Metal black in a sealed dark room; dark prop black against a bright window | Metals take all brightness from the reflection probe: dark room → metallic ~0.3, saturated warm albedo, smoothness ~0.6; bright probe → metallic is the fix. Diffuse ≈ albedo × (1 − metallic): change albedo and metallic one at a time |
+| Baked scene: metal black in a sealed dark room; dark prop black against a bright window | Once baked, metals take all brightness from the reflection probe: dark room → metallic ~0.3, saturated warm albedo, smoothness ~0.6; bright probe → metallic is the fix. Diffuse ≈ albedo × (1 − metallic): change albedo and metallic one at a time |
 | New prop reads cold/blue beside an identical baked one | `lightmapIndex == -1` (added after the bake, skybox ambient): bake it, don't re-tint |
 | Big near-white surface makes a sealed room bake blown | Bounce gain ≈ 1/(1 − albedo): lower the albedo of the big bright surface, not the lights |
 

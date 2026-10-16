@@ -20,4 +20,4 @@ summary: A face-down ground quad is invisible from above yet still casts shadow,
 
 **Verify:** Read the lightmap itself: set the `.hdr` importer `isReadable = true`, `GetPixelBilinear` across the renderer's `lightmapScaleOffset` rect (inset ~12% to skip padding), compare the mean against a renderer that looks right, then restore `isReadable`. That reveals shared-mesh patterns ("all 7 users of this mesh are black") that screenshots hide.
 
-Related: [procedural-mesh-winding-check](procedural-mesh-winding-check.md), [generated-mesh-needs-recalculatetangents](generated-mesh-needs-recalculatetangents.md)
+Related: [scripted-mesh-builder-winding-check](scripted-mesh-builder-winding-check.md), [generated-mesh-needs-recalculatetangents](generated-mesh-needs-recalculatetangents.md)

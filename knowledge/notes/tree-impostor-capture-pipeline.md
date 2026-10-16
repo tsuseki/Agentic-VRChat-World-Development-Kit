@@ -6,6 +6,8 @@ summary: Capture the real tree prefabs to billboard sheets with black/white diff
 ---
 **When:** Vegetation is only ever seen from ≥140-200 m (e.g. from altitude). A 6-tri billboard textured with a render of the *real* tree is visually identical to a 2.6-6.3k-tri mesh, and inherits the scene's exact colour grading by construction, unlike a downloaded low-poly pack. Result in one world: ~30M+ visible vegetation tris -> < 100k. Keep the originals in the project as revert path and capture source.
 
+**Scope:** the capture (steps 1–6) is the current way to make far vegetation look identical. Steps 7–8 (shipping impostors as LODGroup terrain-tree prototypes) were later measured at ~9 ms CPU + ~7.5 ms GPU at 34k instances; for shipping, merge the impostors into per-cell meshes and keep `treeDistance = 0` (see merge-distant-scatter-into-cell-meshes-or-delete-it). Use the terrain-prototype swap only as an intermediate/preview step.
+
 **How (capture via editor script):**
 1. Instantiate the original prefab at an isolated spot; `LODGroup.ForceLOD(0)`; set its renderers' light/reflection-probe usage Off. If the in-scene vegetation renders emission-only, set ambient trilight (sky/equator/ground) black inside try/finally so captures match (validate with an A/B brightness check).
 2. Orthographic camera, square aspect, `orthographicSize = S = max bounds extent`, camera at S+2 outside bounds. Views: side0 (-Z), side90 (-X), top (+Y, up = +Z).
@@ -18,4 +20,4 @@ summary: Capture the real tree prefabs to billboard sheets with black/white diff
 
 **Pitfalls:** `UnityStats.triangles` reads 0 after a manual `cam.Render()` to a RenderTexture (game view only); compute before/after tris arithmetically. Tree instance width/height scales multiply the prototype's natural size, so meshes built at captured world bounds keep painted sizes 1:1.
 
-Related: [terrain-trees-refresh-popping-and-night-emission](terrain-trees-refresh-popping-and-night-emission.md), [vrchat-camera-clip-planes-and-far-cut-fog-math](vrchat-camera-clip-planes-and-far-cut-fog-math.md)
+Related: [merge-distant-scatter-into-cell-meshes-or-delete-it](merge-distant-scatter-into-cell-meshes-or-delete-it.md), [terrain-trees-refresh-popping-and-night-emission](terrain-trees-refresh-popping-and-night-emission.md), [vrchat-camera-clip-planes-and-far-cut-fog-math](vrchat-camera-clip-planes-and-far-cut-fog-math.md)

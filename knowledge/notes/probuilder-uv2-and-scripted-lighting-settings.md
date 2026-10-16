@@ -11,7 +11,7 @@ summary: pb.Refresh() never generates lightmap UVs, so ProBuilder rooms bake off
    ```csharp
    UnityEditor.ProBuilder.EditorMeshUtility.Optimize(pb, true);   // true = force rebuild UV2
    ```
-   Thin trim (mullions, sills, coves, frames) can still report overlapping UVs because islands land sub-texel — set `MeshRenderer.scaleInLightmap = 2.5f` on those pieces instead of raising global resolution.
+   Thin trim (mullions, sills, coves, frames) can still report overlapping UVs because islands land sub-texel. Do not raise `scaleInLightmap` on them (a blunt ×2.5 more than doubled atlas demand): pieces under ~1.3 m largest dimension go to `receiveGI = LightProbes` ([probe-light-small-objects-instead-of-lightmapping](probe-light-small-objects-instead-of-lightmapping.md)); larger ones get a wider `packMargin` ([overlapping-lightmap-uv-warning-is-a-gutter-problem](overlapping-lightmap-uv-warning-is-a-gutter-problem.md)).
 2. `Lightmapping.lightingSettings` **throws** (`Lightmapping.lightingSettings is null...`) when none is assigned, so a null check on the getter is itself the crash. Create and assign first:
    ```csharp
    var ls = AssetDatabase.LoadAssetAtPath<LightingSettings>(path);

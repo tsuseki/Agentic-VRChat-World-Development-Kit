@@ -22,3 +22,5 @@ for (int i = 0; i < 24; i++) {
 The offender: min 2.10 m, mean 7.21 m. A dressed prop reads low mean; an orphaned one reads high mean regardless of min.
 
 **Pitfall:** Exclude outdoor sets before ranking (garden/terrace pots legitimately sit in the open, mean 7-8 m). Filter by room or "has a ceiling above" first.
+
+**Collider-free worlds:** small props have no colliders (workspace rule), so `Physics.Raycast` here only sees walls and big furniture and misses a neighbouring plant. Intersect each ray with the room's renderer AABBs instead (`bounds.IntersectRay`, same body-height band and slab exclusion as the free-spot search) and take the nearest hit.

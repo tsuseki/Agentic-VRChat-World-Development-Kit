@@ -21,6 +21,6 @@ for (float x = xMin; x <= xMax; x += 2) for (float z = zMin; z <= zMax; z += 2) 
 - `Undo.AddComponent<BoxCollider>(slabGO)` auto-fits the mesh bounds in **local** space (immune to parent scale skew). Six boxes took one floor from 228/551 misses to 0/551.
 - Remaining misses may be legitimately open (double-height voids, balconies) - verify by re-testing those spots, not by accepting the grid total.
 
-**Pitfall:** `Collider.bounds` reads `(0,0,0)` on inactive objects (physics doesn't maintain world bounds for them). A disabled toggle group of colliders will all report zero size - check `BoxCollider.size` (serialized local field) instead.
+**Pitfall:** a disabled toggle group of colliders reports `Collider.bounds` of `(0,0,0)`; read `BoxCollider.size` instead (see the inactive-object trap in physics-synctransforms-before-reading-collider-bounds).
 
-Related: [non-uniform-parent-scale-desyncs-colliders](non-uniform-parent-scale-desyncs-colliders.md)
+Related: [non-uniform-parent-scale-desyncs-colliders](non-uniform-parent-scale-desyncs-colliders.md), [physics-synctransforms-before-reading-collider-bounds](physics-synctransforms-before-reading-collider-bounds.md)

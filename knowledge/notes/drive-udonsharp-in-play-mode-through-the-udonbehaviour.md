@@ -12,7 +12,7 @@ summary: In play mode the UdonSharpBehaviour C# proxy is empty; call SendCustomE
 - `ub.SendCustomEvent("MethodName")` for public parameterless methods.
 - `ub.GetProgramVariable("x")` / `SetProgramVariable("x", v)` for fields, including private and `[UdonSynced]`.
 - `Start()` is the Udon event **`_start`**; `SendCustomEvent("Start")` silently does nothing.
-- Parameters are program variables named `__<n>_<param>__param`, where `n` counts occurrences of that parameter *name* across the class in declaration order, not the method index. Dump `ub.programSource.SerializedProgramAsset.RetrieveProgram().SymbolTable.GetSymbols()` and match by name; a wrong index silently no-ops.
+- Methods with parameters export under mangled names and take their arguments as program variables; see the related note for the naming scheme before calling them.
 
 **Fake multiple named players with ClientSim:**
 ```csharp

@@ -19,4 +19,6 @@ Seat from the four `SaccWheel` components (suspension top anchors): XZ = anchor 
 
 **Structure:** body colliders ship on layer Walkthrough (never block players); seats are real `VRCStation`s; Sacc also ships its own race course/scoreboard system (`SaccRaceCourseAndScoreboard`, `SaccRacingTrigger`, `RaceCheckpoint`) with a trigger inside each vehicle, disabled until a race is selected.
 
+**Seats rule:** the no-seats rule (AGENTS.md "No seats unless explicitly requested") applies. Place Sacc vehicles only when the user explicitly asked for drivable vehicles, and record that request in the world's `WORLD.md`; the vehicle's own `VRCStation`s are then part of what was requested. Never use Sacc stations as general seating, and never add stations to other props because vehicles have them.
+
 **Verify:** A top-down render with bay lines visible; numeric height checks can pass while the car overhangs its bay. When photographing one vehicle for a UI portrait, hide neighbouring vehicles and their boards entirely, and assert no stray flat panels remain in range rather than trusting `SetActive(false)`.

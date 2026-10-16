@@ -14,4 +14,4 @@ summary: Per-group Bakery SSS on a large canopy can make the shaded underside br
 - Tint `sssColor` warm (e.g. 0.52, 0.47, 0.40): sun through cream canvas is not neutral.
 - Residual ~0.6 m blotching on the soffit was per-triangle geometric SSS variation, not albedo tiling. Nulling `_MainTex` entirely leaves such a pattern unchanged; that one-bake test settles it.
 
-**Pitfalls:** "No contact shadow" under **non-static** objects (e.g. parked vehicles) is a different cause: they are not in the bake at all. Add invisible `ShadowCastingMode.ShadowsOnly` proxy boxes marked ContributeGI.
+**Pitfalls:** "No contact shadow" under **non-static** objects (e.g. parked vehicles) is a different cause: they are not in the bake at all. Anything a player can move gets no baked shadow; only never-moving objects get a floating ShadowsOnly proxy box (see [baked-shadow-proxy-boxes-float-and-match-height](baked-shadow-proxy-boxes-float-and-match-height.md)).

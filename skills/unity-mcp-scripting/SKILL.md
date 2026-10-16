@@ -46,8 +46,8 @@ by script.
 ## 2. Shape of an `execute_code` call
 
 The Unity MCP `execute_code` tool runs a C# method body on the main thread: the editor is frozen
-while it runs, and MCP gives up after roughly 10 s (30 s windows have been observed; plan for the
-short one). Without Roslyn installed it silently falls back to a C# 6 compiler (bootstrap §3).
+while it runs, and MCP gives up after roughly 10 s. Some timeouts arrive only at 30 s; size every
+call for the 10 s window. Without Roslyn installed it silently falls back to a C# 6 compiler (bootstrap §3).
 
 - **Short and single-purpose.** Return one compact string report; avoid dumping hierarchies.
 - **Every loop over scene geometry gets a time budget.** An unbounded O(n²) triangle loop hung an
@@ -135,11 +135,12 @@ tool (the editor auto-refreshes only on focus), wait for compilation, then the U
 
 ## 6. Capture cameras and screenshots
 
-- **Never destroy a camera after `Render()` in the same call.** Edit-mode `Render()` sets
-  `Camera.current`; the next GUI repaint dereferences the freed camera and the editor segfaults a few
-  calls later. Reuse one persistent `__CapCam__` (`WorldCapture` does this). If a temp camera is
-  unavoidable: `Camera.SetupCurrent(null)`, `RenderTexture.active = null`, `cam.targetTexture = null`
-  before destroying it. Save the scene before a screenshot pass.
+- **Never destroy a camera after `Render()`.** Edit-mode `Render()` sets `Camera.current`; the next
+  GUI repaint dereferences the freed camera and the editor segfaults a few calls later. Reuse one
+  persistent `__CapCam__` (`WorldCapture` does this). Inherited code that already destroys a temp
+  camera: `Camera.SetupCurrent(null)`, `RenderTexture.active = null`, `cam.targetTexture = null`
+  before the destroy, then move it to the persistent camera; `delayCall` deferral may never fire.
+  Save the scene before a screenshot pass.
 - **Sweep `__*__` objects and assert zero realtime/mixed lights** before every save, commit, bake or
   build; review tools may leave a realtime `__CapLight__`, and the SDK saves the open scene on build.
   Run both checks; either can miss on its own.

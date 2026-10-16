@@ -10,7 +10,7 @@ summary: Assume either the wall face position or which side the room is on and t
 
 **Fix / rule:**
 1. Take the face coordinate from the wall renderer's `bounds.min` / `bounds.max`, never a remembered plane or a name.
-2. Determine the occupied side by raycasting both ways from the wall centre, or from walk-surface extents.
+2. Determine the occupied side from geometry outside the wall: the room's renderer-bounds centre or walk-surface extents. Do not raycast from the wall centre or from the prop: a ray that starts inside the wall collider reports nothing.
 3. After placing, print `face - piece.min` (or equivalent) per object and assert it's positive. A per-object `proud=0.050 m` column is the proof; "placed 12 pieces" isn't.
 4. Run the clash test **with walls included**.
 

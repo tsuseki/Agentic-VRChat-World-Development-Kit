@@ -17,6 +17,7 @@ foreach (var r in UnityEngine.Object.FindObjectsOfType<MeshRenderer>())
 ```
 
 - If it is `LightProbes` and the object is bigger than ~0.12 m, move it to the lightmap (`receiveGI = Lightmaps` plus `ContributeGI`). Moving 37 objects let the already-baked lights reach them. Genuinely tiny parts (0.035-0.114 m) stay on probes; no pack margin helps below ~0.12 m (see [overlapping-lightmap-uv-warning-is-a-gutter-problem](overlapping-lightmap-uv-warning-is-a-gutter-problem.md)).
+- Scope: this applies to objects that have (or can get) a clean UV2. Furniture without UV2 can't be lightmapped; keep it on probes but make it a shadow caster (see uv2-less-props-can-cast-baked-shadows-with-receivegi-lightprobes).
 - `lightmapIndex` is only meaningful right after a bake; do not read it off a scene that has not been baked since the change.
 
 Related: [probe-light-small-objects-instead-of-lightmapping](probe-light-small-objects-instead-of-lightmapping.md), [unlit-props-need-a-synthetic-sh-probe-not-emission](unlit-props-need-a-synthetic-sh-probe-not-emission.md)

@@ -148,8 +148,8 @@ review-protocol. Per finding:
 5. Classify toggle-state findings in both states (§2 step 8), then prove the fix with a
    same-camera before/after (§1).
 6. After a fix passes re-review, record symptom → cause → rule before the next task, in the
-   project's own instructions. Promoting a lesson to the shared kit follows
-   `.omp/skills/world-pipeline/SKILL.md` "Lessons capture".
+   project's own instructions. Only the user's verdict, never a reviewer's, makes a lesson shared:
+   promoting it to the kit follows `.omp/skills/world-pipeline/SKILL.md` "Lessons capture".
 
 ## 8. Handoffs between agents
 

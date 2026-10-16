@@ -12,7 +12,7 @@ if (t == p) continue;                       // WRONG - only excludes the root
 if (t == p || t.IsChildOf(p)) continue;     // RIGHT
 ```
 
-**Cause 2 — collider blindness:** decorative props deliberately have no colliders, so `Physics.CheckSphere` / `Raycast` report "clear". Build occupancy from renderer AABBs; keep physics only for floor height (floors do have collision):
+**Cause 2 — collider blindness:** decorative props deliberately have no colliders, so `Physics.CheckSphere` / `Raycast` report "clear". Build occupancy from renderer AABBs; keep physics only for floor height, and only where the floor collider is the visible surface (a separate flat proxy needs the visible mesh, see seat-props-on-visible-floor-not-collider-proxy):
 ```csharp
 var occ = new List<Bounds>();
 foreach (var r in FindObjectsOfType<MeshRenderer>()) {

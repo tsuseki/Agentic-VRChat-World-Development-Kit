@@ -21,4 +21,4 @@ if (dirty) ti.SaveAndReimport();
 
 **Diagnostic order for "the texture looks smeared":** compare import settings against a stock surface that looks right **before** touching UVs, and never start by touching geometry. It is one property read.
 
-Related: [uv-density-may-live-in-the-material](uv-density-may-live-in-the-material.md), [npot-textures-cannot-be-compressed](npot-textures-cannot-be-compressed.md)
+Related: [uv-density-may-live-in-the-material](uv-density-may-live-in-the-material.md), [npot-textures-lose-aspect-and-compression](npot-textures-lose-aspect-and-compression.md)

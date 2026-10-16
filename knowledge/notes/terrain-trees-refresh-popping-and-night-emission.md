@@ -4,6 +4,8 @@ topic: performance
 tags: [terrain, trees, treeMaximumFullLODCount, LODGroup, RefreshPrototypes, SetTreeInstances, detailObjectDistance, emission]
 summary: Terrain tree edits need explicit refresh calls, trees without a billboard LOD vanish when the full-LOD cap is hit, and night emission must be normalized per texture.
 ---
+**Scope:** for worlds that still render vegetation as Unity terrain trees (authoring, previews, small counts). For shipping large far-vegetation sets, merged per-cell meshes with `treeDistance = 0` replace terrain trees (see merge-distant-scatter-into-cell-meshes-or-delete-it).
+
 **Refreshing edits:**
 - Tree prototype **material** edits do not show until `td.RefreshPrototypes(); terrain.Flush();`. The instanced cache keeps rendering the old state, which looks exactly like "my change had no effect".
 - Prefab **LODGroup** edits are not picked up even then; rewrite the instance array: `td.SetTreeInstances(td.treeInstances, true)`.

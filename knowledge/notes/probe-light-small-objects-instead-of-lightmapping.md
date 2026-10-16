@@ -6,7 +6,7 @@ summary: Unity's overlapping-UV warning on small trim cannot be fixed by pack ma
 ---
 **Symptom:** Unity warns "There are N objects in the Scene with overlapping UV's" and the count grows as the world fills with furniture (52 -> 827). Regenerating UV2 with a fatter `packMargin` (e.g. 0.035) barely moves it.
 
-**Cause:** At 16 texels/unit a 5 cm mullion, a 4 cm bulb or a 30 cm furniture leg gets a chart a couple of texels across, and Unity's own padding overlaps it. No margin rescues a 2-texel chart; these objects are too small to deserve a lightmap.
+**Cause:** At 16 texels/unit a 5 cm mullion, a 4 cm bulb or a 30 cm furniture leg gets a chart a couple of texels across, and Unity's own padding overlaps it. No margin rescues a 2-texel chart; these objects are too small to deserve a lightmap. Scope: this is the rule for renderers under ~1.3 m; raising `scaleInLightmap` on them is never the fix, and renderers above that size take the pack-margin fix instead.
 
 **Fix / rule:** Keep `ContributeGI` (they still occlude, cast baked shadows, and emissive ones still inject light) but stop lightmapping them:
 

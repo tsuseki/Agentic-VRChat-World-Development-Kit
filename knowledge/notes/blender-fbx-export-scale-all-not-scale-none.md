@@ -10,4 +10,4 @@ summary: Use apply_scale_options=FBX_SCALE_ALL (copy a known-good sibling export
 
 **Fix / rule:** when a sibling exporter already produces correct assets, copy its export call verbatim instead of writing a plausible new one.
 
-**Pitfalls:** a Z-up Blender model imported this way needs an X=270 stand-up correction on the instance: instantiate with `Euler(270, yaw, 0)`, not `Euler(0, yaw, 0)`. See [apply-tilt-as-delta-on-z-up-fbx](apply-tilt-as-delta-on-z-up-fbx.md) and the full export flag set in [blender-fbx-export-and-modeling-recipes](blender-fbx-export-and-modeling-recipes.md).
+**Pitfalls:** this exporter ran without `bake_space_transform`, so its Z-up model imported with an X=270 stand-up correction on the root: compose yaw onto it (`Euler(0, yaw, 0) * src.rotation`, i.e. `Euler(270, yaw, 0)`), never assign `Euler(0, yaw, 0)`. See [compose-fbx-root-rotation-never-assign](compose-fbx-root-rotation-never-assign.md). With the full flag set in [blender-fbx-export-and-modeling-recipes](blender-fbx-export-and-modeling-recipes.md) (`bake_space_transform=True`) the root arrives unrotated.

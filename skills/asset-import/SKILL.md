@@ -118,7 +118,7 @@ Set on the `ModelImporter`, `SaveAndReimport()`, read back in the next call.
 | Blank slab where detail should be | Facing: the prop shows its back. Average the content submesh's per-triangle normals in local space and orient from that. |
 | Black door, lift or picture | The leaf/canvas sits inside or behind its frame; make it 2–3 cm proud of the frame's front face and sweep the whole class. |
 | Black modular kit piece | You are looking at the hidden side, which the kit maps to a black atlas patch; check from inside the assembly. |
-| See-through or inside-out | Compare each triangle's `Cross(b−a, c−a)` with its stored normal: conclusive only for meshes you generated (a primitive Cube reads 12/12); for imports the render is the oracle. Check every section (caps, flaps), not the first triangle. |
+| See-through or inside-out | Compare each triangle's `Cross(b−a, c−a)` with its stored normal: conclusive only for meshes you generated (a primitive Cube reads 0/12 inverted); for imports the render is the oracle. Make scripted builders flip opposing pairs themselves. Check every section (caps, flaps), not the first triangle. |
 | Hard flat bands after the bake | Duplicate coincident triangles, not normals (see charts ÷ tris, §5). |
 | Pale, grainless, faintly shiny | A generated mesh without tangents: `RecalculateTangents()`; no rebake needed. |
 | Flickering seams | Coplanar faces between parts: push joints 1–3 cm into each other, inset from shared edges; run the z-fight gate (§9). |

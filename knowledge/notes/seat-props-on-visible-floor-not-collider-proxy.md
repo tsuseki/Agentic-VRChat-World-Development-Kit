@@ -8,6 +8,8 @@ summary: When the walkable collider is a separate flat proxy, props seated to it
 
 **Cause:** The floor exists twice: a flat collider proxy (y −0.040) and the visible floor mesh (a cambered deck around y −0.020, sloping ~1.7° across the room). Props were seated to the proxy, ~2 cm under what you see. Every metric was measured against the wrong reference surface, and a flat proxy makes flat-and-level look like success. Two full bakes were spent before a render showed the rug wasn't there.
 
+**Scope:** applies whenever the walkable collider is a separate proxy from the visible floor; downward `Physics.Raycast` seating (for bundle prefabs with junk bounds) is valid only where the collider is the visible surface itself.
+
 **Fix / rule:**
 - Get floor height by ray–triangle intersection against the **visible mesh** (its upward-facing triangles) — not `Physics.Raycast` (hits the proxy), not a remembered constant.
 - On a cambered surface, fit a least-squares plane over the prop's footprint and align the prop to that normal; a small tilt there is the floor's camber, not a defect.

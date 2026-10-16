@@ -4,7 +4,7 @@ Building meshes in Blender or from scripts, and keeping their facing, winding, U
 Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ for the full evidence.
 
 ## Blender bridge and headless runs
-- **Before trusting a Blender MCP session, check which `blender.exe` owns the bridge port; kill a saved, windowless ghost and reopen the file in the GUI** — an orphaned headless Blender or a second window can hold the port, so the agent edits a scene nobody sees (headless-only work: see `blender-modeler` agent banner).
+- **Work headless only (`blender -b --factory-startup` or `execute_blender_code_for_cli`) and kill any stray background `blender.exe` after a batch run** — an orphaned headless Blender squats the MCP bridge port, so a later bridge session edits a scene nobody sees.
 
 ## Blender export
 - **Copy the proven FBX export call verbatim, convert curves/text to mesh, and `sort_elements(type='MATERIAL')` before export** — `FBX_SCALE_NONE` imports at 1/100, curves are skipped silently, and Unity orders submeshes by first reference so slots arrive permuted; `bake_space_transform` can mirror extruded text (export it without that flag and stand it up in Unity); open two-sided sheets break under `normals_make_consistent`, so build them as closed prisms; set rough/metal/alpha 8-bit maps to Non-Color and never hand-encode sRGB into `img.pixels` (see SKILL.md §1 "Blender export").
@@ -24,8 +24,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Check a ProBuilder container for a cavity (24 verts, a top face at the centre) before sinking fill below its rim** — scripted planters are solid boxes, so sunk soil vanishes; leave it proud and retile it per pot, comparing each to its own rim.
 
 ## Triangle winding
-- **Test generated-mesh winding against stored normals with a primitive Cube as the control (12/12), and trust the render for imported FBX** — the test also reports disagreement on correct imports (see SKILL.md §6).
-- **Make scripted quad/box builders self-correcting: flip any triangle pair whose winding opposes its normal and log the count** — an inward-winding builder passes a normals check, is see-through from outside and gets misdiagnosed as lighting.
+- **Make scripted quad/box builders self-correcting: test each triangle's winding against its stored normal (a primitive Cube control reads 0/12 inverted), flip any opposing pair, log the count, and save repairs as a new asset; trust the render for imported FBX** — an inward-winding builder passes a normals check, is see-through from outside and gets misdiagnosed as lighting, and the test misreports correct imports.
 - **Record each section's triangle range in a hand-built mesh and orient each against its own outward direction; build fabric single-sided and 4–9 mm proud** — one facing test covers only the body, not the caps or flaps, and duplicated reversed faces shade as a black band.
 
 ## Writing meshes from scripts

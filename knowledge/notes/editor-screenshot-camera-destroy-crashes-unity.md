@@ -9,7 +9,7 @@ summary: cam.Render() in edit mode sets Camera.current; destroying that camera i
 **Cause:** In edit mode `cam.Render()` sets the static `Camera.current` to that camera. After `DestroyImmediate(cam)` the pointer dangles, and the next editor GUI repaint dereferences the freed camera. The delay makes it look unrelated to the screenshot call.
 
 **Fix / rule:**
-- Prefer a **persistent** capture camera: find or create it once and never destroy it in the same call.
-- If you must use a temporary camera, call `Camera.SetupCurrent(null)` and set `RenderTexture.active = null` and `cam.targetTexture = null` before destroying it. Deferring the destroy to `EditorApplication.delayCall` is another option, but callbacks queued from MCP calls have been observed never to fire, so do not rely on it alone.
+- Never destroy a camera after `Render()`: reuse one **persistent** capture camera (e.g. `__CapCam__`), found or created once, and sweep `__*__` objects before saving, baking or building.
+- Inherited code that already destroys a temp camera: call `Camera.SetupCurrent(null)` and set `RenderTexture.active = null` and `cam.targetTexture = null` before the destroy, and move it to the persistent camera when you touch it. `EditorApplication.delayCall` is not a safe deferral: callbacks queued from MCP calls have been observed never to fire.
 - `ScreenCapture.CaptureScreenshot(path)` against the Game view works when a camera is already rendering.
 - Save the scene before any screenshot pass so a crash costs nothing.

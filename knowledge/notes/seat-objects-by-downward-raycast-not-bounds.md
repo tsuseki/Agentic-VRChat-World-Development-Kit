@@ -6,6 +6,8 @@ summary: Prefabs with UI/cameras at the origin or unposed skinned meshes have ju
 ---
 **Symptom:** parked vehicles or props float or sink after scripted placement; or bar stools end up standing on the counter.
 
+**Scope:** the raycast here is for seating bundle prefabs on ground whose collider *is* the visible surface (terrain, road, floor mesh collider). Where the walkable collider is a separate flat proxy, seat to the visible mesh instead (see the visible-floor note); and to *audit* seating in a collider-free prop world, compare renderer bounds, not rays.
+
 **Cause / rules:**
 - Bundle prefabs (vehicle + race system + cameras + UI at the origin) have bounds spanning the whole map. Don't seat them from bounds; raycast.
 - `GetComponentsInChildren<Renderer>()` pulls in SkinnedMeshRenderers whose bounds on an unposed rig are junk. Filter to `MeshRenderer`s with meaningful size (e.g. `mesh.bounds` max-dim ≥ 0.25 m) and within ~15 m of the root.

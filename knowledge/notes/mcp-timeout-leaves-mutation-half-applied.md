@@ -7,6 +7,6 @@ summary: A bulk Unity edit that exceeds the MCP request window can finish halfwa
 **Symptom:** A single `execute_code` merging 63 groups hit "Request timeout after 30000ms … outcome is unknown". Some groups had both the combined mesh and the source instances — 3.74 M tris where 2.00 M was expected, no error.
 **Fix / rule:**
 1. Never assume a timeout means nothing ran. Query counts (objects, renderers, triangles) first.
-2. Batch under the window (~6 heavy items per call) and loop until the call reports `remaining 0`.
+2. Batch under the window and loop until the call reports `remaining 0`. The window seen here was 30 s, but MCP can give up after ~10 s: size batches for ~10 s (here ~6 heavy items per call) and give each loop a time budget.
 3. Make batches idempotent and resumable with a marker (e.g. rename finished groups `<name>__M`).
 4. Re-running a non-idempotent operation over a half-done state hides the damage (it merges the duplicate in). Regenerate from scratch instead.

@@ -18,6 +18,7 @@ foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true)) {
     r.lightProbeUsage   = LightProbeUsage.BlendProbes;
 }
 ```
+Scope: this is for props that have no UV2 to lightmap with. A probe-lit object larger than ~0.12 m that has, or can be given, a clean UV2 should move to `receiveGI = Lightmaps` instead (see check-receivegi-before-adding-lights).
 
 **Pitfalls:**
 - The enum is `UnityEngine.ReceiveGI`, not `UnityEngine.Rendering.ReceiveGI` (compile error). In a code body without `using` directives, reflection as above is least fragile.
