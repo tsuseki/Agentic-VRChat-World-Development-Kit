@@ -1,0 +1,4 @@
+#!/bin/sh
+# Blocks commits that add personal terms (local/banned-terms.txt). Enable once per clone:
+#   git config core.hooksPath .githooks
+exec python "$(git rev-parse --show-toplevel)/scripts/leak_check.py"

@@ -1,0 +1,1241 @@
+// StaticMergeTool: reversible draw-call merges without a lighting re-bake (vrchat-world-optimization kit).
+// Install: copy to Assets/<Project>/Editor/StaticMergeTool.cs together with MeshDecimator.cs.txt (as MeshDecimator.cs),
+// set the PARAMETERS below, compile.
+// Worlds baked with Bakery: keep STATIC_MERGE_BAKERY defined (merged rows are registered in ftLightmapsStorage).
+// Worlds baked with Unity's Progressive lightmapper: delete the #define. The merged renderer then relies on its own
+// serialized lightmapIndex/lightmapScaleOffset; verify they survive a save + scene reload + play mode (unproven).
+// Requires the VRChat Worlds SDK (UdonBehaviour references exclude objects scripts touch).
+#define STATIC_MERGE_BAKERY
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.SceneManagement;
+
+namespace WorldKit.EditorTools
+{
+    // The originals always stay in the scene; merged copies live in a <ContainerPrefix><mode> container under the cluster
+    // root and are listed in the manifest (ManifestPath), which is also the rollback record.
+    //
+    //   * "glass":   coplanar (within PlaneTolerance), same-facing glass faces (GlassFacePrefix) with the same reflection
+    //                probes and render settings. Double-layer panes (GlassInPrefix faces + an outer face, siblings under one
+    //                pane object) merge only as whole matching pane sets, so the back-to-front draw order is kept.
+    //                Sources' MeshRenderers are disabled (GameObjects/colliders stay). Never an occluder.
+    //   * "cell":    static opaque lightmapped renderers under the root, one mesh per zone x material x lightmap x reflection
+    //                probe blend x render settings. zone = "none", "edge" (each ancestor named EdgeZonePrefix* = one facade
+    //                direction), "child" (each direct child of the root, e.g. one railing run). Sources' renderers disabled.
+    //   * "ceiling": like "cell" (zone none) but only ceiling light fixtures of a room: assemblies under a lighting node
+    //                (LightingContainers / FixtureNodeNames) whose top meets the ceiling (top of the CeilingMarker renderers)
+    //                and that hang above floor + FixtureMinHeight. Probe-lit fixtures merge within the light-probe tolerance.
+    //   * "lod":     room cluster. Its lightmapped renderers are merged like "cell" (zone none; sources' renderers
+    //                disabled), and an LODGroup on the container shows LOD0 = the merged pieces (exact baked lighting),
+    //                LOD1 = decimated copies (~Lod1Ratio tris) beyond farLodDistance, LOD2 (~Lod2Ratio) beyond
+    //                farLodDistance x Lod2DistanceFactor.
+    //   * "heavy":   every static renderer >= HeavyMinTriangles under the root (except HeavyExcludedPaths) gets its own
+    //                LODGroup: LOD0 = the original renderer, untouched; LOD1 / LOD2 = decimated copies in a child container.
+    //   Far LOD distances are for lodBias 1 and a 60 degree FOV; one parameter retunes them all (SetFarLodDistance).
+    //   VRChat scales them by its quality lodBias, and a ~100 degree VR FOV roughly halves them. Decimation is gated by
+    //   MeshDecimator (scripts/MeshDecimator.cs.txt: signed volume >= 0.8, bounds kept, >= 25 % saved); a level that
+    //   fails reuses the level above it. Decimated copies keep the source's lightmap index and scale-offset. Nothing is
+    //   ever culled.
+    //
+    // Lighting without a bake: each lightmapped source's lightmapScaleOffset is baked into the merged UV2 and the merged
+    // renderer gets scale-offset (1,1,0,0) and the same lightmap index (Bakery: a storage row with the source's id).
+    // Probe-lit sources group only when one shared light-probe sample keeps each within ShRelTolerance of its own look.
+    // Merged pieces must pick the same reflection probes as their sources (else the group is split spatially).
+    //
+    // BAKES: the bake must see the originals. Before any lighting bake run "Show Originals (For Bake)"; after the bake run
+    // "Rebuild All Merges" (merged UV2 copies the current charts, so "Use Merged" alone is wrong after a bake). Rebuild
+    // too after any generator recreates source objects. Re-bake occlusion culling after every rebuild.
+    public static class StaticMergeTool
+    {
+        // ---------------------------------------------------------------- PARAMETERS
+        public const string ScenePath = "";                                // "" = any scene, else refuse other scenes
+        public const string AssetDir = "Assets/PerfMerge";                 // merged mesh assets (one .asset per cluster)
+        public const string ManifestPath = "PerfMerge/merge_manifest.json"; // project-relative, outside Assets
+        public const string ContainerPrefix = "PERFMERGE_";                // container = prefix + mode
+        public const string MenuRoot = "Tools/Static Merge/";
+        public const string GlassFacePrefix = "GlassFace_";                // names of mergeable glass face renderers
+        public const string GlassInPrefix = "GlassFace_In";                // inner layer of a double-layer pane
+        public const string EdgeZonePrefix = "Edge_";                      // "edge" zone ancestors (one facade direction)
+        public const string CeilingMarker = "/CeilingRails/";              // path token of renderers whose top = ceiling
+        static readonly float[] FloorLevels = { 0f };                      // world floor heights (highest below a fixture wins)
+        const float FixtureMinHeight = 1.4f;                               // ceiling fixtures hang above floor + this
+        const float CulledHeight = 0.0005f;
+        public const float DefaultFarLodDistance = 50f;                    // LOD1 switch distance (m) at lodBias 1, FOV 60
+        const float Lod2DistanceFactor = 2f;                               // LOD2 switch = farLodDistance x this
+        const float Lod1Ratio = 0.5f, Lod2Ratio = 0.2f;                    // requested decimation (the gate may step it up)
+        public const int HeavyMinTriangles = 10000;                        // "heavy" mode threshold
+        static readonly string[] HeavyExcludedPaths = { };                 // path prefixes "heavy" never touches
+        const float PlaneTolerance = 0.005f;
+
+        [Serializable]
+        public class Spec
+        {
+            public string root, mode, zone = "none";
+        }
+
+        [Serializable]
+        public class Piece
+        {
+            public string path, asset, material, probes, anchor, gate;
+            public int bakeryId = -1, lightmapIndex = -1, vertices, triangles, lodLevel;
+            public bool probeLit;
+            public float[] scaleOffset; // expected lightmapScaleOffset (decimated copies of an unmerged source keep its own)
+            public List<string> sources = new List<string>();
+        }
+
+        [Serializable]
+        public class Cluster
+        {
+            public string root, mode, zone, asset;
+            public bool addedLodGroup;
+            public float size;
+            public float[] reference;
+            public List<Piece> pieces = new List<Piece>();
+            public List<string> lod0 = new List<string>();
+            public List<string> disabledSources = new List<string>();
+            public List<string> skipped = new List<string>();
+        }
+
+        [Serializable]
+        public class Manifest
+        {
+            public string updatedUtc, state = "merged";
+            public float farLodDistance = DefaultFarLodDistance;
+            public List<Spec> specs = new List<Spec>();
+            public List<Cluster> clusters = new List<Cluster>();
+        }
+
+        static readonly HashSet<string> ExcludedComponents = new HashSet<string>
+        {
+            "UdonBehaviour", "VRCPickup", "VRC_Pickup", "VRCObjectSync", "SmartObjectSync", "Animator", "Animation",
+            "ParticleSystem", "SkinnedMeshRenderer", "VRCMirrorReflection", "Canvas", "TextMeshPro", "TextMeshProUGUI",
+            "TextMesh", "Rigidbody", "VRCStation", "Cloth", "VideoPlayer", "Camera", "LineRenderer", "TrailRenderer"
+        };
+
+        static readonly string[] ExcludedNames =
+        {
+            "qvpen", "poker", "holdem", "mahjong", "billiard", "fish", "water", "mirror", "video", "vizvid", "liedown",
+            "ripple", "pickup", "chip", "editorpreview"
+        };
+
+        // Lighting containers (exact names / "Lighting_" prefix) hold many fixtures; fixture nodes are one assembly each.
+        static readonly string[] LightingContainers = { "lights", "lighting", "ceilingrails", "ceiling_mapped" };
+        static readonly string[] FixtureNodeNames = { "pendant", "chandelier", "canopy", "downlight", "ceiling_light", "cove" };
+
+        static bool IsLightingContainer(string lower) => LightingContainers.Contains(lower) || lower.StartsWith("lighting_", StringComparison.Ordinal);
+        static bool IsFixtureNode(string lower) => FixtureNodeNames.Any(k => lower.Contains(k));
+
+        // ------------------------------------------------------------------ menus
+        [MenuItem(MenuRoot + "Show Originals (For Bake)")]
+        static void MenuOriginals() { Debug.Log("[StaticMerge] " + SetState("originals")); }
+
+        [MenuItem(MenuRoot + "Use Merged")]
+        static void MenuMerged() { Debug.Log("[StaticMerge] " + SetState("merged")); }
+
+        [MenuItem(MenuRoot + "Rebuild All Merges")]
+        static void MenuRebuild() { Debug.Log("[StaticMerge] " + Rebuild(null)); }
+
+        [MenuItem(MenuRoot + "Remove All Merges (Rollback)")]
+        static void MenuRollback() { Debug.Log("[StaticMerge] " + RemoveWhere(c => true)); }
+
+        // ------------------------------------------------------------------ manifest
+        public static Manifest Load()
+        {
+            return File.Exists(ManifestPath) ? JsonUtility.FromJson<Manifest>(File.ReadAllText(ManifestPath)) : new Manifest();
+        }
+
+        static void Save(Manifest m)
+        {
+            m.updatedUtc = DateTime.UtcNow.ToString("o");
+            Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath));
+            File.WriteAllText(ManifestPath, JsonUtility.ToJson(m, true));
+        }
+
+        static void Guard()
+        {
+            if (EditorApplication.isPlaying || BakeInProgress) throw new InvalidOperationException("Static merge only in idle Edit mode.");
+            if (ScenePath != "" && SceneManager.GetActiveScene().path != ScenePath) throw new InvalidOperationException("Active scene is not " + ScenePath);
+        }
+
+        public static string PathOf(Transform t)
+        {
+            string p = t.name;
+            while (t.parent != null) { t = t.parent; p = t.name + "/" + p; }
+            return p;
+        }
+
+        static Transform Find(string path)
+        {
+            var go = GameObject.Find("/" + path);
+            return go ? go.transform : null;
+        }
+
+        static string ContainerName(string mode) => ContainerPrefix + mode;
+
+        // ------------------------------------------------------------------ public API
+        // Registers the spec (once) and builds it.
+        public static string Add(string rootPath, string mode, string zone = "none")
+        {
+            Guard();
+            var m = Load();
+            if (!m.specs.Any(s => s.root == rootPath && s.mode == mode))
+            {
+                m.specs.Add(new Spec { root = rootPath, mode = mode, zone = zone });
+                Save(m);
+            }
+            return Build(m.specs.First(s => s.root == rootPath && s.mode == mode));
+        }
+
+        // Drops a spec and its built cluster (rollback of one entry).
+        public static string Drop(string rootPath, string mode)
+        {
+            string r = RemoveWhere(c => c.root == rootPath && c.mode == mode);
+            var m = Load();
+            m.specs.RemoveAll(s => s.root == rootPath && s.mode == mode);
+            Save(m);
+            return r;
+        }
+
+        public static string RemoveMode(string mode) => RemoveWhere(c => c.mode == mode);
+
+        // Removes and rebuilds every spec (mode == null) or one mode plus every mode after it in the order ceiling, cell,
+        // glass, lod, heavy: later modes claim renderers (room clusters take what the earlier merges left), so they follow.
+        public static string Rebuild(string mode)
+        {
+            Guard();
+            var order = new[] { "ceiling", "cell", "glass", "lod", "heavy" };
+            int from = mode == null ? 0 : Array.IndexOf(order, mode);
+            if (from < 0) throw new ArgumentException("Unknown mode " + mode);
+            var modes = new HashSet<string>(order.Skip(from));
+            var log = new List<string> { RemoveWhere(c => modes.Contains(c.mode)) };
+            foreach (var md in order.Skip(from))
+                foreach (var s in Load().specs.Where(x => x.mode == md).ToList())
+                    log.Add(Build(s));
+            var m = Load(); m.state = "merged"; Save(m);
+            return string.Join("\n", log);
+        }
+
+        // "originals": sources on, merged off, LODGroups off (what Bakery must see). "merged": the optimized state.
+        public static string SetState(string state)
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Edit mode only.");
+            bool orig = state == "originals";
+            var m = Load();
+            int n = 0;
+            foreach (var c in m.clusters)
+            {
+                var root = Find(c.root);
+                if (root == null) continue;
+                var cont = root.Find(ContainerName(c.mode));
+                if (cont != null) foreach (var r in cont.GetComponentsInChildren<Renderer>(true)) { r.enabled = !orig; n++; }
+                if (c.mode == "lod" || c.mode == "heavy") { var lg = LodHost(root, cont); if (lg) lg.enabled = !orig; }
+                foreach (var s in c.disabledSources) { var t = Find(s); var mr = t ? t.GetComponent<MeshRenderer>() : null; if (mr) mr.enabled = orig; }
+            }
+            m.state = orig ? "originals" : "merged";
+            Save(m);
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            return "state=" + m.state + " mergedRenderers=" + n;
+        }
+
+        // ------------------------------------------------------------------ eligibility
+        static HashSet<Transform> UdonReferenced()
+        {
+            var set = new HashSet<Transform>();
+            foreach (var ub in Resources.FindObjectsOfTypeAll<VRC.Udon.UdonBehaviour>())
+            {
+                if (ub == null || !ub.gameObject.scene.IsValid() || ub.publicVariables == null) continue;
+                foreach (var sym in ub.publicVariables.VariableSymbols)
+                    if (ub.publicVariables.TryGetVariableValue(sym, out object v) && v != null) AddRefs(set, v);
+            }
+            return set;
+        }
+
+        static void AddRefs(HashSet<Transform> set, object v)
+        {
+            if (v is GameObject g) { if (g) set.Add(g.transform); }
+            else if (v is Component c) { if (c) set.Add(c.transform); }
+            else if (v is Array a) foreach (var e in a) if (e != null) AddRefs(set, e);
+        }
+
+        static string ExclusionReason(Transform t, HashSet<Transform> udonRefs, Dictionary<Transform, string> cache)
+        {
+            if (t == null) return null;
+            if (cache.TryGetValue(t, out string hit)) return hit;
+            string res = null;
+            if (udonRefs.Contains(t)) res = "udon-referenced";
+            if (res == null)
+                foreach (var c in t.GetComponents<Component>())
+                {
+                    if (c == null) { res = "missing-script"; break; }
+                    if (ExcludedComponents.Contains(c.GetType().Name)) { res = c.GetType().Name; break; }
+                }
+            if (res == null)
+            {
+                string n = t.name.ToLowerInvariant();
+                foreach (var k in ExcludedNames) if (n.Contains(k)) { res = "name:" + k; break; }
+            }
+            if (res == null) res = ExclusionReason(t.parent, udonRefs, cache);
+            cache[t] = res;
+            return res;
+        }
+
+        static string ProbeSignature(Renderer r)
+        {
+            var ps = new List<ReflectionProbeBlendInfo>();
+            r.GetClosestReflectionProbes(ps);
+            var parts = ps.Where(x => x.probe != null && x.weight > 1e-4f)
+                .Select(x => PathOf(x.probe.transform) + "=" + x.weight.ToString("0.000", CultureInfo.InvariantCulture))
+                .OrderBy(x => x, StringComparer.Ordinal);
+            return r.reflectionProbeUsage + "|" + string.Join(";", parts);
+        }
+
+        static string AttributeSignature(Mesh m)
+        {
+            return string.Join(",", m.GetVertexAttributes().Where(a => a.attribute != VertexAttribute.TexCoord1)
+                .Select(a => a.attribute + "" + a.dimension));
+        }
+
+        // ---------------------------------------------------------------- lightmap storage (Bakery or Unity)
+#if STATIC_MERGE_BAKERY
+        static bool BakeInProgress => ftRenderLightmap.bakeInProgress;
+        static ftLightmapsStorage Storage() => UnityEngine.Object.FindObjectOfType<ftLightmapsStorage>();
+
+        static Dictionary<Renderer, int> StorageRows(ftLightmapsStorage st)
+        {
+            var rows = new Dictionary<Renderer, int>();
+            if (st == null) return rows;
+            for (int i = 0; i < st.bakedRenderers.Count; i++)
+                if (st.bakedRenderers[i] != null && !rows.ContainsKey(st.bakedRenderers[i])) rows[st.bakedRenderers[i]] = i;
+            return rows;
+        }
+
+        static string LightmapEligibility(Renderer r, Ctx x)
+        {
+            if (!x.rows.TryGetValue(r, out int row)) return "no-bakery-row";
+            if (x.st.bakedVertexColorMesh[row] != null) return "vertex-baked";
+            if (x.st.bakedIDs[row] < 0) return "bakery-id<0";
+            if ((x.st.bakedScaleOffset[row] - r.lightmapScaleOffset).sqrMagnitude > 1e-12f) return "scaleoffset-mismatch";
+            return null;
+        }
+
+        static int LightmapId(Renderer r, Ctx x) => x.st.bakedIDs[x.rows[r]];
+        static Vector4 SourceScaleOffset(Renderer r, Ctx x) => x.st.bakedScaleOffset[x.rows[r]];
+
+        // Bakery re-applies lightmaps at load from its storage: append a row (main lists and the first sector).
+        static void Register(Ctx x, MeshRenderer mr, int id, Vector4 scaleOffset)
+        {
+            var st = x.st;
+            st.bakedRenderers.Add(mr); st.bakedIDs.Add(id); st.bakedScaleOffset.Add(scaleOffset);
+            st.bakedVertexOffset.Add(-1); st.bakedVertexColorMesh.Add(null);
+            var sector = st.sectors != null && st.sectors.Count > 0 ? st.sectors[0] : null;
+            if (sector != null)
+            {
+                sector.bakedRenderers.Add(mr); sector.bakedIDs.Add(id); sector.bakedScaleOffset.Add(scaleOffset);
+                sector.bakedVertexColorMesh.Add(null);
+            }
+            EditorUtility.SetDirty(st);
+        }
+
+        // Removes the storage rows (main lists and the first sector) that point at the given merged renderers.
+        static int RemoveRows(HashSet<Renderer> merged)
+        {
+            var st = Storage();
+            if (st == null) return 0;
+            int n = 0;
+            for (int i = st.bakedRenderers.Count - 1; i >= 0; i--)
+            {
+                var r = st.bakedRenderers[i];
+                if (r == null || !merged.Contains(r)) continue;
+                st.bakedRenderers.RemoveAt(i); st.bakedIDs.RemoveAt(i); st.bakedScaleOffset.RemoveAt(i);
+                st.bakedVertexOffset.RemoveAt(i); st.bakedVertexColorMesh.RemoveAt(i);
+                n++;
+            }
+            if (st.sectors != null && st.sectors.Count > 0 && st.sectors[0] != null)
+            {
+                var s = st.sectors[0];
+                for (int i = s.bakedRenderers.Count - 1; i >= 0; i--)
+                {
+                    var r = s.bakedRenderers[i];
+                    if (r == null || !merged.Contains(r)) continue;
+                    s.bakedRenderers.RemoveAt(i); s.bakedIDs.RemoveAt(i); s.bakedScaleOffset.RemoveAt(i); s.bakedVertexColorMesh.RemoveAt(i);
+                }
+            }
+            EditorUtility.SetDirty(st);
+            return n;
+        }
+
+        static string VerifyRow(MeshRenderer mr, Piece p, Dictionary<Renderer, int> rows, ftLightmapsStorage st)
+        {
+            if (!rows.TryGetValue(mr, out int row)) return "no row " + p.path;
+            return st.bakedIDs[row] != p.bakeryId ? "id " + p.path : null;
+        }
+#else
+        static bool BakeInProgress => Lightmapping.isRunning;
+        static object Storage() => null;
+        static Dictionary<Renderer, int> StorageRows(object st) => new Dictionary<Renderer, int>();
+        static string LightmapEligibility(Renderer r, Ctx x) => null;
+        static int LightmapId(Renderer r, Ctx x) => r.lightmapIndex;
+        static Vector4 SourceScaleOffset(Renderer r, Ctx x) => r.lightmapScaleOffset;
+        static void Register(Ctx x, MeshRenderer mr, int id, Vector4 scaleOffset) { }
+        static int RemoveRows(HashSet<Renderer> merged) => 0;
+        static string VerifyRow(MeshRenderer mr, Piece p, Dictionary<Renderer, int> rows, object st) => null;
+#endif
+
+        static bool Lightmapped(Renderer r) => r.lightmapIndex >= 0 && r.lightmapIndex < 0xFFFE;
+
+        static bool UnderPerfContainer(Transform t)
+        {
+            for (; t != null; t = t.parent)
+                if (t.name.StartsWith(ContainerPrefix, StringComparison.Ordinal)) return true;
+            return false;
+        }
+
+        static HashSet<Renderer> LodMembers()
+        {
+            var set = new HashSet<Renderer>();
+            foreach (var lg in UnityEngine.Object.FindObjectsOfType<LODGroup>(true))
+                foreach (var lod in lg.GetLODs())
+                    foreach (var r in lod.renderers) if (r != null) set.Add(r);
+            return set;
+        }
+
+        struct Ctx
+        {
+#if STATIC_MERGE_BAKERY
+            public ftLightmapsStorage st;
+#else
+            public object st;
+#endif
+            public Dictionary<Renderer, int> rows; public HashSet<Transform> udon;
+            public Dictionary<Transform, string> cache; public HashSet<Renderer> lodMembers; public HashSet<Renderer> otherSources;
+        }
+
+        static string Eligibility(MeshRenderer r, string mode, Ctx x)
+        {
+            var mf = r.GetComponent<MeshFilter>();
+            var mesh = mf ? mf.sharedMesh : null;
+            if (mesh == null) return "no-mesh";
+            if ((GameObjectUtility.GetStaticEditorFlags(r.gameObject) & StaticEditorFlags.BatchingStatic) == 0) return "not-batching-static";
+            string ex = ExclusionReason(r.transform, x.udon, x.cache);
+            if (ex != null) return "excluded:" + ex;
+            if (x.lodMembers.Contains(r)) return "already-in-lodgroup";
+            if (x.otherSources.Contains(r)) return "source-of-another-merge";
+            if (r.HasPropertyBlock()) return "property-block";
+            if (r.additionalVertexStreams != null || r.enlightenVertexStream != null) return "vertex-streams";
+            if (r.sharedMaterials.Length != mesh.subMeshCount) return "material-count!=submeshes";
+            for (int s = 0; s < mesh.subMeshCount; s++)
+                if (mesh.GetTopology(s) != MeshTopology.Triangles) return "non-triangle-topology";
+            foreach (var m in r.sharedMaterials) if (m == null) return "null-material";
+            if (mode == "glass")
+            {
+                if (!r.name.StartsWith(GlassFacePrefix, StringComparison.Ordinal)) return "not-glass-face";
+                if (mesh.subMeshCount != 1 || r.sharedMaterial.renderQueue < 2500) return "not-transparent";
+                if (Lightmapped(r)) return "lightmapped-glass";
+                return null;
+            }
+            foreach (var m in r.sharedMaterials) if (m.renderQueue >= 2450) return "transparent-or-cutout";
+            if (!Lightmapped(r))
+            {
+                if (mode == "ceiling") return null; // probe-lit fixture hardware is allowed
+                return "probe-lit";
+            }
+            return LightmapEligibility(r, x);
+        }
+
+        static string Zone(Renderer r, Transform root, string zone)
+        {
+            if (zone == "edge")
+            {
+                for (var t = r.transform.parent; t != null && t != root; t = t.parent)
+                    if (t.name.StartsWith(EdgeZonePrefix, StringComparison.Ordinal)) return PathOf(t);
+                return "noedge";
+            }
+            if (zone == "child")
+            {
+                var t = r.transform;
+                while (t.parent != null && t.parent != root) t = t.parent;
+                return t.name + "#" + t.GetSiblingIndex();
+            }
+            return "";
+        }
+
+        // Ceiling fixture assemblies of a room root: the child of a lighting node that contains the renderer.
+        static Dictionary<MeshRenderer, string> CeilingFixtures(Transform root, List<string> log)
+        {
+            var result = new Dictionary<MeshRenderer, string>();
+            var renderers = root.GetComponentsInChildren<MeshRenderer>(false).Where(r => r.enabled && !UnderPerfContainer(r.transform)).ToList();
+            // ceiling height: top of the room's CeilingMarker renderers (e.g. ceiling rails placed against the ceiling)
+            var rails = renderers.Where(r => PathOf(r.transform).Contains(CeilingMarker)).ToList();
+            if (rails.Count == 0) { log.Add("no " + CeilingMarker + " renderers under " + PathOf(root) + "; ceiling unknown"); return result; }
+            var assemblies = new Dictionary<Transform, List<MeshRenderer>>();
+            foreach (var r in renderers)
+            {
+                // outermost fixture node below the root wins; otherwise the child of the outermost lighting container
+                Transform container = null, fixture = null;
+                for (var t = r.transform.parent; t != null; t = t.parent)
+                {
+                    if (t == root) break;
+                    string n = t.name.ToLowerInvariant();
+                    if (IsFixtureNode(n)) fixture = t;
+                    else if (IsLightingContainer(n)) container = t;
+                }
+                if (fixture == null && container == null) continue;
+                var a = r.transform;
+                if (fixture != null) a = fixture;
+                else while (a.parent != null && a.parent != container) a = a.parent;
+                if (!assemblies.TryGetValue(a, out var list)) assemblies[a] = list = new List<MeshRenderer>();
+                list.Add(r);
+            }
+            foreach (var kv in assemblies)
+            {
+                var b = kv.Value[0].bounds;
+                foreach (var r in kv.Value) b.Encapsulate(r.bounds);
+                // nearest rail ceiling above this assembly (within 6 m horizontally), else the room's highest rail
+                float ceiling = rails.Where(r => r.bounds.max.y > b.center.y && Vector2.Distance(new Vector2(r.bounds.center.x, r.bounds.center.z), new Vector2(b.center.x, b.center.z)) < 6f)
+                    .Select(r => r.bounds.max.y).DefaultIfEmpty(rails.Max(r => r.bounds.max.y)).Max();
+                bool touches = b.max.y > ceiling - 0.2f;
+                float floorY = FloorLevels.Where(f => f <= b.min.y).DefaultIfEmpty(FloorLevels.Min()).Max();
+                bool hangs = b.min.y > floorY + FixtureMinHeight;
+                if (touches && hangs) foreach (var r in kv.Value) result[r] = PathOf(kv.Key);
+                else log.Add("not ceiling: " + PathOf(kv.Key) + " top=" + b.max.y.ToString("0.00") + " bottom=" + b.min.y.ToString("0.00") + " ceiling=" + ceiling.ToString("0.00"));
+            }
+            return result;
+        }
+
+        static string GroupKey(MeshRenderer r, int sub, string mode, string zone, Ctx x, Transform root)
+        {
+            var mesh = r.GetComponent<MeshFilter>().sharedMesh;
+            string common = string.Join("|", new[]
+            {
+                r.sharedMaterials[sub].GetInstanceID().ToString(), r.shadowCastingMode.ToString(), r.receiveShadows.ToString(),
+                r.lightProbeUsage.ToString(), r.receiveGI.ToString(), r.motionVectorGenerationMode.ToString(), r.renderingLayerMask.ToString(),
+                r.gameObject.layer.ToString(), ((int)GameObjectUtility.GetStaticEditorFlags(r.gameObject)).ToString(),
+                r.sortingLayerID.ToString(), r.sortingOrder.ToString(), AttributeSignature(mesh)
+            });
+            if (mode == "glass")
+            {
+                var pl = PlaneOf(r);
+                var n = new Vector3(Mathf.Round(pl.x * 100f) / 100f, Mathf.Round(pl.y * 100f) / 100f, Mathf.Round(pl.z * 100f) / 100f);
+                string floor = string.Join("/", PathOf(r.transform).Split('/').Take(2));
+                bool inward = r.name.StartsWith(GlassInPrefix, StringComparison.Ordinal);
+                return floor + "|n" + n.ToString("F2") + "|" + (inward ? "In" : "Out") + "|" + EffectiveProbe(r) + "|" + (ProbeLit(r) ? "LP" : "noLP") + "|" + common;
+            }
+            string lm = Lightmapped(r) ? LightmapId(r, x) + "/" + r.lightmapIndex : "probe";
+            string anchor = r.probeAnchor ? r.probeAnchor.GetInstanceID().ToString() : "-";
+            return Zone(r, root, mode == "cell" ? zone : "none") + "|" + lm + "|" + ProbeSignature(r) + "|a" + anchor + "|" + (ProbeLit(r) ? "LP" : "noLP") + "|" + common;
+        }
+
+        // Effective probes (non-zero weight) of Simple-usage glass.
+        static string EffectiveProbe(Renderer r)
+        {
+            var ps = new List<ReflectionProbeBlendInfo>();
+            r.GetClosestReflectionProbes(ps);
+            return r.reflectionProbeUsage + "|" + string.Join(";", ps.Where(x => x.probe != null && x.weight > 1e-4f)
+                .Select(x => PathOf(x.probe.transform) + "=" + x.weight.ToString("0.000", CultureInfo.InvariantCulture)).OrderBy(x => x, StringComparer.Ordinal));
+        }
+
+        // Probe-lit renderers sample ONE light-probe SH per renderer (at the anchor, else the bounds centre). A merged
+        // piece samples a single SH for all its sources, so probe-lit groups are split greedily: a seed source takes every
+        // source whose probe-lit diffuse term would move by at most ShRelTolerance of its own outgoing radiance
+        // (emission + albedo x SH, linear, six axis directions, RGB) or ShAbsTolerance near black, and the merged piece
+        // is anchored at the seed's sample point. An emissive diffuser tolerates a large SH change, a matte trim does
+        // not. Without this, merged probe-lit glass and ceiling strips shift brightness coherently.
+        const float ShRelTolerance = 0.03f;  // fraction of the source's own radiance
+        const float ShAbsTolerance = 0.0005f; // linear; well under one 8-bit sRGB code above ~code 20
+        static readonly Vector3[] ShDirs = { Vector3.right, Vector3.left, Vector3.up, Vector3.down, Vector3.forward, Vector3.back };
+
+        static bool ProbeLit(Renderer r) => !Lightmapped(r) && r.lightProbeUsage == LightProbeUsage.BlendProbes;
+
+        static Vector3 SamplePoint(Renderer r) => r.probeAnchor ? r.probeAnchor.position : r.bounds.center;
+
+        // Linear SH irradiance as the shader sees it (ShadeSH9), six directions x RGB.
+        static float[] ShIrradiance(Renderer r)
+        {
+            LightProbes.GetInterpolatedProbe(SamplePoint(r), r, out SphericalHarmonicsL2 sh);
+            var cols = new Color[ShDirs.Length];
+            sh.Evaluate(ShDirs, cols);
+            return cols.SelectMany(c => new[] { Mathf.Max(c.r, 0f), Mathf.Max(c.g, 0f), Mathf.Max(c.b, 0f) }).ToArray();
+        }
+
+        // Upper-bound albedo and lower-bound emission (linear RGB) of a material; textures are ignored (albedo <= colour).
+        static (Vector3 albedo, Vector3 emission) Response(Material m)
+        {
+            Color a = m.HasProperty("_Color") ? m.GetColor("_Color").linear : Color.white;
+            Color e = m.HasProperty("_EmissionColor") && m.IsKeywordEnabled("_EMISSION") ? m.GetColor("_EmissionColor") : Color.black;
+            return (new Vector3(a.r, a.g, a.b), new Vector3(e.r, e.g, e.b));
+        }
+
+        static bool ShClose(float[] seed, float[] e, Vector3 albedo, Vector3 emission)
+        {
+            for (int i = 0; i < e.Length; i++)
+            {
+                int c = i % 3;
+                float own = emission[c] + albedo[c] * e[i];
+                if (albedo[c] * Mathf.Abs(seed[i] - e[i]) > Mathf.Max(ShRelTolerance * own, ShAbsTolerance)) return false;
+            }
+            return true;
+        }
+
+        // Splits every probe-lit group into SH-tolerance clusters; the seed (first part) of each cluster is its anchor.
+        static Dictionary<string, List<Part>> SplitByLightProbes(Dictionary<string, List<Part>> keyed)
+        {
+            var result = new Dictionary<string, List<Part>>();
+            foreach (var kv in keyed)
+            {
+                var p0 = kv.Value[0];
+                if (!ProbeLit(p0.r)) { result[kv.Key] = kv.Value; continue; }
+                var (albedo, emission) = Response(p0.r.sharedMaterials[p0.sub]);
+                var sh = kv.Value.Select(p => p.r).Distinct().ToDictionary(r => r, ShIrradiance);
+                var left = kv.Value.OrderBy(p => PathOf(p.r.transform), StringComparer.Ordinal).ThenBy(p => p.sub).ToList();
+                int n = 0;
+                while (left.Count > 0)
+                {
+                    var seed = sh[left[0].r];
+                    var take = left.Where(p => ShClose(seed, sh[p.r], albedo, emission)).ToList();
+                    result[kv.Key + "|sh" + n++] = take;
+                    left = left.Except(take).ToList();
+                }
+            }
+            return result;
+        }
+
+        // Glass panes are double layers (In faces + Out face) drawn back to front by bounds centre. Per pane the nearer
+        // layer draws last; merged In and Out pieces keep that order from every viewpoint only if they hold exactly the
+        // same panes (their centres then differ by the glass thickness alone). So every face's group is refined by its
+        // pane's signature: the set of groups of all faces of the pane (an ineligible face makes the pane unique).
+        static Dictionary<string, List<Part>> PairGlassPanes(Dictionary<string, List<Part>> keyed)
+        {
+            var groupId = new Dictionary<MeshRenderer, int>();
+            int gid = 0;
+            foreach (var kv in keyed.OrderBy(k => k.Key, StringComparer.Ordinal)) { foreach (var p in kv.Value) groupId[p.r] = gid; gid++; }
+            var signature = new Dictionary<Transform, string>();
+            var result = new Dictionary<string, List<Part>>();
+            foreach (var kv in keyed)
+                foreach (var p in kv.Value)
+                {
+                    var pane = p.r.transform.parent;
+                    if (!signature.TryGetValue(pane, out string sig))
+                    {
+                        var faces = pane.GetComponentsInChildren<MeshRenderer>(true)
+                            .Where(f => f.transform.parent == pane && f.enabled && f.name.StartsWith(GlassFacePrefix, StringComparison.Ordinal));
+                        signature[pane] = sig = string.Join(",", faces.Select(f => groupId.TryGetValue(f, out int g) ? g.ToString() : "x" + f.GetInstanceID()).OrderBy(s => s, StringComparer.Ordinal));
+                    }
+                    string k = kv.Key + "|pane{" + sig + "}";
+                    if (!result.TryGetValue(k, out var list)) result[k] = list = new List<Part>();
+                    list.Add(p);
+                }
+            return result;
+        }
+
+        static readonly Dictionary<Renderer, Vector4> PlaneCache = new Dictionary<Renderer, Vector4>();
+
+        // World plane (normal xyz, offset w) of a flat face renderer, from its area-weighted triangle normal.
+        static Vector4 PlaneOf(Renderer r)
+        {
+            if (PlaneCache.TryGetValue(r, out var cached)) return cached;
+            var mesh = r.GetComponent<MeshFilter>().sharedMesh;
+            var v = mesh.vertices; var t = mesh.triangles; var l2w = r.transform.localToWorldMatrix;
+            Vector3 acc = Vector3.zero, p0 = l2w.MultiplyPoint3x4(v[t[0]]);
+            for (int i = 0; i < t.Length; i += 3)
+            {
+                var a = l2w.MultiplyPoint3x4(v[t[i]]); var b = l2w.MultiplyPoint3x4(v[t[i + 1]]); var c = l2w.MultiplyPoint3x4(v[t[i + 2]]);
+                acc += Vector3.Cross(b - a, c - a);
+            }
+            var n = acc.normalized;
+            var plane = new Vector4(n.x, n.y, n.z, Vector3.Dot(n, p0));
+            PlaneCache[r] = plane;
+            return plane;
+        }
+
+        // ------------------------------------------------------------------ build
+        struct Part { public MeshRenderer r; public int sub; }
+
+        static string Build(Spec spec)
+        {
+            Guard();
+            string rootPath = spec.root, mode = spec.mode;
+            if (mode == "heavy") return BuildHeavy(spec);
+            if (mode != "lod" && mode != "glass" && mode != "cell" && mode != "ceiling") throw new ArgumentException("mode must be lod, glass, cell, ceiling or heavy");
+            var manifest = Load();
+            if (manifest.state != "merged") return "ERROR state is " + manifest.state + "; run Use Merged or Rebuild first";
+            if (manifest.clusters.Any(c => c.root == rootPath && c.mode == mode)) return "SKIP already built: " + rootPath + " " + mode;
+            var root = Find(rootPath);
+            if (root == null) return "ERROR root not found: " + rootPath;
+            var st = Storage();
+#if STATIC_MERGE_BAKERY
+            if (st == null) return "ERROR no ftLightmapsStorage";
+#endif
+            var x = new Ctx
+            {
+                st = st, rows = StorageRows(st), udon = UdonReferenced(), cache = new Dictionary<Transform, string>(),
+                lodMembers = LodMembers(),
+                otherSources = new HashSet<Renderer>(manifest.clusters.SelectMany(c => c.disabledSources).Select(p => Find(p)).Where(t => t != null).Select(t => t.GetComponent<Renderer>()).Where(r => r != null))
+            };
+            var cluster = new Cluster { root = rootPath, mode = mode, zone = spec.zone };
+            Dictionary<MeshRenderer, string> fixtures = mode == "ceiling" ? CeilingFixtures(root, cluster.skipped) : null;
+
+            // 1. eligible renderers and their group keys
+            var keyed = new Dictionary<string, List<Part>>();
+            foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (!r.enabled || !r.gameObject.activeInHierarchy) continue;
+                if (UnderPerfContainer(r.transform)) continue;
+                if (fixtures != null && !fixtures.ContainsKey(r)) continue;
+                string why = Eligibility(r, mode, x);
+                if (why != null) { cluster.skipped.Add(PathOf(r.transform) + " :: " + why); continue; }
+                var mesh = r.GetComponent<MeshFilter>().sharedMesh;
+                for (int s = 0; s < mesh.subMeshCount; s++)
+                {
+                    string key = GroupKey(r, s, mode, spec.zone, x, root);
+                    if (!keyed.TryGetValue(key, out var list)) keyed[key] = list = new List<Part>();
+                    list.Add(new Part { r = r, sub = s });
+                }
+            }
+
+            // glass: split each key by plane offset (coplanar within PlaneTolerance)
+            if (mode == "glass")
+            {
+                var split = new Dictionary<string, List<Part>>();
+                foreach (var kv in keyed)
+                {
+                    var sorted = kv.Value.OrderBy(p => PlaneOf(p.r).w).ToList();
+                    int band = 0; float start = PlaneOf(sorted[0].r).w;
+                    foreach (var p in sorted)
+                    {
+                        float d = PlaneOf(p.r).w;
+                        if (d - start > PlaneTolerance) { band++; start = d; }
+                        string k = kv.Key + "|plane" + band;
+                        if (!split.TryGetValue(k, out var l)) split[k] = l = new List<Part>();
+                        l.Add(p);
+                    }
+                }
+                keyed = split;
+            }
+            keyed = SplitByLightProbes(keyed);
+            if (mode == "glass") keyed = PairGlassPanes(keyed);
+
+            // 2. build merged pieces; reject groups whose merged renderer picks different reflection probes
+            var container = new GameObject(ContainerName(mode)).transform;
+            container.SetParent(root, false);
+            container.localPosition = Vector3.zero; container.localRotation = Quaternion.identity; container.localScale = Vector3.one;
+            var rejected = new HashSet<MeshRenderer>();
+            var built = new List<(MeshRenderer mr, Mesh mesh, List<Part> parts)>();
+            bool changed = true;
+            int guard = 0;
+            while (changed && guard++ < 8)
+            {
+                changed = false;
+                foreach (var b in built) UnityEngine.Object.DestroyImmediate(b.mr.gameObject);
+                built.Clear();
+                // a renderer is merged only if one of its groups saves a draw; then all its groups are built
+                var groups = keyed.OrderBy(k => k.Key, StringComparer.Ordinal).Select(kv => kv.Value.Where(p => !rejected.Contains(p.r)).ToList()).Where(g => g.Count > 0).ToList();
+                var merging = new HashSet<MeshRenderer>(groups.Where(g => g.Select(p => p.r).Distinct().Count() >= 2).SelectMany(g => g.Select(p => p.r)));
+                int index = 0;
+                // probe mismatches (a bigger merged AABB can reach another probe) split the group spatially and retry
+                var queue = new Queue<List<Part>>(groups.Select(g => g.Where(p => merging.Contains(p.r)).ToList()).Where(g => g.Count > 0));
+                while (queue.Count > 0)
+                {
+                    var parts = queue.Dequeue();
+                    var first = parts[0].r;
+                    bool lit = mode != "glass" && Lightmapped(first);
+                    var mesh = Combine(parts, container, lit, x);
+                    string label = mode + "_" + index.ToString("D2") + "_" + Safe(first.sharedMaterials[parts[0].sub].name);
+                    mesh.name = Safe(rootPath.Replace('/', '_')) + "__" + label;
+                    var go = new GameObject(label);
+                    go.transform.SetParent(container, false);
+                    go.layer = first.gameObject.layer;
+                    var flags = GameObjectUtility.GetStaticEditorFlags(first.gameObject);
+                    // merged copies never feed a bake (the bake sees the originals)
+                    flags &= ~(StaticEditorFlags.ContributeGI | StaticEditorFlags.ReflectionProbeStatic);
+                    GameObjectUtility.SetStaticEditorFlags(go, flags);
+                    go.AddComponent<MeshFilter>().sharedMesh = mesh;
+                    var mr = go.AddComponent<MeshRenderer>();
+                    CopySettings(first, mr, first.sharedMaterials[parts[0].sub]);
+                    var anchors = parts.Select(p => p.r.probeAnchor).Distinct().ToList();
+                    if (anchors.Count == 1 && anchors[0] != null) mr.probeAnchor = anchors[0];
+                    else if (ProbeLit(first))
+                    {
+                        // one SH for the whole piece: sample where the first source sampled (its SH bucket is the group's)
+                        var a = new GameObject(ContainerPrefix + "Anchor").transform;
+                        a.SetParent(go.transform, false);
+                        a.position = SamplePoint(first);
+                        mr.probeAnchor = a;
+                    }
+                    else mr.probeAnchor = null;
+                    if (lit) { mr.lightmapIndex = first.lightmapIndex; mr.lightmapScaleOffset = new Vector4(1, 1, 0, 0); }
+                    string want = mode == "glass" ? EffectiveProbe(first) : ProbeSignature(first);
+                    string got = mode == "glass" ? EffectiveProbe(mr) : ProbeSignature(mr);
+                    if (got != want)
+                    {
+                        // anchor the merged piece at the source nearest its centre and test again (not for probe-lit
+                        // pieces: their anchor is pinned to the SH sample point, so they go straight to the split)
+                        if (!ProbeLit(first))
+                        {
+                            var centre = mr.bounds.center;
+                            var nearest = parts.Select(p => p.r).OrderBy(q => (q.bounds.center - centre).sqrMagnitude).First();
+                            var anchor = new GameObject(ContainerPrefix + "Anchor").transform;
+                            anchor.SetParent(go.transform, false);
+                            anchor.position = nearest.probeAnchor ? nearest.probeAnchor.position : nearest.bounds.center;
+                            mr.probeAnchor = anchor;
+                            got = mode == "glass" ? EffectiveProbe(mr) : ProbeSignature(mr);
+                        }
+                        if (got != want)
+                        {
+                            UnityEngine.Object.DestroyImmediate(go);
+                            var rs = parts.Select(p => p.r).Distinct().ToList();
+                            if (mode == "glass")
+                            {
+                                // a spatial split would break the In/Out pane pairing: leave these panes unmerged
+                                foreach (var pane in parts.Select(p => p.r.transform.parent).Distinct())
+                                    foreach (var f in pane.GetComponentsInChildren<MeshRenderer>(true)) if (f.transform.parent == pane) rejected.Add(f);
+                                changed = true;
+                                continue;
+                            }
+                            if (rs.Count >= 2)
+                            {
+                                var bb = rs[0].bounds; foreach (var q in rs) bb.Encapsulate(q.bounds.center);
+                                int axis = bb.size.x >= bb.size.y && bb.size.x >= bb.size.z ? 0 : (bb.size.y >= bb.size.z ? 1 : 2);
+                                var order = rs.OrderBy(q => q.bounds.center[axis]).ToList();
+                                var low = new HashSet<MeshRenderer>(order.Take(order.Count / 2));
+                                queue.Enqueue(parts.Where(p => low.Contains(p.r)).ToList());
+                                queue.Enqueue(parts.Where(p => !low.Contains(p.r)).ToList());
+                                continue;
+                            }
+                            foreach (var p in parts) rejected.Add(p.r);
+                            changed = true;
+                            continue;
+                        }
+                    }
+                    built.Add((mr, mesh, parts));
+                    index++;
+                }
+            }
+            foreach (var r in rejected) cluster.skipped.Add(PathOf(r.transform) + " :: probe-mismatch-after-merge");
+            // a cluster whose pieces are as many as its source draws (renderer x submesh) saves nothing
+            if (built.Count == 0 || built.Count >= built.Sum(b => b.parts.Count))
+            {
+                UnityEngine.Object.DestroyImmediate(container.gameObject);
+                manifest.clusters.Add(cluster); Save(manifest);
+                return "NOTHING TO MERGE " + rootPath + " " + mode + " skipped=" + cluster.skipped.Count;
+            }
+
+            // 3. assets, storage rows, source disabling, far LODs
+            string assetPath = NewAsset(rootPath, mode);
+            AssetDatabase.CreateAsset(built[0].mesh, assetPath);
+            for (int i = 1; i < built.Count; i++) AssetDatabase.AddObjectToAsset(built[i].mesh, assetPath);
+            cluster.asset = assetPath;
+            foreach (var b in built)
+            {
+                var first = b.parts[0].r;
+                bool lit = mode != "glass" && Lightmapped(first);
+                var piece = new Piece
+                {
+                    path = PathOf(b.mr.transform), asset = assetPath, material = b.mr.sharedMaterial.name, probeLit = !lit,
+                    probes = mode == "glass" ? EffectiveProbe(b.mr) : ProbeSignature(b.mr),
+                    anchor = b.mr.probeAnchor ? PathOf(b.mr.probeAnchor) : null,
+                    vertices = b.mesh.vertexCount, triangles = (int)(b.mesh.GetIndexCount(0) / 3),
+                    sources = b.parts.Select(p => PathOf(p.r.transform) + "#" + p.sub).ToList()
+                };
+                if (lit)
+                {
+                    piece.bakeryId = LightmapId(first, x);
+                    piece.lightmapIndex = b.mr.lightmapIndex;
+                    piece.scaleOffset = new[] { 1f, 1f, 0f, 0f };
+                    Register(x, b.mr, piece.bakeryId, new Vector4(1, 1, 0, 0));
+                }
+                cluster.pieces.Add(piece);
+            }
+            var sourceRenderers = built.SelectMany(b => b.parts.Select(p => p.r)).Distinct().ToList();
+            foreach (var r in sourceRenderers) { r.enabled = false; cluster.disabledSources.Add(PathOf(r.transform)); }
+            string lodNote = "";
+            if (mode == "lod")
+            {
+                lodNote = " " + AddFarLods(container.gameObject, container, built.Select(b => b.mr).ToList(), cluster, assetPath, x, Load().farLodDistance,
+                    r => cluster.pieces.First(p => p.path == PathOf(r.transform)));
+            }
+            manifest = Load();
+            manifest.clusters.Add(cluster);
+            Save(manifest);
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            return string.Format(CultureInfo.InvariantCulture, "BUILT {0} mode={1} pieces={2} sources={3} skipped={4}{5}",
+                rootPath, mode, built.Count, sourceRenderers.Count, cluster.skipped.Count, lodNote);
+        }
+
+        static string NewAsset(string key, string mode)
+        {
+            EnsureFolder(AssetDir);
+            string assetPath = AssetDir + "/" + Safe(key.Replace('/', '_')) + "__" + mode + ".asset";
+            if (AssetDatabase.LoadMainAssetAtPath(assetPath) != null) AssetDatabase.DeleteAsset(assetPath); // stale from an interrupted run
+            return assetPath;
+        }
+
+        static LODGroup LodHost(Transform root, Transform container)
+        {
+            var lg = container != null ? container.GetComponent<LODGroup>() : null;
+            return lg != null ? lg : root.GetComponent<LODGroup>();
+        }
+
+        // LOD1 / LOD2 = gated decimated copies of each LOD0 renderer (a level that fails reuses the level above), an LODGroup
+        // on host. lodPiece gives the LOD0 renderer's lighting record (lightmap id, probe-lit flag) to copy.
+        static string AddFarLods(GameObject host, Transform parent, List<MeshRenderer> lod0, Cluster cluster, string assetPath, Ctx x,
+            float farDistance, Func<MeshRenderer, Piece> lodPiece)
+        {
+            var lod1 = new List<Renderer>(); var lod2 = new List<Renderer>();
+            int t0 = 0, t1 = 0, t2 = 0, copies = 0;
+            bool assetExists = AssetDatabase.LoadMainAssetAtPath(assetPath) != null;
+            foreach (var r in lod0)
+            {
+                var mesh = r.GetComponent<MeshFilter>().sharedMesh;
+                int tris = Enumerable.Range(0, mesh.subMeshCount).Sum(s => (int)(mesh.GetIndexCount(s) / 3));
+                var d1 = MeshDecimator.DecimateGated(mesh, Lod1Ratio);
+                var d2 = d1 != null ? MeshDecimator.DecimateGated(mesh, Lod2Ratio) : null;
+                if (d2 != null && d2.tris >= d1.tris * 0.9f) { UnityEngine.Object.DestroyImmediate(d2.mesh); d2 = null; }
+                var src = lodPiece(r);
+                Renderer m1 = r, m2 = r;
+                foreach (var (res, level) in new[] { (d1, 1), (d2, 2) })
+                {
+                    if (res == null) continue;
+                    res.mesh.name = mesh.name + "_LOD" + level;
+                    if (!assetExists) { AssetDatabase.CreateAsset(res.mesh, assetPath); assetExists = true; }
+                    else AssetDatabase.AddObjectToAsset(res.mesh, assetPath);
+                    var go = new GameObject(r.name + "_LOD" + level);
+                    go.transform.SetParent(parent, false);
+                    go.transform.SetPositionAndRotation(r.transform.position, r.transform.rotation);
+                    var ps = parent.lossyScale; var rs = r.transform.lossyScale;
+                    go.transform.localScale = new Vector3(rs.x / ps.x, rs.y / ps.y, rs.z / ps.z);
+                    go.layer = r.gameObject.layer;
+                    GameObjectUtility.SetStaticEditorFlags(go, GameObjectUtility.GetStaticEditorFlags(r.gameObject)
+                        & ~(StaticEditorFlags.ContributeGI | StaticEditorFlags.ReflectionProbeStatic | StaticEditorFlags.OccluderStatic));
+                    go.AddComponent<MeshFilter>().sharedMesh = res.mesh;
+                    var mr = go.AddComponent<MeshRenderer>();
+                    CopySettings(r, mr, r.sharedMaterial);
+                    mr.sharedMaterials = r.sharedMaterials;
+                    mr.probeAnchor = r.probeAnchor;
+                    var piece = new Piece
+                    {
+                        path = PathOf(go.transform), asset = assetPath, material = r.sharedMaterial.name, probeLit = src.probeLit, lodLevel = level,
+                        probes = ProbeSignature(mr), anchor = mr.probeAnchor ? PathOf(mr.probeAnchor) : null, gate = res.Summary(),
+                        vertices = res.mesh.vertexCount, triangles = res.tris, sources = new List<string> { PathOf(r.transform) }
+                    };
+                    if (!src.probeLit)
+                    {
+                        mr.lightmapIndex = r.lightmapIndex; mr.lightmapScaleOffset = r.lightmapScaleOffset;
+                        piece.bakeryId = src.bakeryId; piece.lightmapIndex = r.lightmapIndex;
+                        var so = r.lightmapScaleOffset; piece.scaleOffset = new[] { so.x, so.y, so.z, so.w };
+                        Register(x, mr, src.bakeryId, so);
+                    }
+                    cluster.pieces.Add(piece);
+                    copies++;
+                    if (level == 1) m1 = mr; else m2 = mr;
+                }
+                if (d2 == null) m2 = m1;
+                lod1.Add(m1); lod2.Add(m2);
+                t0 += tris; t1 += d1 != null ? d1.tris : tris; t2 += d2 != null ? d2.tris : (d1 != null ? d1.tris : tris);
+            }
+            if (copies == 0) return "farLods=none";
+            var lg = host.AddComponent<LODGroup>();
+            lg.fadeMode = LODFadeMode.None;
+            lg.animateCrossFading = false;
+            lg.SetLODs(new[] { new LOD(0.5f, lod0.Cast<Renderer>().ToArray()), new LOD(0.25f, lod1.ToArray()), new LOD(CulledHeight, lod2.ToArray()) });
+            lg.RecalculateBounds();
+            ApplyFarLodHeights(lg, farDistance);
+            cluster.size = lg.size;
+            var refp = host.transform.TransformPoint(lg.localReferencePoint);
+            cluster.reference = new[] { refp.x, refp.y, refp.z };
+            cluster.lod0 = lod0.Select(r => PathOf(r.transform)).ToList();
+            return string.Format(CultureInfo.InvariantCulture, "tris LOD0/1/2 {0}/{1}/{2} copies={3}", t0, t1, t2, copies);
+        }
+
+        // LOD0 shows while size / (2 d tan30) * lodBias >= height: LOD1 from farDistance, LOD2 from farDistance x Lod2DistanceFactor
+        // (lodBias 1, FOV 60). The culled level is effectively never reached.
+        static void ApplyFarLodHeights(LODGroup lg, float farDistance)
+        {
+            var t = lg.transform;
+            float s = lg.size * Mathf.Max(Mathf.Abs(t.lossyScale.x), Mathf.Abs(t.lossyScale.y), Mathf.Abs(t.lossyScale.z));
+            float k = 2f * Mathf.Tan(30f * Mathf.Deg2Rad);
+            float h1 = Mathf.Clamp(s / (k * farDistance), CulledHeight * 4f, 0.99f);
+            float h2 = Mathf.Clamp(s / (k * farDistance * Lod2DistanceFactor), CulledHeight * 2f, h1 * 0.99f);
+            var lods = lg.GetLODs();
+            lods[0].screenRelativeTransitionHeight = h1;
+            lods[1].screenRelativeTransitionHeight = h2;
+            lods[2].screenRelativeTransitionHeight = CulledHeight;
+            lg.SetLODs(lods);
+        }
+
+        // Sets the far-LOD switch distance (m, lodBias 1, FOV 60) of every lod / heavy LODGroup without rebuilding.
+        public static string SetFarLodDistance(float distance)
+        {
+            Guard();
+            var m = Load();
+            m.farLodDistance = distance;
+            int n = 0;
+            foreach (var c in m.clusters.Where(c => c.mode == "lod" || c.mode == "heavy"))
+            {
+                var root = Find(c.root);
+                if (root == null) continue;
+                var lg = LodHost(root, root.Find(ContainerName(c.mode)));
+                if (lg == null || lg.lodCount != 3) continue;
+                ApplyFarLodHeights(lg, distance);
+                n++;
+            }
+            Save(m);
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            return "farLodDistance=" + distance.ToString("0.0", CultureInfo.InvariantCulture) + " lodGroups=" + n;
+        }
+
+        // One LODGroup per heavy static renderer under the root (LOD0 = the original, untouched).
+        static string BuildHeavy(Spec spec)
+        {
+            var manifest = Load();
+            if (manifest.state != "merged") return "ERROR state is " + manifest.state + "; run Use Merged or Rebuild first";
+            var root = Find(spec.root);
+            if (root == null) return "ERROR root not found: " + spec.root;
+            var st = Storage();
+#if STATIC_MERGE_BAKERY
+            if (st == null) return "ERROR no ftLightmapsStorage";
+#endif
+            var x = new Ctx
+            {
+                st = st, rows = StorageRows(st), udon = UdonReferenced(), cache = new Dictionary<Transform, string>(), lodMembers = LodMembers(),
+                otherSources = new HashSet<Renderer>(manifest.clusters.SelectMany(c => c.disabledSources).Select(p => Find(p)).Where(t => t != null).Select(t => t.GetComponent<Renderer>()).Where(r => r != null))
+            };
+            var log = new List<string>();
+            foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (!r.enabled || !r.gameObject.activeInHierarchy || UnderPerfContainer(r.transform)) continue;
+                var mf = r.GetComponent<MeshFilter>();
+                var mesh = mf ? mf.sharedMesh : null;
+                if (mesh == null) continue;
+                int tris = Enumerable.Range(0, mesh.subMeshCount).Sum(s => (int)(mesh.GetIndexCount(s) / 3));
+                if (tris < HeavyMinTriangles) continue;
+                string path = PathOf(r.transform);
+                string why = null;
+                if (HeavyExcludedPaths.Any(p => path.StartsWith(p, StringComparison.Ordinal))) why = "excluded-path";
+                else if (manifest.clusters.Any(c => c.root == path && c.mode == "heavy")) why = "already built";
+                else if ((GameObjectUtility.GetStaticEditorFlags(r.gameObject) & StaticEditorFlags.BatchingStatic) == 0) why = "not-batching-static";
+                else if (ExclusionReason(r.transform, x.udon, x.cache) is string ex) why = "excluded:" + ex;
+                else if (x.lodMembers.Contains(r) || r.GetComponent<LODGroup>() != null) why = "already-in-lodgroup";
+                else if (x.otherSources.Contains(r)) why = "source-of-another-merge";
+                else if (r.sharedMaterials.Length != mesh.subMeshCount || r.sharedMaterials.Any(m => m == null)) why = "materials";
+                else if (Lightmapped(r) && LightmapEligibility(r, x) is string lm) why = lm;
+                if (why != null) { log.Add("SKIP " + path + " (" + tris + " tris) " + why); continue; }
+                var cluster = new Cluster { root = path, mode = "heavy", zone = "none" };
+                var container = new GameObject(ContainerName("heavy")).transform;
+                container.SetParent(r.transform, false);
+                var src = new Piece { probeLit = !Lightmapped(r) };
+                if (!src.probeLit) src.bakeryId = LightmapId(r, x);
+                string assetPath = NewAsset(path, "heavy");
+                string note = AddFarLods(r.gameObject, container, new List<MeshRenderer> { r }, cluster, assetPath, x, manifest.farLodDistance, _ => src);
+                if (note == "farLods=none")
+                {
+                    UnityEngine.Object.DestroyImmediate(container.gameObject);
+                    log.Add("SKIP " + path + " (" + tris + " tris) decimation gate failed at every budget");
+                    continue;
+                }
+                cluster.addedLodGroup = true;
+                cluster.asset = assetPath;
+                manifest.clusters.Add(cluster);
+                log.Add("BUILT heavy " + path + " " + note);
+            }
+            Save(manifest);
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            return string.Join("\n", log);
+        }
+
+        static void CopySettings(MeshRenderer src, MeshRenderer dst, Material material)
+        {
+            dst.sharedMaterial = material;
+            dst.shadowCastingMode = src.shadowCastingMode;
+            dst.receiveShadows = src.receiveShadows;
+            dst.lightProbeUsage = src.lightProbeUsage;
+            dst.reflectionProbeUsage = src.reflectionProbeUsage;
+            dst.motionVectorGenerationMode = src.motionVectorGenerationMode;
+            dst.allowOcclusionWhenDynamic = src.allowOcclusionWhenDynamic;
+            dst.renderingLayerMask = src.renderingLayerMask;
+            dst.sortingLayerID = src.sortingLayerID;
+            dst.sortingOrder = src.sortingOrder;
+            dst.receiveGI = src.receiveGI;
+        }
+
+        // Merge parts into container-local space. Lightmapped: UV2 = sourceUV2 * scaleOffset.xy + scaleOffset.zw.
+        static Mesh Combine(List<Part> parts, Transform container, bool lightmapped, Ctx x)
+        {
+            var pos = new List<Vector3>(); var nrm = new List<Vector3>(); var tan = new List<Vector4>(); var col = new List<Color>();
+            var uvs = new List<Vector4>[8]; var dims = new int[8];
+            var tris = new List<int>();
+            var refMesh = parts[0].r.GetComponent<MeshFilter>().sharedMesh;
+            bool hasN = refMesh.HasVertexAttribute(VertexAttribute.Normal), hasT = refMesh.HasVertexAttribute(VertexAttribute.Tangent), hasC = refMesh.HasVertexAttribute(VertexAttribute.Color);
+            for (int ch = 0; ch < 8; ch++)
+            {
+                var attr = (VertexAttribute)((int)VertexAttribute.TexCoord0 + ch);
+                dims[ch] = refMesh.HasVertexAttribute(attr) ? refMesh.GetVertexAttributeDimension(attr) : 0;
+                if (ch == 1 && lightmapped) dims[1] = 2;
+                if (dims[ch] > 0) uvs[ch] = new List<Vector4>();
+            }
+            var w2c = container.worldToLocalMatrix;
+            foreach (var p in parts)
+            {
+                var mesh = p.r.GetComponent<MeshFilter>().sharedMesh;
+                var M = w2c * p.r.transform.localToWorldMatrix;
+                var N = M.inverse.transpose;
+                bool flip = M.determinant < 0f;
+                float wsign = flip ? -1f : 1f;
+                var v = mesh.vertices; var n = hasN ? mesh.normals : null; var tg = hasT ? mesh.tangents : null; var cl = hasC ? mesh.colors : null;
+                var src = new List<Vector4>[8];
+                for (int ch = 0; ch < 8; ch++)
+                {
+                    if (dims[ch] == 0) continue;
+                    src[ch] = new List<Vector4>();
+                    if (ch == 1 && lightmapped && !mesh.HasVertexAttribute(VertexAttribute.TexCoord1)) mesh.GetUVs(0, src[ch]);
+                    else mesh.GetUVs(ch, src[ch]);
+                }
+                Vector4 so = lightmapped ? SourceScaleOffset(p.r, x) : new Vector4(1, 1, 0, 0);
+                var idx = mesh.GetTriangles(p.sub);
+                var map = new Dictionary<int, int>();
+                for (int i = 0; i < idx.Length; i++)
+                {
+                    int vi = idx[i];
+                    if (!map.TryGetValue(vi, out int ni))
+                    {
+                        ni = pos.Count; map[vi] = ni;
+                        pos.Add(M.MultiplyPoint3x4(v[vi]));
+                        if (hasN) nrm.Add(N.MultiplyVector(n[vi]).normalized);
+                        if (hasT)
+                        {
+                            var t3 = M.MultiplyVector(new Vector3(tg[vi].x, tg[vi].y, tg[vi].z)).normalized;
+                            tan.Add(new Vector4(t3.x, t3.y, t3.z, tg[vi].w * wsign));
+                        }
+                        if (hasC) col.Add(cl[vi]);
+                        for (int ch = 0; ch < 8; ch++)
+                        {
+                            if (dims[ch] == 0) continue;
+                            var u = src[ch][vi];
+                            if (ch == 1 && lightmapped) u = new Vector4(u.x * so.x + so.z, u.y * so.y + so.w, 0, 0);
+                            uvs[ch].Add(u);
+                        }
+                    }
+                    idx[i] = ni;
+                }
+                for (int i = 0; i < idx.Length; i += 3)
+                {
+                    if (flip) { tris.Add(idx[i]); tris.Add(idx[i + 2]); tris.Add(idx[i + 1]); }
+                    else { tris.Add(idx[i]); tris.Add(idx[i + 1]); tris.Add(idx[i + 2]); }
+                }
+            }
+            var outMesh = new Mesh();
+            if (pos.Count > 65535) outMesh.indexFormat = IndexFormat.UInt32;
+            outMesh.SetVertices(pos);
+            if (hasN) outMesh.SetNormals(nrm);
+            if (hasT) outMesh.SetTangents(tan);
+            if (hasC) outMesh.SetColors(col);
+            for (int ch = 0; ch < 8; ch++)
+            {
+                if (dims[ch] == 0) continue;
+                if (dims[ch] == 2) outMesh.SetUVs(ch, uvs[ch].Select(u => new Vector2(u.x, u.y)).ToList());
+                else if (dims[ch] == 3) outMesh.SetUVs(ch, uvs[ch].Select(u => new Vector3(u.x, u.y, u.z)).ToList());
+                else outMesh.SetUVs(ch, uvs[ch]);
+            }
+            outMesh.SetTriangles(tris, 0, true);
+            return outMesh;
+        }
+
+        static string Safe(string s) => new string(s.Select(c => char.IsLetterOrDigit(c) || c == '_' || c == '-' ? c : '_').ToArray());
+
+        // ------------------------------------------------------------------ remove / rollback
+        static string RemoveWhere(Func<Cluster, bool> pick)
+        {
+            if (EditorApplication.isPlaying) throw new InvalidOperationException("Edit mode only.");
+            var manifest = Load();
+            if (manifest.state != "merged" && manifest.clusters.Any(pick)) SetState("merged");
+            manifest = Load();
+            var targets = manifest.clusters.Where(pick).ToList();
+            int restored = 0, rowsRemoved = 0, removed = 0;
+            foreach (var c in targets)
+            {
+                var root = Find(c.root);
+                if (root != null)
+                {
+                    var container = root.Find(ContainerName(c.mode));
+                    if (container != null)
+                    {
+                        var merged = new HashSet<Renderer>(container.GetComponentsInChildren<Renderer>(true));
+                        rowsRemoved += RemoveRows(merged);
+                        UnityEngine.Object.DestroyImmediate(container.gameObject);
+                    }
+                    if (c.addedLodGroup)
+                    {
+                        var lg = root.GetComponent<LODGroup>();
+                        if (lg != null) UnityEngine.Object.DestroyImmediate(lg);
+                    }
+                }
+                foreach (var p in c.disabledSources)
+                {
+                    var t = Find(p);
+                    var mr = t ? t.GetComponent<MeshRenderer>() : null;
+                    if (mr != null && !mr.enabled) { mr.enabled = true; restored++; }
+                }
+                if (!string.IsNullOrEmpty(c.asset) && AssetDatabase.LoadMainAssetAtPath(c.asset) != null) AssetDatabase.DeleteAsset(c.asset);
+                manifest.clusters.Remove(c);
+                removed++;
+            }
+            Save(manifest);
+            EditorSceneManager.MarkSceneDirty(SceneManager.GetActiveScene());
+            return "REMOVED clusters=" + removed + " sourcesReenabled=" + restored + " storageRowsRemoved=" + rowsRemoved;
+        }
+
+        static void EnsureFolder(string assetPath)
+        {
+            if (AssetDatabase.IsValidFolder(assetPath)) return;
+            string parent = Path.GetDirectoryName(assetPath).Replace('\\', '/');
+            EnsureFolder(parent);
+            AssetDatabase.CreateFolder(parent, Path.GetFileName(assetPath));
+        }
+
+        // ------------------------------------------------------------------ verification
+        public static string Verify()
+        {
+            var manifest = Load();
+            var st = Storage();
+            var rows = StorageRows(st);
+            var problems = new List<string>();
+            int pieces = 0;
+            foreach (var c in manifest.clusters)
+            {
+                foreach (var p in c.pieces)
+                {
+                    pieces++;
+                    var t = Find(p.path);
+                    var mr = t ? t.GetComponent<MeshRenderer>() : null;
+                    if (mr == null) { problems.Add("missing " + p.path); continue; }
+                    if (!p.probeLit && c.mode != "glass")
+                    {
+                        string rowProblem = VerifyRow(mr, p, rows, st);
+                        if (rowProblem != null) problems.Add(rowProblem);
+                        if (mr.lightmapIndex != p.lightmapIndex) problems.Add("lmi " + p.path + " " + mr.lightmapIndex + "!=" + p.lightmapIndex);
+                        var so = p.scaleOffset != null && p.scaleOffset.Length == 4 ? new Vector4(p.scaleOffset[0], p.scaleOffset[1], p.scaleOffset[2], p.scaleOffset[3]) : new Vector4(1, 1, 0, 0);
+                        if (mr.lightmapScaleOffset != so) problems.Add("st " + p.path);
+                    }
+                    string probes = c.mode == "glass" ? EffectiveProbe(mr) : ProbeSignature(mr);
+                    if (probes != p.probes) problems.Add("probes " + p.path + " " + probes + " != " + p.probes);
+                    if (manifest.state == "merged" && !mr.enabled) problems.Add("merged off " + p.path);
+                }
+                foreach (var s in c.disabledSources)
+                {
+                    var t = Find(s);
+                    var mr = t ? t.GetComponent<MeshRenderer>() : null;
+                    if (mr == null || !mr.gameObject.activeInHierarchy || mr.enabled != (manifest.state == "originals")) problems.Add("source state " + s);
+                }
+            }
+            return "state=" + manifest.state + " clusters=" + manifest.clusters.Count + " pieces=" + pieces + " problems=" + problems.Count + (problems.Count > 0 ? "\n" + string.Join("\n", problems.Take(40)) : "");
+        }
+    }
+}

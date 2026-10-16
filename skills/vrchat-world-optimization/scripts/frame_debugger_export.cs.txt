@@ -1,0 +1,41 @@
+// Frame Debugger event exporter (UnityMCP execute_code body; Unity 2022.3, Built-in RP). Read-only.
+// Writes the JSON list scripts/draw_categories.py reads: one object per event
+//   {index, type, name, obj, path, root}
+// Usage: enter play mode, pose the camera, enable the Frame Debugger (manage_profiler frame_debugger_enable),
+// wait a few frames, run this body, then DISABLE the Frame Debugger before sampling anything (it freezes the frame).
+// The public adapter only returns marker names; this reads FrameDebuggerEvent.m_Type / m_Obj by reflection.
+// ---- parameters ----
+string OUT = "Perf/frame_debugger_events.json";   // project-relative output path
+// --------------------
+System.Type util = null;
+foreach (var n in new[] { "UnityEditorInternal.FrameDebuggerInternal.FrameDebuggerUtility", "UnityEditorInternal.FrameDebuggerUtility" })
+{ util = typeof(UnityEditor.Editor).Assembly.GetType(n); if (util != null) break; }
+if (util == null) return "ERROR FrameDebuggerUtility not found in this Unity version";
+var bf = System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+var getEvents = util.GetMethod("GetFrameEvents", bf);
+if (getEvents == null) return "ERROR GetFrameEvents missing";
+var events = getEvents.Invoke(null, null) as System.Array;
+if (events == null || events.Length == 0) return "ERROR no events: enable the Frame Debugger in play mode and wait a few frames";
+var getName = util.GetMethod("GetFrameEventInfoName", bf);
+System.Func<Transform, string> path = t => { string p = t.name; while (t.parent != null) { t = t.parent; p = t.name + "/" + p; } return p; };
+var rows = new System.Collections.Generic.List<object>();
+var counts = new System.Collections.Generic.Dictionary<string, int>();
+for (int i = 0; i < events.Length; i++)
+{
+    var e = events.GetValue(i); var et = e.GetType();
+    var fType = et.GetField("m_Type", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic) ?? et.GetField("type");
+    var fObj = et.GetField("m_Obj", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic) ?? et.GetField("obj");
+    string type = fType != null ? fType.GetValue(e).ToString() : "?";
+    var obj = fObj != null ? fObj.GetValue(e) as UnityEngine.Object : null;
+    string name = null;
+    try { if (getName != null) name = getName.Invoke(null, new object[] { i }) as string; } catch { }
+    Transform tr = obj is Component c ? c.transform : obj is GameObject g ? g.transform : null;
+    string p = tr != null ? path(tr) : null;
+    rows.Add(new { index = i, type, name, obj = obj != null ? obj.name : null, path = p, root = p != null ? p.Split('/')[0] : null });
+    counts[type] = counts.TryGetValue(type, out int k) ? k + 1 : 1;
+}
+System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(OUT)));
+System.IO.File.WriteAllText(OUT, Newtonsoft.Json.JsonConvert.SerializeObject(rows, Newtonsoft.Json.Formatting.Indented));
+var sb = new System.Text.StringBuilder("events=" + events.Length + " ->" + OUT + " ;");
+foreach (var kv in counts) sb.Append(" " + kv.Key + "=" + kv.Value);
+return sb.ToString();

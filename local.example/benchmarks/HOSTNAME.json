@@ -1,0 +1,92 @@
+{
+  "profile": "Template benchmark profile. Copy to .omp/local/benchmarks/<hostname>.json (run `hostname`), fill in machine, then calibrate the bands from player feedback rows.",
+  "machine": {
+    "hostname": "",
+    "cpu": "",
+    "gpu": "",
+    "ramGB": null,
+    "headset": null,
+    "headsetNote": "",
+    "inGameSetup": [],
+    "inGameAnchors": [],
+    "editorToInGame": {
+      "fit": "Optional: in-game desktop frame ms ~= factor x editor PerfSample mainThreadMs, fitted from paired editor/in-game measurements of the same spots.",
+      "evidence": "",
+      "worldScale": "",
+      "limits": "",
+      "factor": null,
+      "metricKey": "mainThreadMs",
+      "fittedRangeMs": [],
+      "scale": "",
+      "reportRule": "When factor is set, report every editor timing with its estimated in-game FPS (1000 / (factor x mainThreadMs))."
+    }
+  },
+  "standardSetup": [
+    "Physical monitor session, not remote desktop (remote sessions depress FPS).",
+    "Game view at your usual resolution, VSync off, Scene view closed or minimised, Stats/Profiler windows closed.",
+    "Play mode with ClientSim, local player only, no avatars, mirrors in their default (off) state.",
+    "PerfSample defaults: 15 s settle, 40 warm-up frames, 200 sampled frames.",
+    "Never band editor FPS: it may be capped and says little about the headset."
+  ],
+  "bands": {
+    "cameraRenderMs": {
+      "stat": "median",
+      "green": 4.0,
+      "amber": 8.0,
+      "why": "Starting edge from the kit's reference calibration (a high-end desktop GPU); refit with your own feedback rows."
+    },
+    "gpuFrameMs": {
+      "stat": "median",
+      "green": 2.0,
+      "amber": 4.0,
+      "why": "Starting edge from the kit's reference calibration (a high-end desktop GPU); refit with your own feedback rows."
+    },
+    "behaviourUpdateMs": {
+      "stat": "median",
+      "green": 0.5,
+      "amber": 1.5,
+      "why": "Starting edge from the kit's reference calibration (a high-end desktop GPU); refit with your own feedback rows."
+    },
+    "drawCalls": {
+      "stat": "median",
+      "green": 500,
+      "amber": 1000,
+      "why": "Starting edge from the kit's reference calibration (a high-end desktop GPU); refit with your own feedback rows."
+    },
+    "setPassCalls": {
+      "stat": "median",
+      "green": 200,
+      "amber": 400,
+      "why": "Starting edge from the kit's reference calibration (a high-end desktop GPU); refit with your own feedback rows."
+    },
+    "triangles": {
+      "stat": "median",
+      "green": 1500000,
+      "amber": 3000000,
+      "why": "Starting edge from the kit's reference calibration (a high-end desktop GPU); refit with your own feedback rows."
+    },
+    "textureVramMB": {
+      "stat": "static audit",
+      "green": 250,
+      "amber": 400,
+      "why": "Starting edge from the kit's reference calibration (a high-end desktop GPU); refit with your own feedback rows."
+    },
+    "uploadMB": {
+      "stat": "build size",
+      "green": 100,
+      "amber": 200,
+      "why": "Starting edge from the kit's reference calibration (a high-end desktop GPU); refit with your own feedback rows."
+    }
+  },
+  "anchors": [],
+  "target": "Players on weak graphics cards must find the world smooth. Ground truth is what players say, not FPS: the owner relays it as feedback rows below.",
+  "feedback": {
+    "verdicts": "smooth | ok | laggy",
+    "procedure": [
+      "The owner adds a row whenever players comment on how a world feels: world, date, project commit, verdict, who/what hardware if known, their words.",
+      "On its next run in that world, perf-optimizer samples the worst player viewpoint under standardSetup and fills the row's editor numbers and sampleJson. A row without editor numbers is still evidence, but it cannot move a band edge.",
+      "Refit rule, per metric: the GREEN edge must sit at or above the worst viewpoint of every smooth/ok world; the RED edge (amber upper limit) must sit at or below the laggy worlds' value, but only for the metric the attribution blames for that lag. Record each refit in that band's why."
+    ],
+    "rows": []
+  }
+}

@@ -1,0 +1,417 @@
+// MeshDecimator: seam-locked quadric decimation for far LODs (vrchat-world-optimization kit). Used by StaticMergeTool's
+// "lod" and "heavy" modes. Install: copy to Assets/<Project>/Editor/MeshDecimator.cs next to StaticMergeTool.cs.
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace WorldKit.EditorTools
+{
+    // Seam-aware quadric edge-collapse decimation (Garland-Heckbert) for far LODs. Every position that carries more than
+    // one attribute vertex (UV0/UV2/normal/tangent/colour seam), touches more than one submesh, or lies on an open or
+    // non-manifold border is locked: it never moves and is never removed. Lightmap (UV2) charts therefore keep their
+    // borders, and interior vertices are re-interpolated along the collapsed edge (UVs, normals, colours).
+    // Gate (vrchat-world-optimization "Decimation gate"): signed volume ratio within VolumeTolerance of the source,
+    // bounds kept, zero-length normals repaired. DecimateGated steps the triangle budget up until the gate holds.
+    public static class MeshDecimator
+    {
+        public const float VolumeTolerance = 0.2f;  // |decimated/source signed volume - 1| <= this (>= 0.8)
+        public const float BoundsTolerance = 0.05f; // every bounds extent keeps >= 95 %
+        const float FlipDot = 0.2f;                 // reject collapses that turn a face normal by more than ~78 deg
+
+        public class Result
+        {
+            public Mesh mesh;
+            public int sourceTris, tris, lockedVertices, vertices, normalsRepaired;
+            public float requested, achieved, volumeRatio, boundsRatio;
+            public bool passed;
+            public string Summary() => string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "tris {0}->{1} ({2:0.000} of source, asked {3:0.00}) volume {4:0.000} bounds {5:0.000} lockedVerts {6}/{7} normalsRepaired {8} {9}",
+                sourceTris, tris, achieved, requested, volumeRatio, boundsRatio, lockedVertices, vertices, normalsRepaired, passed ? "PASS" : "FAIL");
+        }
+
+        // A level must drop at least this share of the triangles. Seam-locked meshes that only reach ~0.8 (Penthouse bar
+        // millwork, 2026-10-12) lost visible fluting at the switch for an 18 % saving, so such levels are not worth the pop.
+        public const float MinSaving = 0.25f;
+
+        // Tries targetRatio, then steps up by 0.1 until the gate passes or maxRatio is reached. Returns null if nothing passes
+        // or if the best passing result does not save at least MinSaving of the triangles.
+        public static Result DecimateGated(Mesh src, float targetRatio, float maxRatio = 1f - MinSaving)
+        {
+            for (float r = targetRatio; r <= maxRatio + 1e-4f; r += 0.1f)
+            {
+                var res = Decimate(src, r);
+                if (res.passed && res.achieved <= 1f - MinSaving) return res;
+                if (res.mesh != null) UnityEngine.Object.DestroyImmediate(res.mesh);
+                if (res.passed) return null; // passes but saves too little: higher budgets save even less
+            }
+            return null;
+        }
+
+        struct Key : IEquatable<Key>
+        {
+            public long a, b, c;
+            public bool Equals(Key o) => a == o.a && b == o.b && c == o.c;
+            public override bool Equals(object o) => o is Key k && Equals(k);
+            public override int GetHashCode() => unchecked((int)(a * 73856093L ^ b * 19349663L ^ c * 83492791L));
+        }
+
+        static Key PosKey(Vector3 p) => new Key { a = (long)Math.Round(p.x * 1e5), b = (long)Math.Round(p.y * 1e5), c = (long)Math.Round(p.z * 1e5) };
+
+        struct Cand { public double cost; public int u, v, su, sv; public Vector3 p; public float t; }
+
+        public static Result Decimate(Mesh src, float targetRatio)
+        {
+            // ---- read attributes
+            var srcPos = src.vertices;
+            int n0 = srcPos.Length;
+            bool hasN = src.HasVertexAttribute(VertexAttribute.Normal), hasT = src.HasVertexAttribute(VertexAttribute.Tangent), hasC = src.HasVertexAttribute(VertexAttribute.Color);
+            var srcN = hasN ? src.normals : null; var srcT = hasT ? src.tangents : null; var srcC = hasC ? src.colors : null;
+            var dims = new int[8]; var srcUV = new List<Vector4>[8];
+            for (int ch = 0; ch < 8; ch++)
+            {
+                var attr = (VertexAttribute)((int)VertexAttribute.TexCoord0 + ch);
+                if (!src.HasVertexAttribute(attr)) continue;
+                dims[ch] = src.GetVertexAttributeDimension(attr);
+                srcUV[ch] = new List<Vector4>(); src.GetUVs(ch, srcUV[ch]);
+            }
+
+            // ---- merge exact duplicate vertices (same position and attributes) so they do not read as seams
+            var canon = new int[n0];
+            var attrKey = new Dictionary<string, int>();
+            var sb = new System.Text.StringBuilder();
+            for (int i = 0; i < n0; i++)
+            {
+                sb.Clear();
+                var pk = PosKey(srcPos[i]); sb.Append(pk.a).Append(',').Append(pk.b).Append(',').Append(pk.c);
+                if (hasN) sb.Append('|').Append(Q(srcN[i].x)).Append(',').Append(Q(srcN[i].y)).Append(',').Append(Q(srcN[i].z));
+                if (hasT) sb.Append('|').Append(Q(srcT[i].x)).Append(',').Append(Q(srcT[i].y)).Append(',').Append(Q(srcT[i].z)).Append(',').Append(srcT[i].w > 0 ? 1 : -1);
+                if (hasC) sb.Append('|').Append(Q(srcC[i].r)).Append(',').Append(Q(srcC[i].g)).Append(',').Append(Q(srcC[i].b)).Append(',').Append(Q(srcC[i].a));
+                for (int ch = 0; ch < 8; ch++) if (dims[ch] > 0) { var u = srcUV[ch][i]; sb.Append('|').Append(Q(u.x)).Append(',').Append(Q(u.y)).Append(',').Append(Q(u.z)).Append(',').Append(Q(u.w)); }
+                string k = sb.ToString();
+                if (!attrKey.TryGetValue(k, out int c)) { c = i; attrKey[k] = c; }
+                canon[i] = c;
+            }
+
+            // ---- triangles
+            int subCount = src.subMeshCount;
+            var triList = new List<int>(); var triSub = new List<int>();
+            for (int s = 0; s < subCount; s++)
+            {
+                var idx = src.GetTriangles(s);
+                for (int i = 0; i < idx.Length; i += 3)
+                {
+                    int a = canon[idx[i]], b = canon[idx[i + 1]], c = canon[idx[i + 2]];
+                    if (a == b || b == c || a == c) continue;
+                    triList.Add(a); triList.Add(b); triList.Add(c); triSub.Add(s);
+                }
+            }
+            var tri = triList.ToArray(); int T = triSub.Count;
+            var res = new Result { requested = targetRatio, sourceTris = T };
+            var pos = (Vector3[])srcPos.Clone();
+            var nrm = hasN ? (Vector3[])srcN.Clone() : null; var tan = hasT ? (Vector4[])srcT.Clone() : null; var col = hasC ? (Color[])srcC.Clone() : null;
+            var uv = new Vector4[8][];
+            for (int ch = 0; ch < 8; ch++) if (dims[ch] > 0) uv[ch] = srcUV[ch].ToArray();
+
+            // ---- locks: attribute seams, submesh seams, open / non-manifold borders (all on welded positions)
+            var posId = new int[n0]; var posIds = new Dictionary<Key, int>();
+            for (int i = 0; i < n0; i++) { var k = PosKey(srcPos[i]); if (!posIds.TryGetValue(k, out int id)) { id = posIds.Count; posIds[k] = id; } posId[i] = id; }
+            var used = new bool[n0];
+            for (int i = 0; i < tri.Length; i++) used[tri[i]] = true;
+            var copies = new int[posIds.Count]; var posSub = new int[posIds.Count]; var lockedPos = new bool[posIds.Count];
+            for (int i = 0; i < posSub.Length; i++) posSub[i] = -1;
+            for (int i = 0; i < n0; i++) if (used[i] && canon[i] == i) copies[posId[i]]++;
+            for (int t = 0; t < T; t++)
+                for (int j = 0; j < 3; j++)
+                {
+                    int p = posId[tri[3 * t + j]];
+                    if (posSub[p] == -1) posSub[p] = triSub[t]; else if (posSub[p] != triSub[t]) lockedPos[p] = true;
+                }
+            var edgeCount = new Dictionary<long, int>();
+            for (int t = 0; t < T; t++)
+                for (int j = 0; j < 3; j++)
+                {
+                    long e = EdgeKey(posId[tri[3 * t + j]], posId[tri[3 * t + (j + 1) % 3]]);
+                    edgeCount.TryGetValue(e, out int c); edgeCount[e] = c + 1;
+                }
+            foreach (var kv in edgeCount) if (kv.Value != 2) { lockedPos[(int)(kv.Key >> 32)] = true; lockedPos[(int)(kv.Key & 0xffffffffL)] = true; }
+            var locked = new bool[n0];
+            int lockedCount = 0, usedCount = 0;
+            for (int i = 0; i < n0; i++)
+            {
+                if (!used[i]) continue;
+                usedCount++;
+                locked[i] = copies[posId[i]] > 1 || lockedPos[posId[i]];
+                if (locked[i]) lockedCount++;
+            }
+            res.lockedVertices = lockedCount; res.vertices = usedCount;
+
+            // ---- adjacency and quadrics
+            var vt = new List<int>[n0];
+            for (int i = 0; i < n0; i++) if (used[i]) vt[i] = new List<int>(6);
+            var q = new double[n0 * 10];
+            var triAlive = new bool[T];
+            for (int t = 0; t < T; t++)
+            {
+                triAlive[t] = true;
+                int a = tri[3 * t], b = tri[3 * t + 1], c = tri[3 * t + 2];
+                vt[a].Add(t); vt[b].Add(t); vt[c].Add(t);
+                var cr = Vector3.Cross(pos[b] - pos[a], pos[c] - pos[a]);
+                double area = cr.magnitude * 0.5;
+                if (area < 1e-12) continue;
+                var nn = cr.normalized; double d = -Vector3.Dot(nn, pos[a]);
+                AddPlane(q, a, nn, d, area); AddPlane(q, b, nn, d, area); AddPlane(q, c, nn, d, area);
+            }
+            var stamp = new int[n0]; var vAlive = new bool[n0];
+            for (int i = 0; i < n0; i++) vAlive[i] = used[i];
+
+            var heap = new List<Cand>(T * 3);
+            for (int t = 0; t < T; t++)
+                for (int j = 0; j < 3; j++)
+                {
+                    int a = tri[3 * t + j], b = tri[3 * t + (j + 1) % 3];
+                    if (a < b) Push(heap, Evaluate(a, b, pos, q, locked, stamp));
+                }
+
+            int target = Mathf.Max(4, Mathf.RoundToInt(T * targetRatio));
+            int alive = T;
+            var scratch = new HashSet<int>();
+            while (alive > target && heap.Count > 0)
+            {
+                var c = Pop(heap);
+                if (c.u < 0 || !vAlive[c.u] || !vAlive[c.v] || stamp[c.u] != c.su || stamp[c.v] != c.sv) continue;
+                if (!LinkOk(c.u, c.v, vt, tri, triAlive, scratch)) continue;
+                bool vMoves = !locked[c.v];
+                if (FlipsOrDegenerates(c.u, c.v, c.p, vt, tri, triAlive, pos)) continue;
+                if (vMoves && FlipsOrDegenerates(c.v, c.u, c.p, vt, tri, triAlive, pos)) continue;
+
+                // apply: u disappears into v
+                if (vMoves)
+                {
+                    float t = c.t; // attribute = lerp(u, v, t)
+                    pos[c.v] = c.p;
+                    if (hasN) nrm[c.v] = Vector3.Lerp(nrm[c.u], nrm[c.v], t).normalized;
+                    if (hasT) { var tv = Vector4.Lerp(tan[c.u], tan[c.v], t); var t3 = new Vector3(tv.x, tv.y, tv.z).normalized; tan[c.v] = new Vector4(t3.x, t3.y, t3.z, tan[c.v].w); }
+                    if (hasC) col[c.v] = Color.Lerp(col[c.u], col[c.v], t);
+                    for (int ch = 0; ch < 8; ch++) if (dims[ch] > 0) uv[ch][c.v] = Vector4.Lerp(uv[ch][c.u], uv[ch][c.v], t);
+                }
+                for (int k = 0; k < 10; k++) q[c.v * 10 + k] += q[c.u * 10 + k];
+                foreach (int t in vt[c.u])
+                {
+                    if (!triAlive[t]) continue;
+                    int a = tri[3 * t], b = tri[3 * t + 1], d = tri[3 * t + 2];
+                    if (a == c.v || b == c.v || d == c.v)
+                    {
+                        triAlive[t] = false; alive--;
+                        for (int j = 0; j < 3; j++) { int w = tri[3 * t + j]; if (w != c.u) vt[w].Remove(t); }
+                    }
+                    else
+                    {
+                        for (int j = 0; j < 3; j++) if (tri[3 * t + j] == c.u) tri[3 * t + j] = c.v;
+                        vt[c.v].Add(t);
+                    }
+                }
+                vt[c.u].Clear(); vAlive[c.u] = false;
+                stamp[c.v]++;
+                scratch.Clear();
+                foreach (int t in vt[c.v]) for (int j = 0; j < 3; j++) { int w = tri[3 * t + j]; if (w != c.v) scratch.Add(w); }
+                foreach (int w in scratch) Push(heap, Evaluate(Math.Min(w, c.v), Math.Max(w, c.v), pos, q, locked, stamp));
+            }
+
+            // ---- output
+            var remap = new int[n0]; for (int i = 0; i < n0; i++) remap[i] = -1;
+            var oPos = new List<Vector3>(); var oN = new List<Vector3>(); var oT = new List<Vector4>(); var oC = new List<Color>();
+            var oUV = new List<Vector4>[8]; for (int ch = 0; ch < 8; ch++) if (dims[ch] > 0) oUV[ch] = new List<Vector4>();
+            var subTris = new List<int>[subCount]; for (int s = 0; s < subCount; s++) subTris[s] = new List<int>();
+            for (int t = 0; t < T; t++)
+            {
+                if (!triAlive[t]) continue;
+                for (int j = 0; j < 3; j++)
+                {
+                    int v = tri[3 * t + j];
+                    if (remap[v] < 0)
+                    {
+                        remap[v] = oPos.Count; oPos.Add(pos[v]);
+                        if (hasN) oN.Add(nrm[v]); if (hasT) oT.Add(tan[v]); if (hasC) oC.Add(col[v]);
+                        for (int ch = 0; ch < 8; ch++) if (dims[ch] > 0) oUV[ch].Add(uv[ch][v]);
+                    }
+                    subTris[triSub[t]].Add(remap[v]);
+                }
+            }
+            if (hasN) res.normalsRepaired = RepairNormals(oPos, oN, subTris);
+            var m = new Mesh { name = src.name + "_dec" };
+            if (oPos.Count > 65535) m.indexFormat = IndexFormat.UInt32;
+            m.SetVertices(oPos);
+            if (hasN) m.SetNormals(oN); if (hasT) m.SetTangents(oT); if (hasC) m.SetColors(oC);
+            for (int ch = 0; ch < 8; ch++)
+            {
+                if (dims[ch] == 0) continue;
+                if (dims[ch] == 2) m.SetUVs(ch, oUV[ch].Select(u => new Vector2(u.x, u.y)).ToList());
+                else if (dims[ch] == 3) m.SetUVs(ch, oUV[ch].Select(u => new Vector3(u.x, u.y, u.z)).ToList());
+                else m.SetUVs(ch, oUV[ch]);
+            }
+            m.subMeshCount = subCount;
+            for (int s = 0; s < subCount; s++) m.SetTriangles(subTris[s], s, false);
+            m.RecalculateBounds();
+            res.mesh = m; res.tris = alive; res.achieved = T > 0 ? (float)alive / T : 1f;
+
+            // ---- gate
+            var centre = src.bounds.center;
+            double v0 = SignedVolume(srcPos, src, centre), v1 = SignedVolume(m.vertices, m, centre);
+            res.volumeRatio = Math.Abs(v0) > 1e-9 ? (float)(v1 / v0) : 1f;
+            var s0 = src.bounds.size; var s1 = m.bounds.size;
+            res.boundsRatio = Mathf.Min(Ratio(s1.x, s0.x), Mathf.Min(Ratio(s1.y, s0.y), Ratio(s1.z, s0.z)));
+            res.passed = Mathf.Abs(res.volumeRatio - 1f) <= VolumeTolerance && res.boundsRatio >= 1f - BoundsTolerance && CountBadNormals(m) == 0;
+            return res;
+        }
+
+        static string Q(float f) => Mathf.RoundToInt(f * 10000f).ToString();
+        static float Ratio(float a, float b) => b < 1e-6f ? 1f : a / b;
+        static long EdgeKey(int a, int b) => a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;
+
+        static void AddPlane(double[] q, int v, Vector3 n, double d, double w)
+        {
+            int o = v * 10; double a = n.x, b = n.y, c = n.z;
+            q[o] += w * a * a; q[o + 1] += w * a * b; q[o + 2] += w * a * c; q[o + 3] += w * a * d;
+            q[o + 4] += w * b * b; q[o + 5] += w * b * c; q[o + 6] += w * b * d;
+            q[o + 7] += w * c * c; q[o + 8] += w * c * d; q[o + 9] += w * d * d;
+        }
+
+        static double Err(double[] q, int a, int b, Vector3 p)
+        {
+            double x = p.x, y = p.y, z = p.z, e = 0;
+            for (int s = 0; s < 2; s++)
+            {
+                int o = (s == 0 ? a : b) * 10;
+                e += q[o] * x * x + 2 * q[o + 1] * x * y + 2 * q[o + 2] * x * z + 2 * q[o + 3] * x
+                   + q[o + 4] * y * y + 2 * q[o + 5] * y * z + 2 * q[o + 6] * y + q[o + 7] * z * z + 2 * q[o + 8] * z + q[o + 9];
+            }
+            return Math.Max(e, 0);
+        }
+
+        static Cand Evaluate(int a, int b, Vector3[] pos, double[] q, bool[] locked, int[] stamp)
+        {
+            var c = new Cand { u = -1 };
+            if (locked[a] && locked[b]) return c;
+            if (locked[a]) { c.u = b; c.v = a; c.p = pos[a]; c.t = 1f; }
+            else if (locked[b]) { c.u = a; c.v = b; c.p = pos[b]; c.t = 1f; }
+            else
+            {
+                c.u = a; c.v = b;
+                var mid = (pos[a] + pos[b]) * 0.5f;
+                double ea = Err(q, a, b, pos[a]), eb = Err(q, a, b, pos[b]), em = Err(q, a, b, mid);
+                if (em <= ea && em <= eb) { c.p = mid; c.t = 0.5f; }
+                else if (ea <= eb) { c.p = pos[a]; c.t = 0f; }
+                else { c.p = pos[b]; c.t = 1f; }
+            }
+            c.cost = Err(q, a, b, c.p);
+            c.su = stamp[c.u]; c.sv = stamp[c.v];
+            return c;
+        }
+
+        // Link condition: u and v may share neighbours only through the triangles that contain both.
+        static bool LinkOk(int u, int v, List<int>[] vt, int[] tri, bool[] triAlive, HashSet<int> scratch)
+        {
+            scratch.Clear();
+            int shared = 0;
+            foreach (int t in vt[u])
+            {
+                if (!triAlive[t]) continue;
+                bool hasV = tri[3 * t] == v || tri[3 * t + 1] == v || tri[3 * t + 2] == v;
+                if (hasV) shared++;
+                for (int j = 0; j < 3; j++) { int w = tri[3 * t + j]; if (w != u && w != v) scratch.Add(w); }
+            }
+            int common = 0;
+            var seen = new HashSet<int>();
+            foreach (int t in vt[v])
+            {
+                if (!triAlive[t]) continue;
+                for (int j = 0; j < 3; j++) { int w = tri[3 * t + j]; if (w != u && w != v && scratch.Contains(w) && seen.Add(w)) common++; }
+            }
+            return shared > 0 && common <= shared;
+        }
+
+        static bool FlipsOrDegenerates(int moving, int other, Vector3 p, List<int>[] vt, int[] tri, bool[] triAlive, Vector3[] pos)
+        {
+            foreach (int t in vt[moving])
+            {
+                if (!triAlive[t]) continue;
+                int a = tri[3 * t], b = tri[3 * t + 1], c = tri[3 * t + 2];
+                if (a == other || b == other || c == other) continue;
+                var pa = pos[a]; var pb = pos[b]; var pc = pos[c];
+                var before = Vector3.Cross(pb - pa, pc - pa);
+                if (a == moving) pa = p; else if (b == moving) pb = p; else pc = p;
+                var after = Vector3.Cross(pb - pa, pc - pa);
+                float la = after.magnitude, lb = before.magnitude;
+                if (la < 1e-10f) return true;
+                if (lb > 1e-10f && Vector3.Dot(before / lb, after / la) < FlipDot) return true;
+            }
+            return false;
+        }
+
+        static void Push(List<Cand> h, Cand c)
+        {
+            if (c.u < 0) return;
+            h.Add(c); int i = h.Count - 1;
+            while (i > 0) { int p = (i - 1) / 2; if (h[p].cost <= h[i].cost) break; var tmp = h[p]; h[p] = h[i]; h[i] = tmp; i = p; }
+        }
+
+        static Cand Pop(List<Cand> h)
+        {
+            var top = h[0]; int last = h.Count - 1; h[0] = h[last]; h.RemoveAt(last);
+            int i = 0;
+            while (true)
+            {
+                int l = 2 * i + 1, r = l + 1, m = i;
+                if (l < h.Count && h[l].cost < h[m].cost) m = l;
+                if (r < h.Count && h[r].cost < h[m].cost) m = r;
+                if (m == i) break;
+                var tmp = h[m]; h[m] = h[i]; h[i] = tmp; i = m;
+            }
+            return top;
+        }
+
+        static double SignedVolume(Vector3[] v, Mesh m, Vector3 c)
+        {
+            double vol = 0;
+            for (int s = 0; s < m.subMeshCount; s++)
+            {
+                var idx = m.GetTriangles(s);
+                for (int i = 0; i < idx.Length; i += 3)
+                {
+                    Vector3 a = v[idx[i]] - c, b = v[idx[i + 1]] - c, d = v[idx[i + 2]] - c;
+                    vol += Vector3.Dot(a, Vector3.Cross(b, d));
+                }
+            }
+            return vol / 6.0;
+        }
+
+        static int CountBadNormals(Mesh m)
+        {
+            if (!m.HasVertexAttribute(VertexAttribute.Normal)) return 0;
+            return m.normals.Count(n => !(n.sqrMagnitude >= 0.25f));
+        }
+
+        // Zero-length / NaN normals: average the adjacent face normals per welded position, else any unit vector.
+        static int RepairNormals(List<Vector3> pos, List<Vector3> nrm, List<int>[] subTris)
+        {
+            var bad = new List<int>();
+            for (int i = 0; i < nrm.Count; i++) if (!(nrm[i].sqrMagnitude >= 0.25f)) bad.Add(i); else nrm[i] = nrm[i].normalized;
+            if (bad.Count == 0) return 0;
+            var acc = new Dictionary<Key, Vector3>();
+            foreach (var st in subTris)
+                for (int i = 0; i < st.Count; i += 3)
+                {
+                    var f = Vector3.Cross(pos[st[i + 1]] - pos[st[i]], pos[st[i + 2]] - pos[st[i]]);
+                    for (int j = 0; j < 3; j++) { var k = PosKey(pos[st[i + j]]); acc.TryGetValue(k, out var a); acc[k] = a + f; }
+                }
+            foreach (int i in bad)
+            {
+                acc.TryGetValue(PosKey(pos[i]), out var a);
+                nrm[i] = a.sqrMagnitude > 1e-20f ? a.normalized : Vector3.up;
+            }
+            return bad.Count;
+        }
+    }
+}

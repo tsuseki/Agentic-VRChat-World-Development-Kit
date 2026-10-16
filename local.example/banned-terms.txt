@@ -1,0 +1,6 @@
+# One case-insensitive regex per line. scripts/leak_check.py blocks any added line in a committed
+# kit file that matches. Add your name, username, home and workspace paths, hostname, accounts and
+# the names of paid packs you own.
+C:[\\/]+Users[\\/]
+/home/[a-z_][a-z0-9_-]*/
+/Users/[A-Za-z0-9_-]+/

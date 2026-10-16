@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AWDK — World Pipeline Overview</title>
+<style>
+:root {
+  color-scheme: light;
+  --ink: #1f2430; --muted: #5b6475; --line: #dde2ea; --paper: #ffffff; --bg: #eef1f5;
+  --navy: #22304a; --gold: #c9a35b;
+  --A: #3d6fb6; --A-bg: #eaf1fb; --B: #2f8a6a; --B-bg: #e8f5ef;
+  --C: #c27a1e; --C-bg: #fdf3e4; --D: #8a4fa8; --D-bg: #f5ecf9;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--ink); margin: 0; }
+body { font-family: "Segoe UI", system-ui, Arial, sans-serif; font-size: 15px; line-height: 1.5; }
+h1, h2, h3, h4 { color: var(--navy); margin: 0; }
+p { margin: 0 0 10px; }
+code { font-family: Consolas, "Cascadia Mono", monospace; font-size: .9em; background: #f1f3f7; color: #2b3445; padding: 1px 5px; border-radius: 4px; }
+a { color: var(--A); }
+
+/* screen layout */
+.wrap { max-width: 1100px; margin: 0 auto; padding: 28px 24px 60px; }
+.sheet { background: var(--paper); border-radius: 14px; box-shadow: 0 2px 10px rgba(30,40,60,.08); padding: 28px 34px; margin-bottom: 22px; }
+header.hero { background: linear-gradient(135deg, #22304a, #33507a); color: #fff; border-radius: 14px; padding: 30px 34px; margin-bottom: 22px; }
+header.hero h1 { color: #fff; font-size: 30px; }
+header.hero p { color: #d6deea; margin: 6px 0 0; }
+header.hero .status { display: inline-block; margin-top: 12px; background: var(--gold); color: #fff; font-weight: 700; font-size: 12px; letter-spacing: .05em; padding: 3px 10px; border-radius: 20px; }
+nav.mini { position: sticky; top: 0; z-index: 5; background: rgba(238,241,245,.95); padding: 10px 0; margin: -10px 0 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+nav.mini a { text-decoration: none; font-weight: 600; font-size: 13px; padding: 5px 12px; border-radius: 20px; color: #fff; }
+nav.mini a.n { background: var(--navy); }
+h2 { font-size: 22px; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 3px solid var(--gold); }
+h3 { font-size: 17px; margin-bottom: 6px; }
+.muted { color: var(--muted); }
+
+/* phase diagram */
+.diagram { width: 100%; height: auto; display: block; }
+.phases { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+.phase { border-radius: 12px; padding: 18px 20px; border: 1px solid var(--line); background: #fff; }
+.phase .tag { display: inline-block; font-weight: 800; color: #fff; border-radius: 8px; padding: 2px 10px; margin-right: 8px; }
+.phase h3 { display: flex; align-items: center; }
+.phase .who { font-size: 13px; font-weight: 600; margin: 4px 0 10px; }
+.phase ol { margin: 0; padding-left: 20px; }
+.phase li { margin-bottom: 6px; }
+.pA { background: var(--A-bg); border-color: #c4d6f0; } .pA .tag { background: var(--A); } .pA .who { color: var(--A); }
+.pB { background: var(--B-bg); border-color: #bfe0d1; } .pB .tag { background: var(--B); } .pB .who { color: var(--B); }
+.pC { background: var(--C-bg); border-color: #f0d6ad; } .pC .tag { background: var(--C); } .pC .who { color: var(--C); }
+.pD { background: var(--D-bg); border-color: #e0c9ec; } .pD .tag { background: var(--D); } .pD .who { color: var(--D); }
+.lock { display: inline-block; background: #fff; border: 2px solid var(--gold); color: #7a5a1c; font-weight: 700; border-radius: 8px; padding: 1px 8px; font-size: 13px; }
+
+/* loop */
+.loopbox { display: grid; grid-template-columns: 300px 1fr; gap: 24px; align-items: center; }
+.rules { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.rule { border-left: 4px solid var(--navy); background: #f7f8fb; border-radius: 8px; padding: 12px 16px; }
+.rule h4 { font-size: 15px; margin-bottom: 4px; }
+.rule.warn { border-left-color: #c0703a; background: #fdf4ec; }
+
+/* tables */
+table { border-collapse: collapse; width: 100%; font-size: 14px; background: #fff; }
+th { background: var(--navy); color: #fff; text-align: left; padding: 9px 12px; font-weight: 600; }
+td { background: #fff; color: var(--ink); border-bottom: 1px solid var(--line); padding: 9px 12px; vertical-align: top; }
+tr:nth-child(even) td { background: #f7f8fb; }
+tr:hover td { background: #eef3fb; }
+td .chip { display: inline-block; font-size: 12px; font-weight: 700; color: #fff; border-radius: 6px; padding: 0 7px; margin: 1px 3px 1px 0; }
+.cA { background: var(--A); } .cB { background: var(--B); } .cC { background: var(--C); } .cD { background: var(--D); }
+footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 10px; }
+
+/* print = PDF */
+@page { size: A4; margin: 11mm 12mm; }
+@media print {
+  html, body { background: #fff; }
+  body { font-size: 9.5pt; line-height: 1.4; }
+  .wrap { max-width: none; padding: 0; }
+  nav.mini { display: none; }
+  .sheet { box-shadow: none; border-radius: 0; padding: 0; margin: 0; }
+  .pagebreak { break-before: page; }
+  header.hero { padding: 16px 20px; margin-bottom: 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  header.hero h1 { font-size: 21pt; }
+  h2 { font-size: 13.5pt; margin: 5mm 0 2.5mm; break-after: avoid; }
+  #rules { break-before: page; }
+  .phase { padding: 10px 14px; break-inside: avoid; }
+  .phase li { margin-bottom: 3px; }
+  .loopbox { grid-template-columns: 220px 1fr; }
+  .rule { padding: 8px 12px; break-inside: avoid; }
+  table { font-size: 9pt; } th, td { padding: 5px 8px; }
+  tr { break-inside: avoid; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+</style></head>
+<body><div class="wrap">
+
+<header class="hero">
+  <h1>World Pipeline — Overview</h1>
+  <p>Agentic World Development Kit (AWDK) · how a VRChat world goes from your idea to upload</p>
+  <span class="status">APPROVED · 2026-10-10</span>
+</header>
+
+<nav class="mini">
+  <a class="n" href="#overview">Overview</a>
+  <a style="background:var(--A)" href="#phases">A · Concept</a>
+  <a style="background:var(--B)" href="#phases">B · Blueprint</a>
+  <a style="background:var(--C)" href="#phases">C · Build</a>
+  <a style="background:var(--D)" href="#phases">D · Finish</a>
+  <a class="n" href="#loop">Plan → Build → Review</a>
+  <a class="n" href="#rules">Rules</a>
+  <a class="n" href="#presets">Involvement &amp; trials</a>
+</nav>
+
+<section class="sheet" id="overview">
+<h2>The four phases</h2>
+<p class="muted">You decide the style up front. After the Design Lock the agents build the whole world automatically; you sign off the upload at the end.</p>
+<svg class="diagram" viewBox="0 0 1040 330" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a93a5"/></marker>
+    <marker id="arD" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8a4fa8"/></marker>
+    <marker id="arC" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c27a1e"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1040" height="330" fill="#ffffff"/>
+  <!-- A -->
+  <rect x="10" y="60" width="220" height="170" rx="16" fill="#eaf1fb" stroke="#3d6fb6" stroke-width="2"/>
+  <text x="30" y="95" font-size="22" font-weight="800" fill="#3d6fb6">A · Concept</text>
+  <text x="30" y="120" font-size="13" fill="#3d6fb6" font-weight="600">you decide</text>
+  <text x="30" y="148" font-size="13" fill="#1f2430">Information gathering</text>
+  <text x="30" y="168" font-size="13" fill="#1f2430">Concept: shell blockout</text>
+  <text x="30" y="188" font-size="13" fill="#1f2430">  + concept art, style</text>
+  <rect x="28" y="198" width="140" height="24" rx="6" fill="#fff" stroke="#c9a35b" stroke-width="2"/>
+  <text x="40" y="215" font-size="13" font-weight="700" fill="#7a5a1c">🔒 Design Lock</text>
+  <line x1="232" y1="145" x2="262" y2="145" stroke="#8a93a5" stroke-width="2.5" marker-end="url(#ar)"/>
+  <!-- B -->
+  <rect x="266" y="60" width="220" height="170" rx="16" fill="#e8f5ef" stroke="#2f8a6a" stroke-width="2"/>
+  <text x="286" y="95" font-size="22" font-weight="800" fill="#2f8a6a">B · Blueprint</text>
+  <text x="286" y="120" font-size="13" fill="#2f8a6a" font-weight="600">agents decide</text>
+  <text x="286" y="148" font-size="13" fill="#1f2430">Floor plan (rooms in shells)</text>
+  <text x="286" y="168" font-size="13" fill="#1f2430">Greybox variants (3D +</text>
+  <text x="286" y="186" font-size="13" fill="#1f2430">  furniture placeholders)</text>
+  <text x="286" y="208" font-size="13" fill="#1f2430">→ one variant picked</text>
+  <line x1="488" y1="145" x2="518" y2="145" stroke="#8a93a5" stroke-width="2.5" marker-end="url(#ar)"/>
+  <!-- C -->
+  <rect x="522" y="40" width="250" height="210" rx="16" fill="#fdf3e4" stroke="#c27a1e" stroke-width="2"/>
+  <text x="542" y="75" font-size="22" font-weight="800" fill="#c27a1e">C · Build</text>
+  <text x="542" y="98" font-size="13" fill="#c27a1e" font-weight="600">main build loop</text>
+  <circle cx="647" cy="170" r="52" fill="none" stroke="#c27a1e" stroke-width="3" stroke-dasharray="230 97" marker-end="url(#arC)"/>
+  <text x="647" y="160" font-size="14" font-weight="700" fill="#1f2430" text-anchor="middle">Build-out</text>
+  <text x="647" y="178" font-size="11" fill="#5b6475" text-anchor="middle">plan → build →</text>
+  <text x="647" y="192" font-size="11" fill="#5b6475" text-anchor="middle">review, per area</text>
+  <text x="647" y="243" font-size="12" fill="#1f2430" text-anchor="middle">C.1 Build-out · C.2 Interactions</text>
+  <line x1="774" y1="145" x2="804" y2="145" stroke="#8a93a5" stroke-width="2.5" marker-end="url(#ar)"/>
+  <!-- D -->
+  <rect x="808" y="60" width="222" height="170" rx="16" fill="#f5ecf9" stroke="#8a4fa8" stroke-width="2"/>
+  <text x="828" y="95" font-size="22" font-weight="800" fill="#8a4fa8">D · Finish</text>
+  <text x="828" y="120" font-size="13" fill="#8a4fa8" font-weight="600">agents, then you</text>
+  <text x="828" y="148" font-size="13" fill="#1f2430">Lighting</text>
+  <text x="828" y="168" font-size="13" fill="#1f2430">Performance</text>
+  <text x="828" y="188" font-size="13" fill="#1f2430">Ship → you upload</text>
+  <text x="828" y="208" font-size="13" fill="#1f2430">Retro</text>
+  <!-- D -> C loop back -->
+  <path d="M 918 232 C 918 310, 660 320, 655 254" fill="none" stroke="#8a4fa8" stroke-width="2.5" stroke-dasharray="7 5" marker-end="url(#arD)"/>
+  <text x="790" y="312" font-size="13" fill="#8a4fa8" font-weight="600" text-anchor="middle">change needed → back to C, then redo affected D steps</text>
+  <!-- who decides band -->
+  <text x="120" y="35" font-size="13" fill="#5b6475" text-anchor="middle">your decisions</text>
+  <line x1="20" y1="44" x2="220" y2="44" stroke="#3d6fb6" stroke-width="3"/>
+  <text x="647" y="25" font-size="13" fill="#5b6475" text-anchor="middle">fully automatic</text>
+  <line x1="276" y1="30" x2="1000" y2="30" stroke="#c9ced8" stroke-width="3"/>
+</svg>
+</section>
+
+<section class="sheet" id="phases">
+<h2>What happens in each phase</h2>
+<div class="phases">
+  <div class="phase pA"><h3><span class="tag">A</span>Concept</h3>
+    <div class="who">You decide · ends with the Design Lock</div>
+    <ol>
+      <li><b>A.1 Setup</b> — project, Unity + MCP, packages, <code>WORLD.md</code>.</li>
+      <li><b>A.2 Information gathering</b> — the model works from whatever you give it (description, design doc, reference pictures). <b>No fixed interview</b>: it only asks about what's missing — world kind (living space / event world) and event function, purpose, how many people, avatar eye height (default 1.2 m), cuddling → near clip, space types, mood, and <b>style</b>: palette, materials, lighting &amp; time of day, era/place, exterior, furnishing feel. Pictures are saved and tagged.</li>
+      <li><b>A.3 Concept: style track + layout track</b> — two separate tracks, you pick on each. <b>Style track (text → image only)</b>: text-to-image concept art from the brief and your tagged references, showing the lived-in, furnished world (never empty spaces); refined by changing the prompt text, no reviewer. <b>Layout track</b>: world-architect blocks out 2–3 shell layouts in Unity (massing only: buildings, trees, multi-level houses, bridges, paths, ground/water, sky; no interiors or furniture) and shows an eye-height arrival view, an overview and one intimate view as plain captures, no paint-overs; layout-reviewer ranks them and your pick becomes the geometry. Then text → image style rounds (palette, materials, lighting, conditioned on the lock images) until you approve. Images bind mood and style only.</li>
+      <li><b>A.4</b> <span class="lock">🔒 Design Lock</span> — brief + lock images (style track) + picked shell layout captures (layout track), approved once. Your last decision before the upload.</li>
+    </ol></div>
+  <div class="phase pB"><h3><span class="tag">B</span>Blueprint</h3>
+    <div class="who">Agents decide · optional review by you (on in trials)</div>
+    <ol>
+      <li><b>B.1 Floor plan (2D)</b> — inside the locked shells: which room is which, purposes, space types, rough sizes, what connects to what, public → private, doors, circulation; variants on different plan organisations, ranked by layout-reviewer. No furniture.</li>
+      <li><b>B.2 Greybox (3D)</b> — 3–4 variant blockouts: building volumes, walls, heights, roofs, level changes <b>plus low-poly boxes for the big furniture</b> (couches, beds, tables, wardrobes, bar, screen, big rugs), true to size. No small props or wall decor. Reviewed and scored in 3D from eye height; <b>one variant is picked</b> and refined.</li>
+      <li><b>Not playable yet</b> — no colliders, spawn, stair ramps, teleport doors or clip planes: those need the real objects and are built in C.2.</li>
+      <li>Furniture positions are exported <b>from the 3D scene</b> into the plan file and prop list.</li>
+    </ol></div>
+  <div class="phase pC"><h3><span class="tag">C</span>Build</h3>
+    <div class="who">Agents · the main build loop</div>
+    <ol>
+      <li><b>C.1 Build-out</b>, area by area, each pass doing what the area still needs:
+        <ul>
+          <li><b>shell finish</b> — real walls, floors, roofs, windows, doors, trims, materials replace the greybox</li>
+          <li><b>furniture swap</b> — each placeholder → the real asset at the same spot (moved only for collisions / better fit, reported)</li>
+          <li><b>dressing</b> — secondary pieces and decor, by rule</li>
+        </ul>
+        Assets are found or modelled as each pass needs them.</li>
+      <li><b>C.2 Interactions &amp; playability</b> — once the real objects exist:
+        <ul>
+          <li><b>colliders</b> — walls, floors, big objects you mustn't walk through (trees, solid masses)</li>
+          <li><b>lie-down colliders</b> on beds and couches, <b>off by default</b>: one world toggle lets non-full-body players lie on them; full-body players leave it off since they set their own height. Other props: no colliders</li>
+          <li>stair ramps, spawn, walk test</li>
+          <li><b>Udon</b> — clickable teleport doors on the real doors, teleport islands, toggles (incl. the lie-down collider toggle), video, no world mirrors (personal mirrors; only real ones in bathrooms/gyms/dance rooms), pickups, VIP gate</li>
+          <li>clip planes and fog</li>
+        </ul></li>
+      <li>Done when every area has SHIP IT with nothing left on its plan.</li>
+    </ol></div>
+  <div class="phase pD"><h3><span class="tag">D</span>Finish</h3>
+    <div class="who">Agents, then your sign-off · loops back to C</div>
+    <ol>
+      <li><b>D.1 Lighting</b> — draft bake → mood check against the boards → final bake → reflection probes immediately.</li>
+      <li><b>D.2 Performance</b> — measure the worst viewpoints, find the cause, reversible fixes (asks before destructive ones).</li>
+      <li><b>D.3 Ship</b> — remove helpers, build &amp; test → <b>you upload</b>.</li>
+      <li><b>D.4 Retro</b> — confirmed lessons; lock gaps become new information-gathering questions.</li>
+      <li><b>Any change needed → back to C.</b> After the fix: rebake the area, rebake probes, re-measure, re-run the final review.</li>
+    </ol></div>
+</div>
+</section>
+
+<section class="sheet" id="loop">
+<h2>Plan → Build → Review: how every build stage works</h2>
+<div class="loopbox">
+<svg viewBox="0 0 300 260" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial, sans-serif">
+  <defs><marker id="al" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#22304a"/></marker></defs>
+  <rect width="300" height="260" fill="#fff"/>
+  <path d="M 175 45 A 95 95 0 0 1 240 185" fill="none" stroke="#22304a" stroke-width="2.5" marker-end="url(#al)"/>
+  <path d="M 205 220 A 95 95 0 0 1 90 220" fill="none" stroke="#22304a" stroke-width="2.5" marker-end="url(#al)"/>
+  <path d="M 60 185 A 95 95 0 0 1 120 45" fill="none" stroke="#22304a" stroke-width="2.5" marker-end="url(#al)"/>
+  <circle cx="150" cy="38" r="34" fill="#eaf1fb" stroke="#3d6fb6" stroke-width="2"/><text x="150" y="44" text-anchor="middle" font-size="16" font-weight="700" fill="#22304a">Plan</text>
+  <circle cx="245" cy="205" r="34" fill="#fdf3e4" stroke="#c27a1e" stroke-width="2"/><text x="245" y="211" text-anchor="middle" font-size="16" font-weight="700" fill="#22304a">Build</text>
+  <circle cx="55" cy="205" r="34" fill="#e8f5ef" stroke="#2f8a6a" stroke-width="2"/><text x="55" y="211" text-anchor="middle" font-size="15" font-weight="700" fill="#22304a">Review</text>
+  <text x="150" y="140" text-anchor="middle" font-size="12" fill="#5b6475">until SHIP IT</text>
+  <text x="150" y="156" text-anchor="middle" font-size="12" fill="#5b6475">and nothing left</text>
+</svg>
+<div>
+  <p><b>Plan</b> — a short pass plan: which area, the goal, what changes, which assets, what the reviewer will check. Logged.</p>
+  <p><b>Build</b> — do exactly that plan.</p>
+  <p><b>Review</b> — the stage reviewer's verdict with a <b>score out of 10</b> and the reasons. Its findings plus whatever the area still lacks become the next pass's plan.</p>
+  <p class="muted">Ends on SHIP IT with nothing left on the plan. Three rounds with no improvement on the same finding → change approach, or report blocked with evidence. Nobody waives a finding.</p>
+</div></div>
+</section>
+
+<section class="sheet" id="rules">
+<h2>Rules that shape the pipeline</h2>
+<div class="rules">
+  <div class="rule warn"><h4>Images are feel references, never blueprints</h4>
+    AI images don't translate into 3D: perspective and parallax lines don't line up, scale is guesswork, layouts can be impossible. Builders and reviewers match <b>mood, palette, materials, lighting character and density</b> — never positions, proportions or layout. Geometry is judged only against the approved greybox and the spatial-design guide.</div>
+  <div class="rule"><h4>Scores out of 10</h4>
+    Every review and every ranking of variants gives a score out of 10 per item, with the verdict and reasons; the dressing reviewer scores style and build quality separately. Scores make rankings comparable, show progress across passes, and in trials are compared with your own score.</div>
+  <div class="rule"><h4>Furniture lives in 3D</h4>
+    Big furniture is placed as placeholder boxes in the greybox and judged from eye height; its positions are exported from the scene. Small props and decor come later, in Build-out.</div>
+  <div class="rule"><h4>Lock gaps</h4>
+    A style question during B–D that the lock didn't answer: the dressing reviewer decides provisionally against the boards, it's logged and listed in the upload report, and it becomes a new information-gathering question at the retro.</div>
+  <div class="rule"><h4>World kinds</h4>
+    <b>Living space</b> (hangout, home): real-architecture space types; a VIP supporter teleport room is optional (off unless the brief asks). <b>Event world</b> (e.g. a talk event, a race, an RP auction): function first, anything goes, game design allowed, no VIP room unless asked.</div>
+</div>
+</section>
+
+<section class="sheet pagebreak" id="presets">
+<h2>How involved you are</h2>
+<table>
+<tr><th style="width:30%">Preset</th><th>You decide</th></tr>
+<tr><td><b>Design lock, then autopilot</b> (default)</td><td>information gathering, concept (layout + look), style rounds → <span class="lock">🔒 lock</span> · final upload</td></tr>
+<tr><td><b>Every step</b> (trials &amp; calibration)</td><td>the default + a checkpoint after every stage, including the Blueprint review</td></tr>
+<tr><td><b>Custom</b></td><td>the default + any stops you name</td></tr>
+</table>
+
+<h2 style="margin-top:26px">Trial runs</h2>
+<div class="rules">
+  <div class="rule"><h4>Checkpoint after every stage</h4>
+    Every decision, failed attempt, reviewer verdict and pass is logged with its reasons and screenshots (<code>Trial/log.jsonl</code>), and turned into a readable HTML/PDF report.</div>
+  <div class="rule"><h4>Your verdicts</h4>
+    At each checkpoint you mark each reviewer call agree / disagree (optionally with your own score out of 10), and say what to change and what worked. Every disagreement becomes a fix to a reviewer, builder rule or information-gathering question.</div>
+  <div class="rule"><h4>Calibrated</h4>
+    ≥ 95 % agreement with the reviewers and no lock gaps for 3 trials in a row — then the pipeline runs unattended.</div>
+  <div class="rule"><h4>Trial worlds</h4>
+    Defined by you.</div>
+</div>
+
+<h2 style="margin-top:26px">Who works where</h2>
+<table>
+<tr><th style="width:24%">Agent</th><th>Role</th><th style="width:19%">Phases</th></tr>
+<tr><td><b>orchestrator</b> (main session)</td><td>gathers information (asks only what's missing), owns WORLD.md, dispatches everyone</td><td><span class="chip cA">A</span><span class="chip cB">B</span><span class="chip cC">C</span><span class="chip cD">D</span></td></tr>
+<tr><td><b>world-architect</b></td><td>text → image concept art and style rounds, shell-layout blockouts shown as plain captures, floor plan, greybox variants, world kind &amp; optional VIP island</td><td><span class="chip cA">A</span><span class="chip cB">B</span></td></tr>
+<tr><td><b>world-builder</b></td><td>Build-out, interactions &amp; colliders, lighting</td><td><span class="chip cC">C</span><span class="chip cD">D</span></td></tr>
+<tr><td><b>layout-reviewer</b></td><td>shell layouts, floor plan, greybox and furniture layout in 3D, world size limits</td><td><span class="chip cA">A</span><span class="chip cB">B</span></td></tr>
+<tr><td><b>dressing-reviewer</b></td><td>Build-out passes and interactions: build quality <b>and</b> match with the boards (separate style / quality scores), lock gaps — never lighting</td><td><span class="chip cC">C</span></td></tr>
+<tr><td><b>final-reviewer</b></td><td>lighting (mood vs the boards), final render, the only upload gate</td><td><span class="chip cD">D</span></td></tr>
+<tr><td><b>perf-optimizer</b></td><td>measure, find the cause, reversible fixes</td><td><span class="chip cD">D</span></td></tr>
+<tr><td><b>asset-finder</b> · <b>blender-modeler</b></td><td>find existing assets · model what doesn't exist</td><td><span class="chip cC">C</span></td></tr>
+</table>
+<p class="muted" style="margin-top:14px">Always on: ZFightScan after every placement batch · console clean after every script change · WorldAudit (colliders, seats, pickups) · reflection probes right after every bake.</p>
+</section>
+
+<footer>Spec: <a href="PIPELINE-LAYOUT.md">PIPELINE-LAYOUT.md</a> · applied to the agents and skills · PDF: AWDK-pipeline.pdf</footer>
+</div></body></html>

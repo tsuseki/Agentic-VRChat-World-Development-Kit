@@ -1,0 +1,12 @@
+{
+  "name": "com.awdk.agenttools",
+  "version": "0.3.0",
+  "displayName": "AWDK Agent Tools",
+  "description": "Editor-only, read-only checks for coding agents building VRChat worlds: geometric and render-based z-fighting detection, camera captures, play-mode performance sampling and a world audit. Every entry point is a static method that returns plain text, designed to be called from a Unity MCP execute_code tool. Long work is time-sliced on EditorApplication.update and polled with Status().",
+  "unity": "2022.3",
+  "keywords": ["vrchat", "world", "agent", "mcp", "z-fighting", "audit"],
+  "author": {
+    "name": "Agentic World Development Kit contributors"
+  },
+  "dependencies": {}
+}
