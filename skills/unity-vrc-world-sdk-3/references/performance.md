@@ -200,7 +200,7 @@ Mobile GPUs are weak at Alpha fill rate:
 Countermeasures:
 □ Design without transparency
 □ If absolutely necessary, limit the area
-□ Cutout > Transparent on PC only; on Android/iOS alpha cutout counts as transparency [VRChat Cross-Platform]
+□ Cutout > Transparent on PC only; on Android/iOS alpha cutout counts as transparency
 ```
 
 ---
@@ -392,7 +392,6 @@ Use for:
 ### VRChat Debug Menu (client launched with `--enable-debug-gui`)
 
 Shortcut: Right Shift + `` ` `` + number (the key left of 1), or the Quick Menu Settings "debug" button.
-[World debug views](https://creators.vrchat.com/worlds/udon/world-debug-views)
 
 | # | Page | Use |
 |---|------|-----|
@@ -447,8 +446,6 @@ Cross-platform worlds (PC + Android) need an Android-specific performance budget
 The table distinguishes the enforced world-size limit from optimization guidance;
 recommendations are not upload limits.
 
-Reference: https://creators.vrchat.com/platforms/android/quest-content-optimization
-
 ### Android Limits and High-Cost Features
 
 | Constraint | Status | Notes |
@@ -458,7 +455,7 @@ Reference: https://creators.vrchat.com/platforms/android/quest-content-optimizat
 | World shaders | Unrestricted | Prefer mobile-compatible shaders; profile every custom shader on the target device |
 | Post-processing effects | Disabled | Bloom, depth of field, color grading are unavailable |
 | Real-time shadows / realtime or Mixed lights | None (workspace rule) | Fully baked lighting on every platform; see `.omp/skills/bakery-light-baking/SKILL.md` |
-| Video players | Work | Android plays only HTTPS URLs; the URL resolver works on Android [VRChat Video Allowlist] |
+| Video players | Work | Android plays only HTTPS URLs; the URL resolver works on Android |
 | Particle systems | Profile complexity | VRChat's particle-module limits apply to avatars, not worlds |
 
 ### Features to Remove or Treat with Caution on Quest
@@ -564,7 +561,7 @@ licensed — see `.omp/skills/bakery-light-baking/SKILL.md`). One bake serves PC
 
 Android-side settings:
 ├── Lightmapper:           Bakery (or Progressive) per `.omp/skills/bakery-light-baking/SKILL.md`
-├── Lightmap Resolution:   Keep it low [VRChat Android Optimization]; 5–10 texels/unit is a rule of thumb only
+├── Lightmap Resolution:   Keep it low; 5–10 texels/unit is a rule of thumb only
 ├── Lightmap Size:         1024×1024 max per map
 ├── Directional Mode:      Start with Non-Directional; compare quality/memory before changing it
 ├── Ambient Occlusion:     Baked baseline (Android post-processing disables SSAO)
@@ -703,7 +700,6 @@ and rendering values are budgets to validate through profiling, not upload gates
 ### Official World Triangle Budget (Quest)
 
 From the official Android Content Optimization documentation:
-<https://creators.vrchat.com/platforms/android/quest-content-optimization/>
 
 ```text
 VRChat recommends budgeting approximately 250,000 triangles for the whole world.
@@ -715,8 +711,7 @@ VRChat recommends budgeting approximately 250,000 triangles for the whole world.
 
 ### Per-Object Polygon Guidelines (Quest)
 
-These are approximate guidelines based on community practice and the official optimization guide:
-<https://creators.vrchat.com/platforms/android/quest-content-optimization/>
+These are approximate guidelines based on community practice and the official optimization guide.
 
 | Object Category | Triangle Target | Notes |
 |---|---|---|

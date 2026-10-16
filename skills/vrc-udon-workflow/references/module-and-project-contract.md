@@ -1,6 +1,6 @@
 # Module and project contract
 
-Adapted from sechiro's core-module, project-docs, knowhow-transfer and Fukuro guidance; see [provenance](provenance.md). This is a decision aid, not an instruction to scaffold files.
+Adapted from sechiro's core-module, project-docs, knowhow-transfer and Fukuro guidance. This is a decision aid, not an instruction to scaffold files.
 
 ## Builder First, when a Builder earns its place
 

@@ -123,7 +123,7 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
    - **Animators on static props**: count `Animator` components under static roots (rigged or
      animated FBX, avatar prefabs). One with no controller or no clips costs CPU every frame for
      nothing: list them, measure the delta with the attribution sweep, and fix at the importer
-     (Rig → Animation Type None, Import Animation off; `knowledge/notes/fbx-import-into-unity-traps.md`).
+     (Rig → Animation Type None, Import Animation off).
      Removing the components is a delete: ask first.
    - **Upload size** (≤ 200 MB): attribute it per asset with VRWorld Toolkit's Build Report, and
      diff before/after builds with its Build Report Comparison (skill references/texture-caps.md

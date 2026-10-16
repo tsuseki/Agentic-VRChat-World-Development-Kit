@@ -1,10 +1,9 @@
 # Historical portal-blocking workarounds
 
-Archived implementation evidence from a December 2021 guide (see [../SOURCES.md](../SOURCES.md)), not a
+Archived implementation evidence from a December 2021 guide, not a
 current supported API contract or a runtime-verified recipe.
 
-**Start with the supported option:** current [VRC Scene Descriptor documentation](https://creators.vrchat.com/worlds/components/vrc_scenedescriptor/)
-([official source mirror](https://raw.githubusercontent.com/vrchat-community/creator-docs/main/Docs/docs/worlds/components/vrc_scenedescriptor.md))
+**Start with the supported option:** current VRC Scene Descriptor documentation
 documents **Forbid User Portals** for portals opened from the world menu. Do not infer
 broader coverage. See [the refresh](hai-guides-refresh.md) before considering the
 historical alternatives below; changing respawn transforms can also affect real spawning.

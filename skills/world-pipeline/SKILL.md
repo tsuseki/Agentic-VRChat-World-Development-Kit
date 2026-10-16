@@ -37,7 +37,7 @@ resolve from the file that contains them.
 
 | File | Purpose |
 |---|---|
-| `<project>/WORLD.md` | The brief, the involvement settings, the Design Lock table, the shell layout, floor plan and greybox pick, the prop schedule, the Build-out area tracker, decisions log, lock gaps, stage status. Single source of truth. Template: [.omp/templates/WORLD.template.md](../../templates/WORLD.template.md) |
+| `<project>/WORLD.md` | The brief, the involvement settings, the Design Lock table, the shell layout, floor plan and greybox pick, the prop schedule, the Build-out area tracker, decisions log, lock gaps, stage status. Single source of truth. Template: `.omp/templates/WORLD.template.md` |
 | `<project>/Design/lock/` | Every image the user approved for the lock, plus `lock.json` (captions, tags, feel lines). The feel target every builder and reviewer works to |
 | `<project>/Design/concepts/genNN-<route>/` | A.3 images only, **one folder per generation** (route `text`, `3d` or `style`): `<letter>_<view>.png` (3D route: plain Unity captures, no paint-overs). This is the only folder the user looks at |
 | `<project>/Design/_prompts/genNN-<route>/` | Agent-only: the prompt files, pitches and notes for the matching generation. Never shown to the user; pitches are summarised in chat |
@@ -48,7 +48,7 @@ resolve from the file that contains them.
 | [clip-planes](../clip-planes/SKILL.md) | Clip planes, fog vs the far cut, float precision and world extent (256/512 m radii), teleport-island placement, distant scenery, z-fight separation; setup checklist |
 | [references/review-protocol.md](references/review-protocol.md) | Shared rules for all reviewers: capture, verdict and score, images as feel references, judging against the lock, reviewers by stage, trial logging |
 | [pipeline-trial](../pipeline-trial/SKILL.md) | Trial runs: checkpoint after every stage, `Trial/log.jsonl` event log, HTML/PDF reports, agreement rate |
-| `ZFightScan`, `WorldCapture`, `ZFightRender`, `PerfSample`, `WorldAudit` | Editor package `com.awdk.agenttools` ([.omp/docs/unity-tools.md](../../docs/unity-tools.md)); the checks every gate uses |
+| `ZFightScan`, `WorldCapture`, `ZFightRender`, `PerfSample`, `WorldAudit` | Editor package `com.awdk.agenttools` (`.omp/docs/unity-tools.md`); the checks every gate uses |
 
 ## Agents
 
@@ -276,8 +276,8 @@ and you stop at a checkpoint after every stage (that skill's "Checkpoints").
 | C.2 Interactions & playability | Once the real objects exist: colliders on walls, floors and big solid masses; **lie-down colliders** (below); one ramp box per stair flight; spawn; walk test in play mode; Udon (load `unity-vrc-udon-sharp`): clickable teleport doors on the real doors, teleport islands inside the clip-planes §4 radii, toggles incl. the lie-down toggle, video, no world mirrors (VRChat has personal mirrors; only real ones in bathrooms, gyms, dance/dressing rooms), pickups (only if requested), the VIP gate if the plan has one; Reference Camera near/far, runtime near/far Udon script (cuddle worlds: near 0.001–0.01) and fog per clip-planes §2 | world-builder | working Udon, collision, walk-test evidence, world-extent data | ClientSim/play-mode test passes; console clean; z-fight scan + WorldAudit clean → dressing-reviewer SHIP IT on the placed interaction objects |
 | **D · Finish** | | | | |
 | D.1 Lighting | Draft bake → final-reviewer mood check against the boards → final bake → reflection probes immediately | world-builder (`bakery-light-baking`; its Progressive GPU section without Bakery) | baked scene + lightmap/probe timestamps | final-reviewer SHIP IT (mood vs boards, final render) |
-| D.2 Performance | Measure, attribute, reversible fixes | perf-optimizer | measured report + applied fixes | budgets in [`perf-optimizer`](../../agents/perf-optimizer.md) "Default budgets" met (or the brief's own); any visual change → final-reviewer regression check |
-| D.3 Ship | Sweep `__*__` objects, assert 0 realtime/mixed lights, thumbnail (`.omp/knowledge/notes/render-thumbnail-titles-with-real-fonts.md`), SDK build & test → ready-to-upload report → **the user uploads** | orchestrator | build | user |
+| D.2 Performance | Measure, attribute, reversible fixes | perf-optimizer | measured report + applied fixes | budgets in `perf-optimizer` (`.omp/agents/perf-optimizer.md`) "Default budgets" met (or the brief's own); any visual change → final-reviewer regression check |
+| D.3 Ship | Sweep `__*__` objects, assert 0 realtime/mixed lights, thumbnail ([`.omp/skills/vrchat-world-thumbnail/SKILL.md`](../vrchat-world-thumbnail/SKILL.md)), SDK build & test → ready-to-upload report → **the user uploads** | orchestrator | build | user |
 | D.4 Retro | Lessons capture (below); every lock gap becomes an information-gathering question or lock item ("Lock gaps") | orchestrator | notes/skills, intake.md | — |
 
 Always load the matching skill before a stage: Udon → `unity-vrc-udon-sharp`; SDK/components →
@@ -359,7 +359,7 @@ be better, record it before moving on:
 
 1. What was built first, the user's words, why it failed, and what fixed it.
 2. Where it goes: a transferable technique becomes a note in this kit
-   (`.omp/knowledge/notes/`, sanitized, following [.omp/knowledge/README.md](../../knowledge/README.md))
+   (`.omp/knowledge/notes/`, sanitized, following `.omp/knowledge/README.md`)
    and, if it changes how a stage is run, an edit to this skill or the relevant agent; a
    project-specific fact goes in the project's AGENTS.md or WORLD.md.
 3. Save any script that produced the fix next to the note or skill.

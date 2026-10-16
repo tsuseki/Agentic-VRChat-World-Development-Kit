@@ -6,10 +6,9 @@ description: Camera clip planes, depth and float precision, and world extent for
 # Clip planes, precision and world extent
 
 Scope: VRChat PC, Unity 2022.3, Built-in RP, D3D11. Archetypes A1–A5 are defined in `.omp/skills/spatial-design/SKILL.md` §1.
-Tags (`[in-house, measured]`, `[INFERENCE]`, `[WORKSPACE RULE]`, named sources) follow the spatial-design
-conventions; named sources resolve in [SOURCES.md](SOURCES.md). Derivations, measurements and the
-reach-box snippet: [references/clip-planes-and-precision.md](references/clip-planes-and-precision.md)
-(cited below as "the research §N").
+Tags (`[in-house, measured]`, `[INFERENCE]`, `[WORKSPACE RULE]`) follow the spatial-design conventions; untagged
+facts come from published sources. Derivations, measurements and the reach-box snippet:
+[references/clip-planes-and-precision.md](references/clip-planes-and-precision.md) (cited below as "the research §N").
 
 Stages (`.omp/skills/world-pipeline/SKILL.md`): A.3 shell layouts, B.1 floor plan and B.2 greybox plan the extent, islands, near/far, fog and backdrops (§2–§5);
 C.2 sets them up (§7 items 1–7); D.1 checks sky matching and backdrops (§5, §7 items 9–11);
@@ -18,19 +17,19 @@ every builder and reviewer applies §6 to z-fighting.
 ## 1. Facts that drive the numbers
 | Fact | Value | Tag |
 |---|---|---|
-| Where clip planes are set | Scene Descriptor's **Reference Camera** (Inspector minimum near 0.01) | [VRChat Scene Descriptor] [in-house] |
-| Runtime override | `VRCCameraSettings.ScreenCamera.NearClipPlane` / `FarClipPlane`; set far first, then near | [VRChat Camera Settings] |
-| Near clamp | **0.001–0.05 m**; far ≥ near + 0.1 | [VRChat Camera Settings] |
-| Default far / near | 1000 m / ~5 cm | [VRChat Dev Update 2022-08-03] [WildCat Canny 2025] |
-| User override | "Forced Camera Near Distance" Off / Dynamic / Forced; Forced = 0.001 always; worlds can detect, not override | [VRChat Dev Update 2022-08-03] [hdorriker Canny 2025] |
-| PC depth buffer | **32-bit float, reversed Z** (`D32_SFloat_S8_UInt`, `usesReversedZBuffer = True`) | [in-house, measured] [Unity Platform Differences] |
-| Depth precision vs near | Measured separations identical for n = 0.001–0.1: a small near costs no z-fighting on PC | [in-house, measured] [Reed 2015] |
+| Where clip planes are set | Scene Descriptor's **Reference Camera** (Inspector minimum near 0.01) | [in-house] |
+| Runtime override | `VRCCameraSettings.ScreenCamera.NearClipPlane` / `FarClipPlane`; set far first, then near | |
+| Near clamp | **0.001–0.05 m**; far ≥ near + 0.1 | |
+| Default far / near | 1000 m / ~5 cm | |
+| User override | "Forced Camera Near Distance" Off / Dynamic / Forced; Forced = 0.001 always; worlds can detect, not override | |
+| PC depth buffer | **32-bit float, reversed Z** (`D32_SFloat_S8_UInt`, `usesReversedZBuffer = True`) | [in-house, measured] |
+| Depth precision vs near | Measured separations identical for n = 0.001–0.1: a small near costs no z-fighting on PC | [in-house, measured] |
 | Real far limit | The skybox paints over geometry whose reversed depth < ε ≈ 5.3×10⁻⁷: **f_eff ≈ n·f / (n + ε·(f−n))**, saturating at n/ε (1.9 km at n = 0.001) | [in-house, measured] |
-| Overpaint examples | f = 1000: visible to 684 m at n = 0.001, 950 m at 0.01, 989 m at 0.05. f = 700, n = 0.001: 532 m (users measured 531 m) | [in-house, measured] [WildCat Canny 2025] |
+| Overpaint examples | f = 1000: visible to 684 m at n = 0.001, 950 m at 0.01, 989 m at 0.05. f = 700, n = 0.001: 532 m (users measured 531 m) | [in-house, measured] |
 
 **Near-clip rule:** n ≤ (closest surface that must stay intact) / 2, because the flat near plane clips
 off-axis points at up to 1.56 n in a wide VR view. 1 cm is "close enough for head pats and cuddles"; 5 cm
-"is too relaxed". [INFERENCE] [WildCat Canny 2025]
+"is too relaxed". [INFERENCE]
 
 ## 2. Near, far and fog per archetype
 | World | Reference Camera near | Runtime near (Udon) | Far clip | Fog | Max \|coordinate\| reachable | Tag |
@@ -62,25 +61,25 @@ off-axis points at up to 1.56 n in a wide VR view. 1 cm is "close enough for hea
 
 ## 3. Float precision and world extent
 - Float32 spacing grows with distance from the **world origin** (not spawn): 7.6 µm at 100 m, 30.5 µm at
-  256–512 m, 61 µm at 512–1024 m, 0.49 mm at 5 km. [Dawson 2012]
+  256–512 m, 61 µm at 512–1024 m, 0.49 mm at 5 km.
 - Close-up jitter is what breaks cuddle worlds: a face 2 cm away shimmers 1 px at 250 m, 2 px at 500 m,
   26 px at 5 km. A smaller near clip lets people get closer, so it magnifies this. [in-house, measured]
 - PhysBones and UI jitter far from the origin are confirmed float effects. Floating-origin tricks break
-  static batching, occlusion culling and object sync: avoid them in social worlds. [Mr. Imagination Canny 2024] [KitKat4191 JetSim FO]
+  static batching, occlusion culling and object sync: avoid them in social worlds.
 - **Radii (largest per-axis |coordinate| of anything people occupy, eye height included):**
   - **Cuddle zones (any A1 space, cuddle booths, beds) < 256 m.** Below 128 m is better still.
   - **Any occupied space < 512 m.** 512 m is the float exponent boundary where users report problems.
   - Viewed-only scenery may sit anywhere inside the far clip.
-  [INFERENCE] on [Dawson 2012] [in-house, measured] [in-house]
+  [INFERENCE] [in-house, measured] [in-house]
 - Spawn and the main social area sit at the origin. [in-house]
 
 ## 4. Teleport islands inside the limits
 - Keep the ≥200 m separation between the main area and each island, and between islands. [WORKSPACE RULE]
 - **|island centre| + half-extent < 256 m on every axis for cuddle rooms** (512 m absolute for others).
   Grid that works: centres at (±220, 0, 0), (0, 0, ±220), (±220, 0, ±220) with rooms ≤30 m wide; layers
-  at y = ±200 add slots. Every island stays above the Respawn Height. [INFERENCE] [VRChat Scene Descriptor]
+  at y = ±200 add slots. Every island stays above the Respawn Height. [INFERENCE]
 - At 200–300 m islands sit inside a 1000 m far clip: seal them (they then occlude with baked occlusion
-  culling), put them below the ground plane, or put them on their own layer with `LayerCullDistances` ≈150 m. [VRChat Camera Settings] [INFERENCE]
+  culling), put them below the ground plane, or put them on their own layer with `LayerCullDistances` ≈150 m. [INFERENCE]
 - Island landings are raycast-checked: floor hit, clear capsule, door ~1.4 m behind the arrival point. [in-house]
 
 ## 5. Distant scenery: geometry, backdrops or skybox
@@ -105,7 +104,7 @@ off-axis points at up to 1.56 n in a wide VR view. 1 cm is "close enough for hea
   reachable. [INFERENCE]
 - Capture: build far content at true distance, capture from the reach-box centre at eye height with near =
   r + margin and runtime fog on, `RenderToCubemap` to HDR, import at 2048 per face, disable the source,
-  point the Bakery sky light at the new cubemap, rebake, then bake reflection probes. [Unity RenderToCubemap] [in-house]
+  point the Bakery sky light at the new cubemap, rebake, then bake reflection probes. [in-house]
 - Match the skybox sun to the baked light in azimuth and elevation; grade geometry, impostors and capture
   together. [in-house]
 
@@ -131,5 +130,3 @@ off-axis points at up to 1.56 n in a wide VR view. 1 cm is "close enough for hea
 | 11 | Sky matching | sun azimuth and elevation match the bake; Bakery sky light uses the sky cubemap; probes rebaked |
 | 12 | Close-up jitter spot test | at the farthest cuddle spot, a camera 2 cm from a surface shows no shimmer while moving |
 | 13 | Layer culls | small-prop and island layers culled with `LayerCullDistances` where it helps; reserved layers untouched |
-
-[the research §6]

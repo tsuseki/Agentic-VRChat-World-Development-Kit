@@ -115,12 +115,11 @@ disappears when I'm not looking straight at it" (2026-10-12).
 
 Occlusion only stops rendering; scripts, physics and animators in a hidden zone still run (disable
 zones the player is not in to save CPU). Prove every change below with the on/off and wide-
-`cullingMatrix` diffs above. [Silent occlusion guide](https://gitlab.com/s-ilent/SCSS/-/wikis/Other/Occlusion-Culling)
-(tips from the developers of *The Devouring*; Unity-2018 "blinks between areas" notes are history)
+`cullingMatrix` diffs above.
 
 - **Occluders are large, solid, opaque statics only** (walls, slabs, closed shells). Unity uses
   **LOD0's silhouette** for an occluder, so a room whose LOD0 is gappy occludes poorly whatever its
-  far LODs look like. [Unity 2022.3 occlusion manual](https://docs.unity3d.com/2022.3/Documentation/Manual/occlusion-culling-getting-started.html)
+  far LODs look like.
 - **Bake-only proxy occluders.** Where the real shell is gappy, thin or complex (modular kits,
   pillars with jogs, glass walls with mullions, the dense core of a hedge), occlude with plain cubes
   under one `__Occluders__` root tagged **`EditorOnly`**: `OccluderStatic` only, no collider, one

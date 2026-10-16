@@ -1065,7 +1065,7 @@ public class ManagedVideoLoader : UdonSharpBehaviour
 
 ## Event Dispatch & Cross-Behaviour Call Cost Tiers
 
-Udon dispatches cross-behaviour method calls via `SendCustomEvent` internally, and per the [official UdonSharp performance pointers](https://udonsharp.docs.vrchat.com/random-tips-&-performance-pointers/) "Udon can take on the order of 200x to 1000x longer to run a piece of code than the equivalent in normal C#" and "Calls across behaviours will be somewhat slower than local method calls due to how Udon handles SendCustomEvent which is used internally for those cases." The same docs note that "Due to how Udon searches for methods to call, the fewer public methods you have, the better performance-wise" and recommend "Prefer to keep methods as private if they are not being called from other scripts."
+Udon dispatches cross-behaviour method calls via `SendCustomEvent` internally, and per the official UdonSharp performance pointers "Udon can take on the order of 200x to 1000x longer to run a piece of code than the equivalent in normal C#" and "Calls across behaviours will be somewhat slower than local method calls due to how Udon handles SendCustomEvent which is used internally for those cases." The same docs note that "Due to how Udon searches for methods to call, the fewer public methods you have, the better performance-wise" and recommend "Prefer to keep methods as private if they are not being called from other scripts."
 
 This section consolidates the cost-vs-shape trade-offs across three axes — method visibility, cross-behaviour calls, and periodic / time-distributed work — so the right tier can be chosen per situation. None of these tiers is forbidden; the (Avoid) row is reserved for combinations that produce frame-time spikes.
 

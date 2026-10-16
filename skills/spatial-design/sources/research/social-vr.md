@@ -388,7 +388,7 @@ Per-hangout minimum [INFERENCE]: ≥ 3 activity resources of different intensity
 
 | # | Pitfall | Symptom (screenshot / scene data / playtest) | Fix | Basis |
 |---|---|---|---|---|
-| P1 | **Literal box** (a past luxury-residence world's first layout, [case study](../case-studies/luxury-penthouse-layout.md)) | One rectangle with furniture lining the walls, an empty centre and uniform ceiling and light; everyone piles at one spot | ≥ 3 zones differing in enclosure, ceiling or light; clusters in pockets | [INFERENCE] from [Williamson 2021], [Ducheneaut 2007] |
+| P1 | **Literal box** (a past luxury-residence world's first layout, [case study](../../references/case-studies/luxury-penthouse-layout.md)) | One rectangle with furniture lining the walls, an empty centre and uniform ceiling and light; everyone piles at one spot | ≥ 3 zones differing in enclosure, ceiling or light; clusters in pockets | [INFERENCE] from [Williamson 2021], [Ducheneaut 2007] |
 | P2 | Spawning into the crowd | Arrivals overlap seated players; clusters within 3 m of spawn | Vestibule spawn, 3 m clear disc, radius > 0 | [Williamson 2021], [VRChat First World] |
 | P3 | Spawn faces a wall or a dark void | The first spawn screenshot shows a wall or black | Rotate the spawn toward the hub | [INFERENCE] |
 | P4 | Spawn far from the social core | > 30 m or > 15 s before seeing anyone | Move the hub to the spawn, or the spawn to the hub | [Ducheneaut 2007] |

@@ -52,7 +52,7 @@ Haï's 2021 guide says an intervening trigger **may sometimes** cause unlimited 
 not that every trigger always does. Compare with/without the suspect volume before
 removing or relayering a functional zone trigger. This has not been reproduced here.
 
-Current [Pickup proximity documentation](https://creators.vrchat.com/worlds/components/vrc_pickup/)
+Current Pickup proximity documentation
 also applies to Interactables: desktop has scale-sensitive extra reach; VR compares hand
 distance to the collider. Proximity 0 requires VR hover inside the collider but still
 allows desktop compensation. See the refresh for the accessible official source mirror.
@@ -73,7 +73,7 @@ way to operate the menu, and test desktop plus VR input.
 
 ## Instance capacity — Maximum and Recommended are different
 
-The current [official world-creation guide](https://creators.vrchat.com/worlds/creating-your-first-world/#step-4---configure-your-world-in-the-sdk-build-panel)
+The current official world-creation guide
 distinguishes **Maximum Capacity** (ordinary join limit) from **Recommended Capacity**
 (public-listing/discovery threshold). Instance creator, world creator and group owner may
 join beyond capacity unless they lack permission to enter/see that instance.
@@ -99,7 +99,7 @@ views that depend on bone fidelity.
 
 ### Blocking dropped portals
 First evaluate the documented **Forbid User Portals** setting on
-[VRC Scene Descriptor](https://creators.vrchat.com/worlds/components/vrc_scenedescriptor/).
+VRC Scene Descriptor.
 Its documented scope is portals opened from the world menu, not every portal source.
 
 [The historical portal recipe](reference/portal-blocking.md) preserves Haï's 2021
@@ -207,9 +207,6 @@ only on unsolicited feedback. This is not a claim that testers can never notice 
 Derived application: pair important colour states with labels/shapes/icons and ask testers
 to distinguish the actual gameplay states. See the refresh for source versus derived advice.
 
-Reference: *Solving an Invisible Problem: Designing for Color-Blindness in Games*, Douglas
-Pennant — https://www.youtube.com/watch?v=KbFs9ghIIEI
-
 ### Japanese font choice is a real design decision
 Japanese fonts carry style connotations the same way English fonts do, and JP players have
 opinions about the defaults. Ask a localizer which font suits the world instead of taking
@@ -222,11 +219,6 @@ All three guides are 2021–2022 material, re-read on 2026-09-12, not current ru
 Capacity has been corrected against official documentation. Trigger reach, canvas lasers,
 portal internals, EditorOnly GI, probe-reference loss and rendering path remain historical
 diagnostic candidates: plausible mechanisms are not compatibility evidence.
-
-Further reading: Silent's advanced light-baking guide, Bakery-era but still good on mixed
-baking and shadowmask — https://gitlab.com/s-ilent/SCSS/-/wikis/Other/Light-Baking
-(note: mixed/Shadowmask is off the table in these projects per the no-realtime-directional-light
-rule).
 
 ## Read but not included
 

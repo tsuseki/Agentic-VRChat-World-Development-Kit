@@ -2,7 +2,7 @@
 
 For world-architect and layout-reviewer. A two-storey luxury residence hangout world, built once,
 then remade at a smaller scale. Quotes are the world owner's recorded feedback. Anything deduced
-rather than recorded is marked [INFERENCE]. Source: the maintainers' own project records.
+rather than recorded is marked [INFERENCE].
 
 ## 1. The two "square box" episodes
 

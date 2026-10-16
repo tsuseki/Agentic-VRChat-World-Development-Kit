@@ -479,4 +479,4 @@ In this workspace, use the pickup template only for an explicitly requested pick
 | `references/troubleshooting.md` | Troubleshooting guide                                                                            | 500+          |
 | `CHEATSHEET.md`                 | Quick reference                                                                                  | 200+          |
 
-Related lessons: [knowledge index → vrchat-sdk-upload-components](../../knowledge/INDEX.md#vrchat-sdk-upload-components), [knowledge index → colliders-physics](../../knowledge/INDEX.md#colliders-physics), [knowledge index → audio-video-ui](../../knowledge/INDEX.md#audio-video-ui)
+Colliders, audio/video/UI and SDK lessons checklist: [references/lessons-world-components.md](references/lessons-world-components.md).

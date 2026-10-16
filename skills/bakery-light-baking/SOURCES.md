@@ -16,6 +16,7 @@ where a claim or tag came from. Sections are grouped by the file that cites them
 - "Unity shine" symptom row — shader options read 2026-10-13: [Filamented](https://gitlab.com/s-ilent/filamented) (1.4.0),
   [ORL Standard base shader](https://shaders.orels.sh/docs/orl-standard/base-shader) (7.3.x),
   [Graphlit](https://github.com/z3y/Graphlit) (2.7.4)
+- Driver R590+ / OptiX 6 removal — [NVIDIA's response to Bakery's developer](https://forums.developer.nvidia.com/t/optix-6-0-0-is-broken-on-driver-591-44/353738)
 
 ## `reference/silent-lighting-guides.md`
 

@@ -7,7 +7,7 @@ Scope: real-world architecture and interior design only, turned into rules for p
 - Imperial source values are converted to metres (1 ft = 0.305 m, 1 in = 25.4 mm). The conversion is mine; the value is the source's.
 - `APL nnn` keys: I read the per-pattern summary pages on patternlanguage.cc (Problem / Solution / related patterns), not the 1977 book itself.
 
-Known failure case: a past luxury-residence world ([case study](../case-studies/luxury-penthouse-layout.md)) was first one square box and it was bad. Its second version combines several volumes and works. Sections 1 and 2 explain why, with checks.
+Known failure case: a past luxury-residence world ([case study](../../references/case-studies/luxury-penthouse-layout.md)) was first one square box and it was bad. Its second version combines several volumes and works. Sections 1 and 2 explain why, with checks.
 
 ---
 

@@ -318,8 +318,7 @@ In UdonGraph, the current UdonBehaviour is used when omitted, but in UdonSharp i
 
 ### Memory Management (Important)
 
-Memory is consumed each time an image is downloaded. Per the
-[official docs](https://creators.vrchat.com/worlds/udon/image-loading), `IVRCImageDownload.Dispose()`
+Memory is consumed each time an image is downloaded. `IVRCImageDownload.Dispose()`
 unloads that download's texture and frees its memory (State → `Unloaded`);
 `VRCImageDownloader.Dispose()` frees every download it made and their textures.
 

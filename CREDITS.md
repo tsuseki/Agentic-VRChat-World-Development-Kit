@@ -102,7 +102,7 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   Adapted as `.omp/skills/unity-vrc-udon-sharp/` and `.omp/skills/unity-vrc-world-sdk-3/` (`LICENSE.txt`).
 - **sechiro** — [VRCUdonSkills-for-Codex](https://github.com/sechiro/VRCUdonSkills-for-Codex), MIT,
   pinned commit `1a19d149`. Adapted as `.omp/skills/vrc-udon-workflow/` (`LICENSE`,
-  `references/provenance.md`, `references/texture-decisions.md`).
+  `SOURCES.md`, `references/texture-decisions.md`).
 - **nemurigi** — [UdonSharp program-asset AssetPostprocessor gist](https://gist.github.com/nemurigi/dea7c0a1fb94f7b9cf1c36481a459ded), MIT.
   Used by `.omp/skills/unity-vrc-udon-sharp/assets/templates/UdonSharpProgramAssetAutoGenerator.cs`,
   `.omp/skills/unity-vrc-udon-sharp/references/editor-scripting.md`.
@@ -197,10 +197,10 @@ Sourced research the pipeline's layout agents read. Each skill keeps its bibliog
 `SOURCES.md` (e.g. `.omp/skills/spatial-design/SOURCES.md`, grouped by citing file); those lists are
 the authoritative credits and are not duplicated here:
 
-- `.omp/skills/spatial-design/references/research/architecture-interior.md`
-- `.omp/skills/spatial-design/references/research/social-architecture.md` (Gehl, Whyte, Oldenburg,
+- `.omp/skills/spatial-design/sources/research/architecture-interior.md`
+- `.omp/skills/spatial-design/sources/research/social-architecture.md` (Gehl, Whyte, Oldenburg,
   Alexander, Susanka, Sommer, residential, hospitality and cinema planning)
-- `.omp/skills/spatial-design/references/research/social-vr.md`
+- `.omp/skills/spatial-design/sources/research/social-vr.md`
 - `.omp/skills/clip-planes/references/clip-planes-and-precision.md` (VRChat camera settings,
   depth and float precision, far clip, fog and skybox backdrops), digested in `skills/clip-planes/SKILL.md`
 - `.omp/skills/spatial-design/references/spatial-design.md`, the digest of the three spatial-design

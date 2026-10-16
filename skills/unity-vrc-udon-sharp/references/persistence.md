@@ -205,7 +205,7 @@ PlayerObject is a more powerful system for per-player state management. When a p
 4. If data must persist, add `VRC Enable Persistence` component to the same GameObject as the UdonBehaviour
 5. Place **one instance** of the prefab in the scene — VRChat handles instantiation for all players automatically
 
-> **Network ID ceiling (Canny 2025-05, tracked, undocumented):** persistence on a PlayerObject breaks when its Network ID is above **10,000**. Sync keeps working, but the client logs "Removed some Player Persistence metadata that had invalid IDs" and ClientSim logs "ran out of player persistence view ids". The general ceiling is reportedly 100,000. The SDK Network ID Utility only increments, so after many network edits, check the IDs and renumber persistent PlayerObjects low before shipping ([OpenNID](https://github.com/BobyStar/OpenNID) can audit and fix them). Renumbering can orphan existing saves; do it before release.
+> **Network ID ceiling (undocumented):** persistence on a PlayerObject breaks when its Network ID is above **10,000**. Sync keeps working, but the client logs "Removed some Player Persistence metadata that had invalid IDs" and ClientSim logs "ran out of player persistence view ids". The general ceiling is reportedly 100,000. The SDK Network ID Utility only increments, so after many network edits, check the IDs and renumber persistent PlayerObjects low before shipping ([OpenNID](https://github.com/BobyStar/OpenNID) can audit and fix them). Renumbering can orphan existing saves; do it before release.
 
 ### OnPlayerRestored on PlayerObjects
 

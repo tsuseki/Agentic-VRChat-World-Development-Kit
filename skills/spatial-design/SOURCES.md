@@ -3,7 +3,10 @@
 Bibliography and attribution for `.omp/skills/spatial-design/SKILL.md`. Not needed to use the skill; open it only to check
 where a claim or tag came from. Sections are grouped by the file that cites them.
 
-## `references/research/architecture-interior.md`
+The sourced research behind the guide lives in `sources/research/` (architecture-interior.md, social-architecture.md,
+social-vr.md); its inline tags resolve in the matching sections below. `references/spatial-design.md` digests it.
+
+## `sources/research/architecture-interior.md`
 
 Format: **[Key]** Author/creator. *Title*. Publisher/site. Year. URL. Access note. "n.d." = no date shown on the page read.
 
@@ -58,7 +61,7 @@ Format: **[Key]** Author/creator. *Title*. Publisher/site. Year. URL. Access not
 - **[FourSeasons]** Four Seasons Hotels. "Royal Suite – Two-Level Penthouse, Four Seasons Hotel Doha." fourseasons.com, n.d. https://www.fourseasons.com/doha/accommodations/specialty-suites/royal-suite (excerpt read).
 - **[Archello-VELA]** Archello. "VELA and VELA VIENTO | Foster + Partners." archello.com, n.d. https://archello.com/project/vela-and-vela-viento (excerpt read).
 
-## `references/research/social-architecture.md`
+## `sources/research/social-architecture.md`
 
 How each source was accessed is stated per entry. I credit only what I read. Web pages without a visible date are marked n.d.
 
@@ -113,10 +116,10 @@ How each source was accessed is stated per entry. I credit only what I read. Web
 - **[Aston 2016]** Carla Aston. "One Fall Is One Too Many! Why Sunken Living Rooms Have Got To Go." carlaaston.com. https://carlaaston.com/designed/one-fall-is-one-too-many-why-sunken-living-rooms-have-got-to-go (post read).
 
 **Workspace files**
-- **[AWDK social-vr]** `.omp/skills/spatial-design/references/research/social-vr.md` (this kit). The source for VRChat voice range, locomotion speed, VR density, and the Williamson, Great Pug and Black Cat findings, each with its original source listed there.
+- **[AWDK social-vr]** `.omp/skills/spatial-design/sources/research/social-vr.md` (this kit). The source for VRChat voice range, locomotion speed, VR density, and the Williamson, Great Pug and Black Cat findings, each with its original source listed there.
 - **architecture-interior.md** (this kit). The source for [APL 159] and [APL 190], as noted where used.
 
-## `references/research/social-vr.md`
+## `sources/research/social-vr.md`
 
 Only sources actually read for this file are listed. "n.d." = no publication date shown.
 Accessed 2026-10-09 unless noted.
@@ -185,4 +188,126 @@ Tags cited directly in the main reference (added 2026-10-13). Accessed 2026-10-1
 - [Kenomo 2023] Kenomo (sound designer). "【VRChat】ワールド制作サウンドTips." kenomo.jp, notes dated 2023-10. https://kenomo.jp/worldsoundtips (its 2D-ambience sub-tip is not adopted: kit rule "no 2D audio").
 - [Chrono Cabin 2024] れいんつ (laynts). "VRChat World「Chrono Cabin」ができるまで." note.com, 2024-08-12, updated 2024-08-25. https://note.com/laynts_/n/nbd10954de90d
 - [GameDev.net 2017] "Design Guide for Room Scale VR." GameDev.net, 2017. https://gamedev.net/tutorials/game-design/game-design-and-theory/design-guide-for-room-scale-vr-r4355
-- [Meta 2025 Locomotion Environments] see `references/research/social-vr.md` above.
+- [Meta 2025 Locomotion Environments] see `sources/research/social-vr.md` above.
+
+Tag map: every source tag removed from the guide's text, with where its full entry lives.
+The rule text itself is unchanged.
+- [AD 2024] → under `sources/research/social-architecture.md`
+- [ADK] → under `sources/research/architecture-interior.md`
+- [AISC 2023] → under `sources/research/architecture-interior.md`
+- [APL 107] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 112] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 116] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 127] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 129] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 131] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 132] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 133] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 134] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 136] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 139] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 141] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 142] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 159] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 167] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 179] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 180] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 181] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 182] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 185] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 186] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 187] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 188] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 190] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 191] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 193] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 196] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 250] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 252] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [APL 63] → [APL nnn] under `sources/research/architecture-interior.md` / `sources/research/social-architecture.md`
+- [Aston 2016] → under `sources/research/social-architecture.md`
+- [Autodesk] → under `sources/research/architecture-interior.md`
+- [AWDK social-vr] → `sources/research/social-vr.md` (its sources listed under that file above)
+- [Bailenson 2003] → under `sources/research/social-vr.md`
+- [BHG] → under `sources/research/architecture-interior.md`
+- [Cabaret-Capacity] → under `sources/research/social-architecture.md`
+- [Ching 2015] → under `sources/research/architecture-interior.md`
+- [Chrono Cabin 2024] → under `references/spatial-design.md`
+- [Collins 1993] → under `sources/research/social-architecture.md`
+- [Dawson 2012] → `.omp/skills/clip-planes/SOURCES.md`
+- [DesignFiles] → under `sources/research/architecture-interior.md`
+- [DiamondBar ODS] → under `sources/research/architecture-interior.md`
+- [Dim-Bar] → under `sources/research/social-architecture.md`
+- [Dim-King] → under `sources/research/social-architecture.md`
+- [Ducheneaut 2007] → under `sources/research/social-vr.md`
+- [Dunbar 1995] → under `sources/research/social-vr.md`
+- [GameDev.net 2017] → under `references/spatial-design.md`
+- [Gehl 2006] → under `sources/research/social-architecture.md`
+- [Gehl 2011] → under `sources/research/social-architecture.md`
+- [Guribo UdonVoiceUtils] → under `sources/research/social-vr.md`
+- [Han 2024] → under `sources/research/social-vr.md`
+- [HB 2026] → under `sources/research/social-architecture.md`
+- [Homebuilding 2026] → under `sources/research/social-architecture.md`
+- [IBC Table 1004.5 via WAC] → under `sources/research/social-architecture.md`
+- [InterNACHI] → under `sources/research/architecture-interior.md`
+- [IRC 2021 R311.7.5.1] → under `sources/research/architecture-interior.md`
+- [IVO-NKBA] → under `sources/research/architecture-interior.md`
+- [Kenomo 2023] → under `references/spatial-design.md`
+- [Meta 2025 Locomotion Environments] → under `sources/research/social-vr.md`
+- [Meta 2026 Seven Design Decisions] → under `sources/research/social-vr.md`
+- [Mixmag 2018] → under `sources/research/social-architecture.md`
+- [Monad 2019] → under `sources/research/architecture-interior.md`
+- [NBS 1979] → under `sources/research/social-architecture.md`
+- [NKBA 2022] → under `sources/research/architecture-interior.md`
+- [NYC DCP 2021] → under `sources/research/social-vr.md`
+- [Ralston 2026] → under `sources/research/social-architecture.md`
+- [Ralston-Entry] → under `sources/research/social-architecture.md`
+- [Rec Room 2024 Layout] → under `sources/research/social-vr.md`
+- [Robson 2011] → under `sources/research/social-architecture.md`
+- [ShelbyWilliams 2013] → under `sources/research/social-architecture.md`
+- [social-architecture §1.7] → section 1.7 of `sources/research/social-architecture.md` (its sources listed under that file above)
+- [social-architecture §2] → section 2 of `sources/research/social-architecture.md` (its sources listed under that file above)
+- [social-architecture §3] → section 3 of `sources/research/social-architecture.md` (its sources listed under that file above)
+- [social-architecture §4] → section 4 of `sources/research/social-architecture.md` (its sources listed under that file above)
+- [social-architecture §5] → section 5 of `sources/research/social-architecture.md` (its sources listed under that file above)
+- [social-architecture §6] → section 6 of `sources/research/social-architecture.md` (its sources listed under that file above)
+- [social-architecture §7] → section 7 of `sources/research/social-architecture.md` (its sources listed under that file above)
+- [social-architecture §8] → section 8 of `sources/research/social-architecture.md` (its sources listed under that file above)
+- [Sommer 1959] → under `sources/research/social-architecture.md`
+- [Susanka 2000] → under `sources/research/social-architecture.md`
+- [Susanka Houzz-Ceiling] → [Susanka Houzz-Shelter] / [-Level] / [-Ceiling] / [-Views] under `sources/research/social-architecture.md`
+- [Susanka Houzz-Level] → [Susanka Houzz-Shelter] / [-Level] / [-Ceiling] / [-Views] under `sources/research/social-architecture.md`
+- [Susanka Houzz-Shelter] → [Susanka Houzz-Shelter] / [-Level] / [-Ceiling] / [-Views] under `sources/research/social-architecture.md`
+- [Susanka-Bungalow] → under `sources/research/social-architecture.md`
+- [Susanka-Libertyville] → under `sources/research/social-architecture.md`
+- [Terrapin 2014] → under `sources/research/architecture-interior.md`
+- [UNIC 2020] → under `sources/research/social-architecture.md`
+- [VBU] → under `sources/research/architecture-interior.md`
+- [VRChat Avatar Scaling] → under `sources/research/social-vr.md`
+- [VRChat Camera Settings] → `.omp/skills/clip-planes/SOURCES.md`
+- [VRChat First World] → under `sources/research/social-vr.md`
+- [VRChat Labs Tips] → under `sources/research/social-vr.md`
+- [VRChat Player Audio] → under `sources/research/social-vr.md`
+- [VRChat Scene Descriptor] → under `sources/research/social-vr.md`
+- [VRChat Spatial Audio Source] → under `sources/research/social-vr.md`
+- [VRChat Wiki Black Cat] → under `sources/research/social-vr.md`
+- [VRChat Wiki Great Pug] → under `sources/research/social-vr.md`
+- [WDFM 2020] → under `sources/research/architecture-interior.md`
+- [West 1972] → under `sources/research/social-architecture.md`
+- [WhiteBearLake] → under `sources/research/architecture-interior.md`
+- [Whyte 1980 via Han 2012] → under `sources/research/social-architecture.md`
+- [Wiki-Enfilade] → under `sources/research/architecture-interior.md`
+- [Wiki-HDTV] → under `sources/research/social-architecture.md`
+- [Wiki-Susanka] → under `sources/research/architecture-interior.md`
+- [WildCat Canny 2025] → `.omp/skills/clip-planes/SOURCES.md`
+- [Williamson 2021] → under `sources/research/social-vr.md`
+- [Williamson 2025] → under `sources/research/social-vr.md`
+- [Willis] → under `sources/research/architecture-interior.md`
+
+The guide's §1.5 table maps from `sources/research/social-architecture.md`: its §1.1 edges → §5.1, §1.2 seating and
+§1.3 seat counts → §5.2, §1.4 triangulation → §5.3, §1.5 light → §5.4, §1.6 sound → §5.8, §1.7 level changes → §5.5,
+§1.8 clearances → §5.11, §2–§6 archetypes → §3.1–§3.5, §7 combining → §4.
+
+## `references/case-studies/luxury-penthouse-layout.md`
+
+- The maintainers' own project records (world owner's recorded feedback).

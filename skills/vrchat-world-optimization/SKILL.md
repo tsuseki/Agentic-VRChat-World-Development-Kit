@@ -90,4 +90,4 @@ Editor play mode is one mono view with no avatars, IK, menus or compositor, so e
 
 State the editor FPS cap when quoting FPS; lead with Camera.Render/GPU ms deltas on the same content pair, and the benchmark band. A weak PC multiplies those times — cost *ranking* transfers, absolute FPS does not.
 
-Related lessons: [knowledge index → performance](../../knowledge/INDEX.md#performance)
+Performance lessons checklist: [references/lessons-performance.md](references/lessons-performance.md).

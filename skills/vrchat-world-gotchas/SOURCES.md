@@ -26,3 +26,16 @@ tool status from each repo's README / GitHub archived flag, read 2026-10-13:
 [NetworkedEventCaller](https://github.com/Miner28/NetworkedEventCaller), [z3y/shaders](https://github.com/z3y/shaders),
 [USharpVideo](https://github.com/MerlinVR/USharpVideo), [MerlinVR/UdonSharp](https://github.com/MerlinVR/UdonSharp).
 Depth-texture row points to `unity-vrc-world-sdk-3` (official [VRC Camera Settings](https://creators.vrchat.com/worlds/udon/vrc-graphics/vrc-camera-settings)).
+
+## `SKILL.md` — official docs, colour-blindness, further reading (moved from inline 2026-10-16)
+
+- Pickup proximity (also applies to Interactables): [vrc_pickup](https://creators.vrchat.com/worlds/components/vrc_pickup/).
+- Maximum vs Recommended Capacity: [Creating your first world, step 4](https://creators.vrchat.com/worlds/creating-your-first-world/#step-4---configure-your-world-in-the-sdk-build-panel).
+- Forbid User Portals: [VRC Scene Descriptor](https://creators.vrchat.com/worlds/components/vrc_scenedescriptor/).
+- Colour-blindness section: Douglas Pennant, *Solving an Invisible Problem: Designing for Color-Blindness in Games*, https://www.youtube.com/watch?v=KbFs9ghIIEI
+- Further reading (was in "Staleness"): Silent's advanced light-baking guide, Bakery-era, good on mixed baking and shadowmask (mixed/Shadowmask is off the table in these projects): https://gitlab.com/s-ilent/SCSS/-/wikis/Other/Light-Baking
+
+## `reference/portal-blocking.md` — Forbid User Portals (moved from inline 2026-10-16)
+
+[VRC Scene Descriptor](https://creators.vrchat.com/worlds/components/vrc_scenedescriptor/)
+([official source mirror](https://raw.githubusercontent.com/vrchat-community/creator-docs/main/Docs/docs/worlds/components/vrc_scenedescriptor.md)).

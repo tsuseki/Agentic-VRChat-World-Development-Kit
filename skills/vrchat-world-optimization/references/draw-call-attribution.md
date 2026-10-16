@@ -51,8 +51,8 @@ For each top category, sample its renderers and record what breaks batching:
 | Different lightmap pages | `lightmapIndex` differs | split merges per lightmap index |
 | Not static / batching flag off | `GameObjectUtility.GetStaticEditorFlags` | set flags only where the object never moves |
 | Different reflection probes / probe anchors | `probeAnchor`, blended probes | group per probe zone |
-| Same probe on paper, different in the shader | Frame Debugger "different reflection probe"; `unity_SpecCube0_BoxMin.w` reads e.g. 0.9999998 vs 1 | set `Renderer.probeAnchor` to one shared point per group (no re-bake) [[Chrono Cabin 2024](https://note.com/laynts_/n/nbd10954de90d)] |
-| Instanced repeats not instancing | lightmapped instances on > 1 lightmap index ([Unity: one lightmap](https://docs.unity3d.com/2022.3/Documentation/Manual/GPUInstancing.html)); terrain trees under a `WindZone` (per-tree `_Wind`); renderer also static-batched | one lightmap page for the group (one 2K beat two 1K); hand-placed prefabs + sway shader instead of terrain trees; choose instancing OR static batching per asset, never both [Chrono Cabin 2024] |
+| Same probe on paper, different in the shader | Frame Debugger "different reflection probe"; `unity_SpecCube0_BoxMin.w` reads e.g. 0.9999998 vs 1 | set `Renderer.probeAnchor` to one shared point per group (no re-bake) |
+| Instanced repeats not instancing | lightmapped instances on > 1 lightmap index; terrain trees under a `WindZone` (per-tree `_Wind`); renderer also static-batched | one lightmap page for the group (one 2K beat two 1K); hand-placed prefabs + sway shader instead of terrain trees; choose instancing OR static batching per asset, never both [Chrono Cabin 2024] |
 | Multi-part assets (post, cap, shoe, rail as separate objects) | child count under one asset | merge per assembly run |
 
 Typical expensive classes, all invisible in triangle counts: modular railings, lamp hardware

@@ -12,7 +12,6 @@ description: "Placement, size and legibility rules for the title on a VRChat wor
   - The world-menu tile is a centre crop with a see-through **PC/Quest platform badge at the top right** (nearly opaque on hover zoom). Keep the title and the subject clear of that corner.
   - A dropped portal shows only a **central circle**, with the image squashed about 33% horizontally. Check that the title still reads inside a circle centred on the image; a full 57%-wide row can touch its edge, so preview the portal crop before finalising.
   - The top and bottom bands survive only on the full view: fine for credits or update notes, never for the title.
-  - [VRChat wiki "World thumbnails", crop template: https://wiki.vrchat.com/wiki/Guides:World_thumbnails]
 - **Legibility:**
   - a light fill on a dark scene, with a soft glow plus a slight dark shadow behind the letters;
   - it must read at thumbnail size;

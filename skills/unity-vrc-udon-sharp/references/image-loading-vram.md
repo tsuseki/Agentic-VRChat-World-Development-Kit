@@ -80,8 +80,7 @@ a 2048x2048 RGBA32 texture consumes about 16 MB per download. After 20 cycles:
 
 ## `Dispose()` vs `Destroy()`
 
-Per the [official image-loading docs](https://creators.vrchat.com/worlds/udon/image-loading)
-(2026-06-17), `Dispose()` **does** free the downloaded texture:
+`Dispose()` **does** free the downloaded texture:
 
 | Operation | What it frees |
 |-----------|---------------|

@@ -96,8 +96,3 @@ Do not globally force Auto Referenced OFF for all VPM packages. Use it when the 
 - Do not make editor-only tooling inherit `UdonSharpBehaviour`.
 - If an editor tool creates or moves UdonSharp scripts under a Unity `.asmdef`, also ensure the corresponding U# Assembly Definition exists and points Source Assembly at that `.asmdef`.
 - For package samples, state whether consumers can call runtime types from `Assembly-CSharp` or must create their own `.asmdef` reference.
-
-## Primary Evidence
-
-- UdonSharp migration docs: <https://udonsharp.docs.vrchat.com/migration/>
-- Unity assembly definition file format: <https://docs.unity3d.com/Manual/assembly-definition-file-format.html>

@@ -289,7 +289,7 @@ VRC Phys Bone
 
 ### PhysBone Events
 
-In [SDK 3.10.5](https://creators.vrchat.com/releases/release-3-10-5/), PhysBone
+In SDK 3.10.5, PhysBone
 **Reset When Disabled** also resets animator parameters and Udon state. When
 debugging a value that changes on disable, inspect this component setting before
 adding a second reset in Udon. This does not add a new PhysBone callback.

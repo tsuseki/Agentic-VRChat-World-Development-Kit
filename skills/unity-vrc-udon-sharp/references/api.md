@@ -91,7 +91,7 @@ float radius  = player.GetVoiceVolumetricRadius();
 bool  lowpass = player.GetVoiceLowpass();
 ```
 
-> **Note**: The voice getters are named in the [SDK 3.6.1 release notes](https://creators.vrchat.com/releases/release-3-6-1/) — added to `VRCPlayerApi` and exposed to Udon — but do not appear on the current [Player Audio](https://creators.vrchat.com/worlds/udon/players/player-audio/), Players, or UdonSharp API reference pages. Each is parameterless and returns the value type of its matching setter (4 `float`, 1 `bool`). This entry records that they exist and their signatures; it does not specify runtime read semantics. What a getter returns before its setter has run, whether it reflects the last value set versus the live effective value, and whether local- and remote-player reads behave identically, are not verified here — confirm against your SDK/client before relying on a getter's return value (for example, before using one in place of your own tracked state). The planned voice-audio rework did not ship in SDK version 3.10.4; re-check these getter semantics when an official release includes that rework.
+> **Note**: The voice getters are named in the SDK 3.6.1 release notes — added to `VRCPlayerApi` and exposed to Udon — but do not appear on the current Player Audio, Players, or UdonSharp API reference pages. Each is parameterless and returns the value type of its matching setter (4 `float`, 1 `bool`). This entry records that they exist and their signatures; it does not specify runtime read semantics. What a getter returns before its setter has run, whether it reflects the last value set versus the live effective value, and whether local- and remote-player reads behave identically, are not verified here — confirm against your SDK/client before relying on a getter's return value (for example, before using one in place of your own tracked state). The planned voice-audio rework did not ship in SDK version 3.10.4; re-check these getter semantics when an official release includes that rework.
 
 ### Avatar Methods
 
@@ -270,8 +270,6 @@ bool isClogged = Networking.IsClogged;
 | `NetworkCalling.InNetworkCall` | `bool` | True until the network entry point returns, including execution in nested methods or secondary behaviours |
 
 These properties apply to `[NetworkCallable]` and legacy network events. Do not use a `playerId`, display name, or identity value received as a network parameter for authorization. Read `CallingPlayer`, validate it, then apply the world's explicit authorization policy. `Networking.IsOwner(gameObject)` is still required before the receiver mutates synced state, but that ownership check controls mutation location and does not authorize the caller.
-
-Official behavior reference: [VRChat Network Events](https://creators.vrchat.com/worlds/udon/networking/events/).
 
 ### Usage Example: Rate Limit Monitoring
 
@@ -594,7 +592,7 @@ The Master-Managed pattern above protects its pool calls with an `IsOwner` guard
 
 #### Tier 1 — Forward to owner (recommended)
 
-> **Setup precondition**: Attach `PoolInteractForwarded` to the **same GameObject as the `VRCObjectPool`** it references. `NetworkEventTarget.Owner` resolves to the owner of the *sending UdonBehaviour's* GameObject (per [creators.vrchat.com networking events](https://creators.vrchat.com/worlds/udon/networking/events/)), not to `objectPool.gameObject`. Co-location ensures the event is delivered to the pool owner. If you need the interactor and the pool on separate GameObjects, see Tier 2 instead.
+> **Setup precondition**: Attach `PoolInteractForwarded` to the **same GameObject as the `VRCObjectPool`** it references. `NetworkEventTarget.Owner` resolves to the owner of the *sending UdonBehaviour's* GameObject, not to `objectPool.gameObject`. Co-location ensures the event is delivered to the pool owner. If you need the interactor and the pool on separate GameObjects, see Tier 2 instead.
 
 ```csharp
 using UdonSharp;
@@ -1006,8 +1004,6 @@ assume writing these properties fires that event or synchronizes other players.
 - `VRCGraphics.Blit(src, dst, mat)`: `dst` must be non-null. On Quest the shader needs `ZTest Always`, or `dst` must have no depth buffer.
 - Shader clocks without Udon: `#include "Packages/com.vrchat.base/ShaderLibrary/VRCTime.cginc"`, then `VRC_GetLocalTime(out h, out m, out s, out ms)` etc. (SDK ≥3.10.2; `_VRChatTime*` globals).
 - Never declare custom shader variables with the `_VRChat` prefix (reserved).
-
-Docs: [VRCGraphics](https://creators.vrchat.com/worlds/udon/vrc-graphics/), [VRChat shader globals](https://creators.vrchat.com/worlds/udon/vrc-graphics/vrchatshader-globals).
 
 ---
 

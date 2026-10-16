@@ -20,7 +20,7 @@ metadata:
 
 # VRChat Udon project workflow
 
-A selective adaptation of [sechiro/VRCUdonSkills-for-Codex](https://github.com/sechiro/VRCUdonSkills-for-Codex), not an installation of its twelve overlapping skills. See [provenance and topic dispositions](references/provenance.md) and the retained [MIT license](LICENSE).
+A selective adaptation of sechiro's VRCUdonSkills-for-Codex, not an installation of its twelve overlapping skills.
 
 ## Governing rules come first
 
@@ -58,3 +58,5 @@ Do not load all references by default. The two established Udon/SDK skills remai
 4. Change only the authorized objects/files. Keep package choices, external guidance and documentation conditional on the task.
 5. Prove the changed path: inspect Editor output, compile/console, run the interaction, and use VRChat Build & Test when client behavior matters. Editor inspection alone cannot prove networking or persistence.
 6. Update the existing project record when required by the task/governing workflow. Report observed results and remaining verification limits; create no automatic documentation pack.
+
+Sources: SOURCES.md (not needed to use this skill).

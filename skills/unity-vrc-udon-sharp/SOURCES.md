@@ -64,3 +64,64 @@ Sources: [Physics and layers](https://creators.vrchat.com/worlds/layers), [Items
 ## `references/sdk-migration.md` — Toon Standard
 
 Sources: SDK 3.10.5 release notes (2026-09-04), [Quest content limitations](https://creators.vrchat.com/platforms/android/quest-content-limitations).
+
+## `SKILL.md` — event receiver cast
+
+[SDK 3.10.4 release notes](https://creators.vrchat.com/releases/release-3-10-4/) and the SDK source declaration.
+
+## `references/api.md`
+
+- Voice getters: [SDK 3.6.1 release notes](https://creators.vrchat.com/releases/release-3-6-1/); absent from [Player Audio](https://creators.vrchat.com/worlds/udon/players/player-audio/).
+- Network events, `NetworkEventTarget.Owner`: [VRChat Network Events](https://creators.vrchat.com/worlds/udon/networking/events/).
+- VRCGraphics: see the VRCShader / VRCGraphics section above.
+
+## `references/assembly-definitions.md`
+
+- [UdonSharp migration docs](https://udonsharp.docs.vrchat.com/migration/)
+- [Unity assembly definition file format](https://docs.unity3d.com/Manual/assembly-definition-file-format.html)
+
+## `references/constraints.md` — network-event method layout
+
+[SDK 3.10.5 release](https://github.com/vrchat/packages/releases/tag/3.10.5),
+[official network-event requirements](https://creators.vrchat.com/worlds/udon/networking/events/).
+
+## `references/dynamics.md`
+
+PhysBone Reset When Disabled: [SDK 3.10.5 release notes](https://creators.vrchat.com/releases/release-3-10-5/).
+
+## `references/editor-scripting.md`
+
+- `IEditorOnly`, build callbacks: [build-pipeline callbacks and interfaces](https://creators.vrchat.com/sdk/build-pipeline-callbacks-and-interfaces/);
+  [world component whitelist](https://creators.vrchat.com/worlds/whitelisted-world-components/).
+- `ActiveBuildType` = `Test` on Build & Reload: [SDK 3.10.5 release notes](https://creators.vrchat.com/releases/release-3-10-5/).
+- Program-asset auto-generator: [nemurigi's AssetPostprocessor gist](https://gist.github.com/nemurigi/dea7c0a1fb94f7b9cf1c36481a459ded) (MIT).
+
+## `references/events.md` — execution order
+
+[Event Execution Order](https://creators.vrchat.com/worlds/udon/event-execution-order/).
+
+## `references/networking-antipatterns.md`, `references/networking.md`
+
+- `SetOwner` locally immediate: [Ownership transfer events diagram](https://creators.vrchat.com/worlds/udon/networking/ownership/#transfer-events-diagram).
+- `OnOwnershipRequest` runs on requester and owner ("This logic runs locally on both the requester and the owner"), master not an auth boundary:
+  [Network Components](https://creators.vrchat.com/worlds/udon/networking/network-components/), [Object Ownership](https://creators.vrchat.com/worlds/udon/networking/ownership/).
+- Array changes don't fire `OnVariableChanged`: [OnVariableChanged](https://creators.vrchat.com/worlds/udon/networking/network-components/#onvariablechanged),
+  [Udon Example Scene](https://creators.vrchat.com/worlds/examples/udon-example-scene/).
+- `None` vs `NoVariableSync`: UdonSharp source XML docs (verified SDK 3.10.3).
+- Network events: [VRChat Network Events](https://creators.vrchat.com/worlds/udon/networking/events/); general: [VRChat networking](https://creators.vrchat.com/worlds/udon/networking/).
+
+## `references/networking-bandwidth.md` — 11 KB/s
+
+[Network details](https://creators.vrchat.com/worlds/udon/networking/network-details).
+
+## `references/patterns-performance.md` — cross-behaviour call cost quotes
+
+[UdonSharp random tips & performance pointers](https://udonsharp.docs.vrchat.com/random-tips-&-performance-pointers/).
+
+## `references/testing.md` — Play Mode exit skips `OnDisable`
+
+[SDK 3.10.5 release notes](https://creators.vrchat.com/releases/release-3-10-5/). ClientSim table rows map to issues #118 (teleport/AvatarRoot), #130 (OnBecameVisible), #129 (SetVelocity), #142 (station collider), #137 (EditorOnly), #143 (Input Manager); see the testing section above.
+
+## `references/troubleshooting.md` — station PlayerLocal collision
+
+[Canny: PlayerLocal collision should remain on players in stations](https://vrchat.canny.io/sdk-bug-reports/p/playerlocal-collision-should-remain-on-players-in-stations).

@@ -21,8 +21,7 @@ Read first: `.omp/skills/world-pipeline/SKILL.md` (your stages), `.omp/skills/sp
 (rules, numbers, pitfalls; mandatory), `.omp/skills/clip-planes/SKILL.md` (world extent, near/far, fog, islands, backdrops; mandatory), `WORLD.md` **and every image in its References table**
 (`massing`, `layout` and `avoid` tags constrain you directly; boards are generated from the
 `mood`/`lighting`/`palette`/`materials` refs), and the case studies in
-`.omp/skills/spatial-design/references/case-studies/`. The detailed research behind spatial-design lives in
-`.omp/skills/spatial-design/references/research/`; open it when a rule needs context. When the user's reference contradicts a
+`.omp/skills/spatial-design/references/case-studies/`. When the user's reference contradicts a
 spatial-design rule, the reference wins for that world; note the deviation in your report. What
 the user locked at A.4 (`Design/lock/`, `SHELL_PICK`, WORLD.md Design Lock table) constrains everything after it.
 

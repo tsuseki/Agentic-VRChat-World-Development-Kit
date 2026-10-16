@@ -101,7 +101,7 @@ An API that requires a receiver can therefore receive `this` directly:
 VRCStringDownloader.LoadUrl(dataUrl, this);
 ```
 
-The receiver argument is still required; only the explicit `(IUdonEventReceiver)` cast is unnecessary on the active SDK. Keep any pre-3.10.4 cast in the historical migration reference only. This follows the [official SDK 3.10.4 release notes](https://creators.vrchat.com/releases/release-3-10-4/) and the SDK source declaration.
+The receiver argument is still required; only the explicit `(IUdonEventReceiver)` cast is unnecessary on the active SDK. Keep any pre-3.10.4 cast in the historical migration reference only.
 
 ### Public fields: Inspector visibility is not persistence policy
 
@@ -369,4 +369,4 @@ input through unchanged and emits `VALIDATOR-WARNING: validation skipped
 
 - `CHEATSHEET.md` - One-page quick reference
 
-Related lessons: [knowledge index → udonsharp-networking](../../knowledge/INDEX.md#udonsharp-networking)
+Networking lessons checklist: [references/lessons-networking.md](references/lessons-networking.md).

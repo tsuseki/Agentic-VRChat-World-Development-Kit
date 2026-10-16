@@ -182,7 +182,7 @@ and have no Build Panel Auto Fix:
 | `multiple pipeline manager components in the built scene` | Inspect build callbacks/processors that add managers or duplicate prefabs. |
 | `The built scene has no pipeline manager component` | Inspect build callbacks/processors that remove the manager or its GameObject. |
 
-Source: `VRCWorldPostBuildValidator.cs:17-45`. The source scene can pass validation
+The check is in `VRCWorldPostBuildValidator.cs:17-45`. The source scene can pass validation
 while a build script changes the exported scene. Repair that script instead of
 repeatedly editing an already-correct source scene. Upload paths also reject
 multiple managers (`VRCSdkControlPanelWorldBuilder.cs:2852-2859, 3360-3367, 3440-3447`).

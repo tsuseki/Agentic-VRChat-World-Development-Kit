@@ -328,7 +328,7 @@ Called when players enter/exit triggers or collide.
 | `void OnPlayerTriggerStay(VRCPlayerApi player)` | Player stays in trigger |
 | `void OnPlayerTriggerExit(VRCPlayerApi player)` | Player exits trigger |
 
-> Official caveats ([player collisions](https://creators.vrchat.com/worlds/udon/players/player-collisions)):
+> Official caveats:
 > - `OnPlayerTrigger*` may be skipped when a player teleports into or out of the collider, or moves very fast. For state that must be right (room occupancy, voice zones, teleport-door destinations), also test the player's position against the zone bounds after `TeleportTo` and on a slow (1–3 s) timer.
 > - `OnPlayerCollision*` fire only when a **moving** collider hits the player; a player walking into a stationary collider fires nothing, so use a trigger.
 
@@ -754,8 +754,6 @@ void OnTriggerEnter(Collider other)
 ```
 
 ## Event Execution Order
-
-Reference: [VRChat Official Docs — Event Execution Order](https://creators.vrchat.com/worlds/udon/event-execution-order/)
 
 ### Per-Frame Lifecycle
 

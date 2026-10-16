@@ -99,3 +99,24 @@ Tags used inline (full list and the Android workflow: `.omp/skills/vrchat-androi
 - **[VRChat Video Allowlist]** [www-whitelist](https://creators.vrchat.com/worlds/udon/video-players/www-whitelist) (2026-07-14): Android plays HTTPS only; URL resolver available on Android per [video-players](https://creators.vrchat.com/worlds/udon/video-players/).
 - **[Meta Device Comparison]** [Device-specific optimization](https://developers.meta.com/vr/resources/device-optimization-comparison/) (updated 2026-05-11): whole-frame draw calls < 100 (Quest 2) / < 200 (Quest 3).
 - Mobile shader list (Standard Lite, Lightmapped, Particles Additive/Multiply; Toon Standard without lightmaps): [Android Content Limitations](https://creators.vrchat.com/platforms/android/quest-content-limitations/) (updated 2025-10-08).
+
+## `references/audio-video.md` — Steam Audio
+
+Steam Audio ship date and server-side tuning: VRChat client release notes
+[2025.4.2](https://docs.vrchat.com/docs/vrchat-202542) (2025-12-03, Build 1768) and
+[2025.4.2p1](https://docs.vrchat.com/docs/vrchat-202542p1); conversion caveats and "report these as bugs" list:
+[Developer Update, December 4, 2025](https://ask.vrchat.com/t/developer-update-4-december-2025/47243).
+
+## `references/layers.md` — user layer names overridden
+
+Runtime evidence: [niaka3dayo/agent-skills-vrc-udon Issue #286](https://github.com/niaka3dayo/agent-skills-vrc-udon/issues/286)
+(layer-dump script and output), [independent report](https://ask.vrchat.com/t/user-defined-unity-layers-raycasts-ignored-by-vrchat/47933);
+upstream report [vrchat-community/creator-docs#303](https://github.com/vrchat-community/creator-docs/issues/303).
+
+## `references/lighting.md` — VRCCameraSettings
+
+[VRC Camera Settings](https://creators.vrchat.com/worlds/udon/vrc-graphics/vrc-camera-settings).
+
+## `references/build-validation.md` — pipeline manager check
+
+Local SDK source `VRCWorldPostBuildValidator.cs:17-45`.

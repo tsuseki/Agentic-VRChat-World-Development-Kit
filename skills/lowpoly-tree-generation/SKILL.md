@@ -136,4 +136,4 @@ For night worlds grade the leaf atlas once (a per-world `grade_atlas.py` next to
 ## Verify before calling it done
 `STAT` tris in budget, `open_bark_edges_above_ground 0`, `tips_uncovered 0`, `attach out_of_tolerance 0`, bark stretch max/min ≲ 3, leaf normal spread < 0.7; `--qa` render; in Unity a composition review from eye height and from below at night.
 
-Related lessons: [knowledge index → blender-modeling](../../knowledge/INDEX.md#blender-modeling)
+Blender and mesh lessons checklist: [asset-import/references/lessons-blender-and-geometry.md](../asset-import/references/lessons-blender-and-geometry.md).

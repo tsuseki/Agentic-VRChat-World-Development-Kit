@@ -422,8 +422,6 @@ SDK >= 3.10.2 instantiates its own non-editable material (the source material is
 SDK >= 3.10.3 renders mirrors in Camera.onPreCull.
 ```
 
-Docs: [vrc_mirrorreflection](https://creators.vrchat.com/worlds/components/vrc_mirrorreflection).
-
 ### Best Practices
 
 ```csharp
@@ -631,7 +629,6 @@ Enables VRChat interaction with Unity UI (Canvas).
 //   if you add your own, size it to the canvas.
 // In-client, debug overlay 0 outlines every UIShape and shows what the pointer hits
 //   (first check for "menu won't click").
-// Docs: https://creators.vrchat.com/worlds/components/vrc_uishape
 ```
 
 ### TextMeshPro Recommendation
@@ -656,7 +653,6 @@ TMP setup:
   Japanese/Chinese/Korean names render instead of □.
 - Custom fonts: generate the smallest atlas with only the character set you need
   (font assets cost download size and RAM).
-Docs: https://creators.vrchat.com/worlds/components/textmeshpro/
 ```
 
 ---

@@ -21,6 +21,8 @@ KIT = Path(__file__).resolve().parent.parent
 HOST_URI = re.compile(r"\b(xd|skill|local|agent|artifact|cfg)://")
 HOST_DOCS = {"docs/hosts.md", "scripts/README.md", "scripts/check_kit.py"}  # these describe the URIs
 LINK = re.compile(r"\]\(([^)#\s]+)(?:#[^)]*)?\)")
+# Backticked kit paths such as `.omp/docs/hosts.md`; placeholders (<...>, *), local/ and anchors skipped.
+OMP_PATH = re.compile(r"`\.omp/(?!local/)([^`<>*\s#:]+?)/?(?:[#:][^`]*)?`")
 
 
 def tracked() -> list[str]:
@@ -58,8 +60,17 @@ def main() -> int:
                     errors.append(f"host-specific URI {rel}:{n}: {line.strip()[:100]}")
         if path.suffix == ".md":
             for target in LINK.findall(text):
-                if not re.match(r"[a-z]+:", target) and not (path.parent / target).resolve().exists():
+                if re.match(r"[a-z]+:", target):
+                    continue
+                resolved = (path.parent / target).resolve()
+                if not resolved.exists():
                     errors.append(f"broken link {rel} -> {target}")
+                elif rel.startswith(("skills/", "agents/")) and not resolved.is_relative_to(KIT / "skills"):
+                    # installed skills and agents move to .claude/skills etc.; only skill-to-skill links survive
+                    errors.append(f"non-portable link {rel} -> {target} (write it as `.omp/...`)")
+            for target in OMP_PATH.findall(text):
+                if not (KIT / target).exists():
+                    errors.append(f"missing path {rel}: .omp/{target}")
 
     for script, args in (("build-knowledge-index.py", []), ("leak_check.py", ["--all"])):
         r = subprocess.run([sys.executable, str(KIT / "scripts" / script), *args], capture_output=True, text=True)

@@ -60,13 +60,9 @@ to `user0`-`user9` (layer 22 = `user0`, ... layer 31 = `user9`).
 > testing).** The official docs state that VRChat "will not override the name
 > and collision matrix" of layers 22-31. Runtime observation (2026-07) shows
 > layer *names* ARE overridden to `user0`-`user9`; only the collision matrix is
-> preserved. See [Issue #286](https://github.com/niaka3dayo/agent-skills-vrc-udon/issues/286)
-> (includes a layer-dump script and full runtime output) and
-> [this independent report](https://ask.vrchat.com/t/user-defined-unity-layers-raycasts-ignored-by-vrchat/47933).
-> The error has been reported upstream in
-> [vrchat-community/creator-docs#303](https://github.com/vrchat-community/creator-docs/issues/303);
+> preserved. The error has been reported upstream;
 > if the official docs or client behavior change, re-verify with the layer-dump
-> script in #286.
+> script in [Issue #286](https://github.com/niaka3dayo/agent-skills-vrc-udon/issues/286).
 
 Layers 22-30 are freely usable; layer 31 should be avoided (see note below).
 
@@ -139,9 +135,6 @@ big-furniture `SolidCollider`s, lie-down colliders (when on) and menu/interactab
 - Udon physics queries that hit an Item return a null protected object; exclude layer 3 from physics masks
   and check hits with `Utilities.IsValid`.
 - World owners can disable items under Default Content Settings → Items Enabled on vrchat.com.
-
-Docs: [creators.vrchat.com/worlds/layers](https://creators.vrchat.com/worlds/layers),
-[/worlds/items](https://creators.vrchat.com/worlds/items).
 
 ---
 

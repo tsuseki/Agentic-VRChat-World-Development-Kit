@@ -1,8 +1,7 @@
 # Port workflow: PC world → Android (and iOS)
 
 Step detail for `.omp/skills/vrchat-android-worlds/SKILL.md` §3. Stack: Unity 2022.3.22f1, Built-in RP, fully
-baked (Bakery or Progressive), lilToon/Standard, UdonSharp, SDK 3.10.x. Tags resolve in
-[../SOURCES.md](../SOURCES.md). All editor work goes through the Unity MCP device (hard rule 5);
+baked (Bakery or Progressive), lilToon/Standard, UdonSharp, SDK 3.10.x. All editor work goes through the Unity MCP device (hard rule 5);
 the snippets are `execute_code` bodies. Snippets that only read are safe at any time; the ones
 marked **writes** change assets or settings.
 
@@ -61,7 +60,7 @@ Write a short port plan in WORLD.md before editing:
   ContributeGI (its baked shadow stays in the shared lightmaps) and carries **no synced Udon,
   VRCObjectSync or pickup** (step 7).
 - **Collision**: identical on both platforms, so nobody floats or sinks relative to players on the
-  other platform [VRChat Cross-Platform]. The workspace collider rules hold on both (no colliders on
+  other platform. The workspace collider rules hold on both (no colliders on
   small props; always-on `SolidCollider` on big furniture; disabled-by-default `LieDownCollider`;
   one ramp box per stair flight).
 - **Udon changes** behind `#if` (step 7).
@@ -69,9 +68,9 @@ Write a short port plan in WORLD.md before editing:
 
 ## 3. Install EasyQuestSwitch (needs the user's OK)
 
-VRChat recommends EasyQuestSwitch for per-platform adjustments [VRChat Cross-Platform]. It records
+VRChat recommends EasyQuestSwitch for per-platform adjustments. It records
 per-platform values on scene components and applies them when the build target changes
-[EasyQuestSwitch]. VCC Curated package `vrchat.jordo.easyquestswitch` 1.4.0 (2024-03-25, still the
+. VCC Curated package `vrchat.jordo.easyquestswitch` 1.4.0 (2024-03-25, still the
 current curated version on 2026-10-13). Supported types include GameObject (active), Renderer
 (materials), Material, MeshFilter (mesh), LODGroup, ReflectionProbe, `VRC_MirrorReflection`
 (SDK3), Camera, Transform, colliders, AudioSource, `VRC_SpatialAudioSource` and Bakery lights. The
@@ -91,7 +90,7 @@ pattern). Prefer EasyQuestSwitch: it is VRChat-recommended and leaves no project
    Enable GPU Instancing.
 2. In EasyQuestSwitch, add each renderer and set its Android materials; add PC-only GameObjects with
    Android `active = false`; add a diegetic mirror (if any) with a reduced Reflect Layers set and a
-   lower Mirror Resolution for Android [VRChat Mirror].
+   lower Mirror Resolution for Android.
 3. Disabled objects still ship in the bundle. When the point is upload size rather than draw cost,
    the object must be removed from the Android build (EditorOnly-tag it only for the Android build
    via the build callback, or move the content to a PC-only asset); never EditorOnly a synced or
@@ -99,18 +98,18 @@ pattern). Prefer EasyQuestSwitch: it is VRChat-recommended and leaves no project
 
 ## 5. Switch the build target
 
-SDK Control Panel → Builder → Platforms: untick Windows, tick Android → Switch [VRChat Cross-Platform].
+SDK Control Panel → Builder → Platforms: untick Windows, tick Android → Switch.
 Scripted equivalent (**writes**, long): `EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Android, BuildTarget.Android)`.
-The first switch reimports every asset; later switches are much faster [VRChat Cross-Platform].
+The first switch reimports every asset; later switches are much faster.
 The MCP connection drops during the domain reload; wait until `editor_state` reports not compiling
 and not updating, then:
 
 - Read the console; resolve any `error CS` (UdonSharp recompiles on platform switch since SDK
-  3.9.0 [SDK 3.9.0]).
+  3.9.0).
 - Builder validation: fix the red "Default texture format on Android should be set to … ASTC"
-  error with its Auto Fix [SDK source]. Yellow "World uses unsupported shader 'X'" lines are
+  error with its Auto Fix. Yellow "World uses unsupported shader 'X'" lines are
   advisory: the SDK compares against a short list that omits Standard, lilToon and even Toon
-  Standard [SDK source]. Profile those materials; don't chase the warning to zero.
+  Standard. Profile those materials; don't chase the warning to zero.
 - Check that EasyQuestSwitch applied the Android profile (spot-check three renderers).
 
 ## 6. Textures, lightmaps, encoding (**writes**)
@@ -174,13 +173,12 @@ Re-read both with the matching `Get…ForPlatformGroup` methods to confirm. Why 
 ## 7. Udon
 
 - Platform code: `#if UNITY_ANDROID || UNITY_IOS … #endif` in UdonSharp is safe on SDK ≥ 3.9.0,
-  which recompiles U# on platform switch [SDK 3.9.0].
+  which recompiles U# on platform switch.
 - **Never** put `[UdonSynced]` fields, synced behaviours or `VRCObjectSync`/pickups inside a platform
   `#if`, and never remove a synced object from one platform. PC and Android players share
   instances, and network compatibility requires matching component types, count and order and
-  matching synced-variable types, count and order on every synced object [VRChat Network
-  Compatibility]; network IDs are the link between the platform versions [VRChat Network ID
-  Utility]. One scene for both platforms keeps the IDs identical; if a separate Android scene is
+  matching synced-variable types, count and order on every synced object;
+  network IDs are the link between the platform versions. One scene for both platforms keeps the IDs identical; if a separate Android scene is
   ever unavoidable, copy IDs with *VRChat SDK → Utilities → Network ID Import and Export Utility*.
 - Near clip: a cuddle world's runtime near of 0.001–0.003 m (PC) becomes **0.01 m** on mobile,
   because a 24-bit depth buffer must be assumed there (z-separation 6 mm at 10 m for n = 0.001 vs
@@ -188,7 +186,7 @@ Re-read both with the matching `Get…ForPlatformGroup` methods to confirm. Why 
   pats and cuddles" (`.omp/skills/clip-planes/SKILL.md` §1).
 - Phones: VRChat runs on touch-only devices. Use `OnInputMethodChanged(VRCInputMethod)` /
   `InputManager.GetLastUsedInputMethod()` == `VRCInputMethod.Touch` for a touch path, and
-  `OnScreenUpdate` for orientation changes [VRChat Mobile Best Practices]. Big buttons, short text,
+  `OnScreenUpdate` for orientation changes. Big buttons, short text,
   nothing that needs a VR gesture.
 - Keep idle cost near zero: no per-frame `Update` polling in an idle world; mobile CPUs pay more for
   the same Udon work [INFERENCE].
@@ -199,10 +197,10 @@ Re-read both with the matching `Get…ForPlatformGroup` methods to confirm. Why 
 
 - Per-viewpoint draw calls, SetPass and visible tris with the same `PerfSample` viewpoints as the PC
   D.2 report (`perf-optimizer`); compare with the skill's §4 budgets. Editor play mode does not
-  reproduce device performance [VRCreators Mobile]; it ranks costs and catches regressions.
+  reproduce device performance; it ranks costs and catches regressions.
 - **Build** for Android (Builder → Build, or Build & Test without a device) and read the size: the
-  SDK refuses an upload above 100 MB compressed [SDK source]; the Editor log's build "statistics"
-  give the pre-compression breakdown [VRChat Android Optimization]; VRWorld Toolkit's Build Report
+  SDK refuses an upload above 100 MB compressed; the Editor log's build "statistics"
+  give the pre-compression breakdown; VRWorld Toolkit's Build Report
   reads Android build reports and diffs two builds (`vrchat-world-optimization/references/texture-caps.md`).
 - Captures for the reviewer: the PC D.2 viewpoints, Android target, play mode, no post-processing.
 
@@ -210,7 +208,7 @@ Re-read both with the matching `Get…ForPlatformGroup` methods to confirm. Why 
 
 Agents cannot judge comfort in a headset; the user runs this and reports back.
 
-**Quest / Android (ADB)** [VRChat Android B&T]:
+**Quest / Android (ADB)**:
 1. Unity install has Android Build Support (VCC installs it by default).
 2. Quest: developer mode through Meta Quest Developer Hub; phone/tablet: Build number ×7, then USB
    debugging. Data-capable USB cable; accept the debugging prompt.
@@ -222,14 +220,14 @@ Agents cannot judge comfort in a headset; the user runs this and reports back.
    (start scrcpy after Unity); the package name setting is *VRChat → SDK → Android App Package Name*
    (default `com.vrchat.mobile.playstore`). scrcpy mirrors a phone to the desktop.
 
-**iOS (VRChat Test Protocol)** [VRChat iOS B&T]: install iOS Build Support; Builder → iOS; the
+**iOS (VRChat Test Protocol)**: install iOS Build Support; Builder → iOS; the
 console must show `[VTP] Listening on port 9002`; enter the PC's IP (SDK settings → Show Local IP
 Address) in iOS Settings → Apps → VRChat → SDK IP Address; allow local-network access on the phone
 and the Windows firewall prompt for Unity (delete a blocked "Unity Editor" inbound rule if the prompt
 never appears); no VPN; same Wi-Fi. `[VTP] Client connected.` means ready.
 
 What the user checks (≈ 15 min): load time and no crash; smooth at spawn alone (72 Hz on Quest;
-VRChat's floor is 45 FPS at spawn [VRChat Public Submission]); walk every room; lamps lit and no
+VRChat's floor is 45 FPS at spawn); walk every room; lamps lit and no
 banding in dark gradients; no flicker or z-fighting at distance; video plays; every toggle, teleport
 door and the lie-down toggle; UI readable and tappable on a phone; mirror toggle (if any).
 
@@ -246,12 +244,11 @@ survive in lighting and materials". NEEDS WORK findings are fixed on the Android
 1. Switch back to Windows; confirm EasyQuestSwitch restored the PC materials and objects (spot-check;
    one PC capture diff against the shipped PC capture must be identical).
 2. The user uploads. Builder → Platforms: tick Windows and Android (and iOS if the account supports
-   it) → Build and Publish builds each target in turn [VRChat Cross-Platform]. Same scene, same
+   it) → Build and Publish builds each target in turn. Same scene, same
    Pipeline Manager, so the same blueprint ID; never detach it. Check the Content Manager shows
    the world with both platforms.
 3. iOS: if the Builder shows the red "iOS is not supported as a build target", the account has no
-   iOS upload permission [SDK source]; ship without it and rely on the Android fallback
-   [VRChat Cross-Platform].
+   iOS upload permission; ship without it and rely on the Android fallback.
 4. **Every later PC update re-uploads Android too** when it touches anything synced, or players on
-   the two builds land in incompatible instances [INFERENCE from VRChat Network Compatibility].
+   the two builds land in incompatible instances [INFERENCE].
 5. Log the Android budgets, swaps and the reviewer verdict in WORLD.md Decisions; commit.

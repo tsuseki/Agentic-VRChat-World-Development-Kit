@@ -39,8 +39,7 @@ built asset by size, groupable by type (lightmaps, skybox, fonts, audio, meshes,
 **Build Report Comparison** window diffs two builds: capture one before and one after each
 size-reduction pass and quote the delta. For compressed vs uncompressed size per asset (some assets
 compress far better in the bundle than others), AssetBundleStat (lox9973). Usual surprises: unused
-TMP fonts ([ysmreg1 2025](https://qiita.com/ysmreg1/items/38a90c13e4dfa825c3ea)), an oversize skybox HDRI, lightmaps bigger than they need to be, and inactive objects
+TMP fonts, an oversize skybox HDRI, lightmaps bigger than they need to be, and inactive objects
 that still ship (only `EditorOnly` strips; VRWorld Toolkit's `DisableOnBuild` tag only disables).
 Review the toolkit's Auto Fixes against workspace rules before applying any (post-processing setup,
-crunch defaults). [[wata23 2024](https://note.com/watahumi_mina/n/ned5a874f6c52)]
-[[VRWorld Toolkit](https://github.com/oneVR/VRWorldToolkit)]
+crunch defaults).

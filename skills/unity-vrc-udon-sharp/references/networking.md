@@ -108,7 +108,7 @@ public class ManualSyncExample : UdonSharpBehaviour
 
 NoVariableSync disables variable synchronization while keeping network events available.
 
-`BehaviourSyncMode` has both `None` and `NoVariableSync`; `None` also disables `SendCustomNetworkEvent` on the behaviour, while `NoVariableSync` keeps network events working. For event-driven behaviours, use `NoVariableSync`. Source: UdonSharp source XML docs (verified SDK 3.10.3).
+`BehaviourSyncMode` has both `None` and `NoVariableSync`; `None` also disables `SendCustomNetworkEvent` on the behaviour, while `NoVariableSync` keeps network events working. For event-driven behaviours, use `NoVariableSync`.
 
 **Characteristics:**
 - No synced variables supported (`[UdonSynced]` will error)
@@ -530,7 +530,7 @@ public override void OnOwnershipTransferred(VRCPlayerApi player)
 - **On remote clients:** the new ownership becomes visible after VRChat propagates the change. Each remote client's `OnOwnershipTransferred` fires when the propagation arrives.
 - **No client-side arbitration:** when two clients call `SetOwner` simultaneously, both succeed locally and may write synced variables; VRChat resolves the durable owner by network arrival order. The loser's write is overwritten when the winner's serialization arrives. This is by design — see [networking-antipatterns.md §1](networking-antipatterns.md#1-ownership-race-condition) for the recommended `IsOwner`-guarded pattern, and [§"Ownership Arbitration with OnOwnershipRequest"](#ownership-arbitration-with-onownershiprequest) below for owner-side protection during critical actions.
 
-> *Footnote: Pre-2021.2.2 SDKs treated `SetOwner` as asynchronous on the calling client; the active target (SDK 3.10.5) is locally immediate. Source: [Ownership Transfer Events](https://creators.vrchat.com/worlds/udon/networking/ownership/#transfer-events-diagram).*
+> *Footnote: Pre-2021.2.2 SDKs treated `SetOwner` as asynchronous on the calling client; the active target (SDK 3.10.5) is locally immediate..*
 
 ### Owner Leave and Ownership Cascade
 
@@ -607,7 +607,7 @@ public override bool OnOwnershipRequest(
 | Turn-based game during active turn | Reject (`false`) until turn ends |
 | Free-for-all interaction | Accept (`true`) |
 
-> **Important**: `OnOwnershipRequest` runs locally on **both the requester and the current owner** (per the official [Network Components page](https://creators.vrchat.com/worlds/udon/networking/network-components/): "This logic runs locally on both the requester and the owner"). The logic must return the same result on both sides to avoid desync. If the current owner has disconnected, the callback is not invoked — VRChat auto-assigns directly.
+> **Important**: `OnOwnershipRequest` runs locally on **both the requester and the current owner**. The logic must return the same result on both sides to avoid desync. If the current owner has disconnected, the callback is not invoked — VRChat auto-assigns directly.
 >
 > The two parameters are `VRCPlayerApi requestingPlayer` (the player calling `SetOwner`) and `VRCPlayerApi requestedOwner` (the player being assigned ownership — typically the same as `requestingPlayer` for self-promotion, but can differ when one client transfers ownership to another).
 
@@ -719,9 +719,9 @@ private void OnHealthChanged()
 ### Synced Arrays: Apply Them After Deserialization
 
 `FieldChangeCallback` is useful for scalar synced fields, but it is not a
-receiver contract for arrays. The official [`OnVariableChanged` guidance](https://creators.vrchat.com/worlds/udon/networking/network-components/#onvariablechanged)
+receiver contract for arrays. The official `OnVariableChanged` guidance
 states that changing an array's contents does not trigger the event because the
-array itself is unchanged. The official [Udon Example Scene](https://creators.vrchat.com/worlds/examples/udon-example-scene/)
+array itself is unchanged. The official Udon Example Scene
 uses `OnDeserialization()` for its array example for the same reason.
 
 Do not depend on `FieldChangeCallback` for same-length element changes, array reassignments, or array length changes. Reassignment and length changes are not special exceptions to this guidance; use one receiver path for every synced array shape. The owner applies the same idempotent method immediately after the mutation, and remote clients apply it from `OnDeserialization()` after the serialized snapshot is complete. For Manual sync, make all element writes (or a single array reassignment) first, then make one `RequestSerialization()` after the complete array update.
@@ -925,7 +925,7 @@ Caller authorization and receiver ownership are separate checks: authorize `Netw
 
 A direct local method call is not a network call. Require `InNetworkCall` when a method must only accept network-originated requests.
 
-> **Official warning:** Instance master is for gameplay/session arbitration, not security or access control. Do not use `isMaster` as an authorization boundary. VRChat's [Object Ownership](https://creators.vrchat.com/worlds/udon/networking/ownership/) and [Network Components](https://creators.vrchat.com/worlds/udon/networking/network-components/) documentation explicitly warns against using master to gate access.
+> **Official warning:** Instance master is for gameplay/session arbitration, not security or access control. Do not use `isMaster` as an authorization boundary. VRChat's Object Ownership and Network Components documentation explicitly warns against using master to gate access.
 
 The following complete example uses an owner-only caller policy. Sender authorization is evaluated against the object owner, while the receiver separately verifies that it is the local owner before mutating synced state.
 
@@ -978,8 +978,6 @@ public class NetworkHardenedReset : UdonSharpBehaviour
     }
 }
 ```
-
-Official behavior reference: [VRChat Network Events](https://creators.vrchat.com/worlds/udon/networking/events/).
 
 ---
 
@@ -1539,8 +1537,6 @@ public override void OnOwnershipTransferred(VRCPlayerApi player)
 | Checking if a specific player is the master | `player.isMaster` on `VRCPlayerApi` | N/A |
 
 [^owner-req]: The callback fires on both the requester and the current owner; logic must agree on both clients to avoid desync. See [Ownership Arbitration with OnOwnershipRequest](#ownership-arbitration-with-onownershiprequest) above.
-
-> **Reference**: VRChat networking documentation — https://creators.vrchat.com/worlds/udon/networking/
 
 ---
 

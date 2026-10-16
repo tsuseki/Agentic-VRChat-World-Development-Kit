@@ -217,7 +217,7 @@ public class VoiceZone : UdonSharpBehaviour
 ## Steam Audio Integration
 
 > **Status**: Shipped default. Steam Audio replaced ONSP as the spatializer for every player on every platform in
-> VRChat client release **2025.4.2** ([December 3, 2025, Build 1768](https://docs.vrchat.com/docs/vrchat-202542)).
+> VRChat client release **2025.4.2** (December 3, 2025, Build 1768).
 > This is a client version, not an SDK version — no SDK upgrade is involved.
 
 ### Steam Audio Replaced ONSP
@@ -239,16 +239,15 @@ opt-out: Steam Audio is shipped to all players on every platform.
 A runtime conversion layer keeps existing content working: author with `VRC_SpatialAudioSource` exactly as before
 and VRChat converts it under the hood when the world loads. Most content came through unchanged — VRChat reported
 that "almost all content will work without any adjustments" after two months of open beta — but the conversion is
-not guaranteed to be inaudible
-([Developer Update, December 4, 2025](https://ask.vrchat.com/t/developer-update-4-december-2025/47243)).
+not guaranteed to be inaudible.
 
-That update also draws a line that matters when triaging a complaint. Three symptoms are **functional bugs VRChat
+VRChat's December 4, 2025 Developer Update also draws a line that matters when triaging a complaint. Three symptoms are **functional bugs VRChat
 wants reported**, not things to tune around: audio levels changing drastically, falloff curves not being respected,
 and ranges not applying the same. Separately, some differences are expected and are the creator's to absorb:
 direction and audible distance cues, and minor shifts in tonality, EQ, or mixing.
 
 VRChat also added a server-side tuning path in
-[2025.4.2p1](https://docs.vrchat.com/docs/vrchat-202542p1), so parts of the audio experience can change without a
+2025.4.2p1, so parts of the audio experience can change without a
 client update. A world tuned by ear is worth re-checking occasionally rather than treated as settled.
 
 Advanced Steam Audio capabilities are **not available to world creators**: "Certain aspects of Steam Audio will
@@ -298,7 +297,7 @@ not aim for a 1:1 conversion** from ONSP:
 - Falloff curves differ slightly
 - EQ and compressor tuning changed
 - Source-directionality was added — a speaker's orientation relative to the listener now affects what you hear
-- Client [2025.4.2p1](https://docs.vrchat.com/docs/vrchat-202542p1) applied further tuning to voice falloff and
+- Client 2025.4.2p1 applied further tuning to voice falloff and
   compression
 
 Treat voice-zone values tuned before 2025.4.2 as a starting point to re-verify by ear, not as settings that reproduce

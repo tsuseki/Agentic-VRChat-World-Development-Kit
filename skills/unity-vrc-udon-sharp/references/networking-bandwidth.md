@@ -7,7 +7,6 @@ Bandwidth throttling, request serialization patterns, bit packing, data size opt
 ### Bandwidth Limits
 
 > Udon scripts can send out about **11 kilobytes** per second.
-> — [VRChat Creator Docs](https://creators.vrchat.com/worlds/udon/networking/network-details)
 
 Exceeding this limit causes sync delays known as "Death Runs." This is particularly problematic when:
 - Multiple UI elements are operated rapidly

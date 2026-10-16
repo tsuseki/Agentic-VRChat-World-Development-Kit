@@ -83,7 +83,7 @@ and skip them.
      (tile − 2·pad)/atlas (1024 tile, 4 px pad, 4096 atlas → 0.248, not 0.25). Costs vertices; mips
      bleed neighbouring cells unless pad ≥ 2^(mips used) (or cap the mips), so check at the farthest
      reachable view. Not for high-repeat floors; keep water, video, transparent and special-shader
-     materials separate. [[VRChat Wiki atlas guide](https://wiki.vrchat.com/wiki/Guides:How_to_atlas_your_VRChat_world)]
+     materials separate.
    - Same shader family as before (Built-in Standard or the project's prop shader); metallic /
      smoothness / normal packed the same way the source used them. Emission stays emission.
    - **UV2 is never touched by material merging.**

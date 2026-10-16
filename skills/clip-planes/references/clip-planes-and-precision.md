@@ -5,10 +5,9 @@ Most of these worlds are cuddle and lie-down interiors, so the near clip should 
 covers how that choice constrains depth precision, the far clip, how far the world can extend from the origin, and
 how distant scenery should be handled.
 
-**Tags.** `[Source]` means the claim comes from that entry in **## Sources**. `[in-house]` means a user report or
-a kit knowledge note. `[in-house, measured]` means I measured it on 2026-10-10 in the Unity 2022.3.22f1 editor on
-D3D11 with throwaway C# (method in §2.1). `[INFERENCE]` means my own derivation or recommendation, which you can
-tune.
+**Tags.** `[in-house]` means a user report or a kit knowledge note. `[in-house, measured]` means I measured it on
+2026-10-10 in the Unity 2022.3.22f1 editor on D3D11 with throwaway C# (method in §2.1). `[INFERENCE]` means my own
+derivation or recommendation, which you can tune. Untagged claims come from published sources.
 
 ---
 
@@ -29,43 +28,41 @@ shipped world [in-house].
 
 | Fact | Value | Tag |
 |---|---|---|
-| Where the world sets clip planes | The Scene Descriptor's **Reference Camera**. Its settings "are applied to the player when they join the room. It is most often used for adjusting the clipping planes" | [VRChat First World], [VRChat Scene Descriptor] |
-| Default far clip with no override | 1000 m | [VRChat Dev Update 2022-08-03] |
-| Default near clip | 5 cm (stated by a user; not in the docs I read) | [WildCat Canny 2025] |
+| Where the world sets clip planes | The Scene Descriptor's **Reference Camera**. Its settings "are applied to the player when they join the room. It is most often used for adjusting the clipping planes" | |
+| Default far clip with no override | 1000 m | |
+| Default near clip | 5 cm (stated by a user; not in the docs I read) | |
 | Inspector minimum for `Camera.nearClipPlane` | 0.01. The Reference Camera can't go lower | [in-house] (clip-planes note) |
-| Runtime API | `VRCCameraSettings.ScreenCamera.NearClipPlane` / `FarClipPlane` are read-write and "follow similar restrictions to setting them via the Reference Camera" | [VRChat Camera Settings] |
-| Enforced near range | **Clamped to 0.001–0.05 m** | [VRChat Camera Settings] |
-| Enforced far range | ≥ near + 0.1 | [VRChat Camera Settings] |
-| Desktop vs VR | Same API and clamps. `ScreenCamera` "will be a stereo camera if the user is in VR". The docs list no per-platform difference | [VRChat Camera Settings] |
-| Handheld photo, stream and drone camera | `VRCCameraSettings.PhotoCamera` exposes the same near/far properties. It is `null` in ClientSim | [VRChat Camera Settings] |
-| Mirrors | The mirror's Clear Flags default to "From Reference Camera" (the skybox is redrawn in the mirror). The Water layer never renders in mirrors | [VRChat Mirror Reflection] |
+| Runtime API | `VRCCameraSettings.ScreenCamera.NearClipPlane` / `FarClipPlane` are read-write and "follow similar restrictions to setting them via the Reference Camera" | |
+| Enforced near range | **Clamped to 0.001–0.05 m** | |
+| Enforced far range | ≥ near + 0.1 | |
+| Desktop vs VR | Same API and clamps. `ScreenCamera` "will be a stereo camera if the user is in VR". The docs list no per-platform difference | |
+| Handheld photo, stream and drone camera | `VRCCameraSettings.PhotoCamera` exposes the same near/far properties. It is `null` in ClientSim | |
+| Mirrors | The mirror's Clear Flags default to "From Reference Camera" (the skybox is redrawn in the mirror). The Water layer never renders in mirrors | |
 | Mirror near plane | Oblique, lying on the mirror surface. Fog state is missing in the mirror pass | [in-house] (fog note: replicate with `Camera.CalculateObliqueMatrix`); oblique-plane depth effects are [INFERENCE] |
-| Per-layer cull distances | `ScreenCamera.LayerCullDistances` (32 entries; 0 means use far). Reserved layers can't be changed | [VRChat Camera Settings] |
-| Occlusion culling toggle | `UseOcclusionCulling` defaults to true and works only if occlusion data is baked | [VRChat Camera Settings] |
-| Since 2024.1.1 | "World-specified camera reference clipping distances should no longer affect the VRChat menu" | [VRChat 2024.1.1] |
+| Per-layer cull distances | `ScreenCamera.LayerCullDistances` (32 entries; 0 means use far). Reserved layers can't be changed | |
+| Occlusion culling toggle | `UseOcclusionCulling` defaults to true and works only if occlusion data is baked | |
+| Since 2024.1.1 | "World-specified camera reference clipping distances should no longer affect the VRChat menu" | |
 
 **User override: "Forced Camera Near Distance".** This is a user setting with three modes. **Off** uses the world's
 value. **Dynamic** uses 0.001 m when far ≤ 1000. When far > 1000 it uses the lowest near within a factor of 10⁶ of
-far, capped at the world's near. **Forced** always uses 0.001 [VRChat Dev Update 2022-08-03]. The setting now
-persists between worlds and sessions [hdorriker Canny 2025]. A world can't override it, but it can detect it by
-reading `NearClipPlane` back after setting it [VRChat Camera Settings], [hdorriker Canny 2025]. In Dynamic and
+far, capped at the world's near. **Forced** always uses 0.001. The setting now
+persists between worlds and sessions. A world can't override it, but it can detect it by
+reading `NearClipPlane` back after setting it. In Dynamic and
 Forced mode, users measured visible distance falling from 693 to 531 m (far 700) and from 1180 to 683–787 m
-(far 1200) [WildCat Canny 2025]. §2.5 reproduces and explains this. VRChat states that very small near values with
-large far values cause "fog breaking, sprites drawing past FarClip, extreme Z-fighting"
-[VRChat Dev Update 2022-08-03], and that cursor jitter improved but "floating point inaccuracies will still occur"
-[VRChat 2025.4.2].
+(far 1200). §2.5 reproduces and explains this. VRChat states that very small near values with
+large far values cause "fog breaking, sprites drawing past FarClip, extreme Z-fighting", and that cursor jitter
+improved but "floating point inaccuracies will still occur".
 
 **What a too-large near clip looks like.** Anything closer than *n* in view depth is cut away. Surfaces are
 back-face culled, so a clipped face or hand shows as a hole you can see through, not a cap. Avatars smaller than
-average see their own body clipped [Ericbazinga in hdorriker Canny 2025]. A frequent reporter says "1 cm is close
-enough for head pats and cuddles when using typically scaled avatars" and 5 cm "is too relaxed"
-[WildCat Canny 2025].
+average see their own body clipped. A frequent reporter says "1 cm is close
+enough for head pats and cuddles when using typically scaled avatars" and 5 cm "is too relaxed".
 
 The near plane is flat, so a point at angle θ off-axis is clipped once its *radial* distance falls below n/cos θ.
 At 50° off-axis in a wide VR field of view that is 1.56 n. **Rule: n ≤ (closest surface that must stay intact) / 2.**
 With n = 0.01 everything beyond about 2 cm survives anywhere in view [INFERENCE].
 
-**Setting it from Udon** (pattern from [in-house] clip-planes note; API from [VRChat Camera Settings]):
+**Setting it from Udon** (pattern from [in-house] clip-planes note; API per `VRCCameraSettings`):
 ```csharp
 // UdonSharp. Set far first: Dynamic mode re-derives near when far changes.
 var cam = VRC.SDK3.Rendering.VRCCameraSettings.ScreenCamera;
@@ -88,7 +85,7 @@ older 24-bit fixed-point model at near 0.01 remains available as `DepthFormat = 
 
 - Unity puts DirectX 11, DirectX 12 and Metal on **reversed Z**: depth is 1.0 at the near plane and 0.0 at the
   far plane. "Other platforms" use the traditional direction. "Reversed direction depth (Z), combined with a
-  floating point depth buffer, significantly improves depth buffer precision" [Unity Platform Differences].
+  floating point depth buffer, significantly improves depth buffer precision".
 - On 2022.3.22f1 with D3D11 [in-house, measured]: `SystemInfo.usesReversedZBuffer = True`. The default
   depth-stencil format is `D32_SFloat_S8_UInt`. A render texture that asks for a **24-bit depth gets
   D32_SFloat_S8_UInt**, and 32-bit does too; only 16-bit gives D16_UNorm. HDR+MSAA4/8 and LDR+MSAA2 targets also
@@ -96,7 +93,7 @@ older 24-bit fixed-point model at near 0.01 remains available as `DepthFormat = 
 - So VRChat PC renders into a **32-bit float, reversed-Z** depth buffer. That holds for camera targets and
   intermediate targets on D3D11 [in-house, measured]. The VR eye-texture format inside the shipping client was not
   observable [INFERENCE: it is created through the same 24-bit request, so it is D32F].
-- Android/Quest is not covered here. Unity lists only D3D11/12 and Metal as reversed [Unity Platform Differences].
+- Android/Quest is not covered here. Unity lists only D3D11/12 and Metal as reversed.
   For worst-case numbers, assume D24 fixed point there [INFERENCE].
 
 **Method.** I drew a front quad, then a back quad at +δ, through `CommandBuffer.SetViewProjectionMatrices`
@@ -108,14 +105,14 @@ smallest δ at which the back quad never wins any pixel. Pixels are tested head-
 Distance from the camera along the view axis = d. Bits of depth = b.
 
 - **Fixed point (D24), either direction:** Δd ≈ d²·(f−n)/(n·f·2^b) ≈ **d² / (n·2²⁴)**. The far clip barely matters.
-  The near clip dominates. This is the classic curve [Reed 2015].
+  The near clip dominates. This is the classic curve.
 - **Float32 with reversed Z** (z_ndc = n(f−d)/(d(f−n)) stored with 23-bit relative precision):
   Δd ≈ 2⁻²³·d·(1 − d/f) ≈ **1.2×10⁻⁷·d**, **independent of n** [INFERENCE: derivation]. In practice
   vertex-transform rounding of float32 positions dominates, so the real floor is about ½ ulp of the larger of the
   distance and the world coordinate (§2.3).
 - NVIDIA: reversed Z with a float buffer gave a "zero error rate" in their test. It "erases the distinctions
   between ... finite versus infinite far planes" — **"you can use whichever far plane you like, without affecting
-  precision at all"**. Reversed Z with an *integer* buffer is no better than standard [Reed 2015].
+  precision at all"**. Reversed Z with an *integer* buffer is no better than standard.
 
 ### 2.3 Minimum surface separation for a correct depth order
 
@@ -150,10 +147,10 @@ The world coordinate, not the near clip, sets the floor: about ½·ulp(max(|P|, 
 
 1. **Near clip no longer limits depth precision.** Measured separations were identical for n = 0.001, 0.01, 0.05
    and 0.1 [in-house, measured]. On PC, dropping from n = 0.05 to n = 0.001 costs no z-fighting.
-2. **Far clip doesn't limit precision either** [Reed 2015]. It still matters for culling, fog and the skybox cut
+2. **Far clip doesn't limit precision either**. It still matters for culling, fog and the skybox cut
    (§2.5, §4).
 3. The old "far/near ≤ 10³–10⁴" rule [in-house] (clip-planes note) is a fixed-point rule. So is Wikidot's advice
-   that "raising [far] past 3000 is not recommended" [VRChat Wikidot Render Distance]. On PC the real
+   that "raising [far] past 3000 is not recommended". On PC the real
    replacement is the skybox limit in §2.5 [INFERENCE].
 4. Exactly coplanar faces (δ = 0) fight on any buffer. Scripted flush joints fight on every instance [in-house]
    (overlap note).
@@ -172,14 +169,14 @@ gave identical results), and a binary search for the largest d at which the quad
 
 - The result was identical for LDR and HDR, with no MSAA and with MSAA 2/4/8. With a **solid-colour clear** there
   is no overpaint: geometry stays visible to ~f. At n = 0.001 it is even drawn **past** the far plane (seen at
-  1.05 f) [in-house, measured]. That matches VRChat's "sprites drawing past FarClip" [VRChat Dev Update 2022-08-03].
-- The f = 700, n = 0.001 result (532 m) reproduces the user measurement of 531 m [WildCat Canny 2025]. **Cause:**
+  1.05 f) [in-house, measured]. That matches VRChat's "sprites drawing past FarClip".
+- The f = 700, n = 0.001 result (532 m) reproduces the user measurement of 531 m. **Cause:**
   the skybox, drawn after opaques, overwrites any pixel whose reversed depth is below ε ≈ 4.5–6.0×10⁻⁷ (median
   5.3×10⁻⁷) [in-house, measured]. The exact internal reason is [INFERENCE].
 - **Effective far:** f_eff ≈ n·f / (n + ε·(f − n)), with ε ≈ 5.3×10⁻⁷. As f → ∞ it saturates at **n/ε**:
   ≈ 1.9 km at n = 0.001, 19 km at n = 0.01, 95 km at n = 0.05 [INFERENCE: fit to the table above].
 - **Keeping 95 % of f** needs f ≤ ~10⁵·n. **Keeping 99 %** needs f ≤ ~1.9×10⁴·n. VRChat's Dynamic factor of 10⁶
-  leaves about 65 % [INFERENCE]. That matches the 787/1200 the user measured [WildCat Canny 2025].
+  leaves about 65 % [INFERENCE]. That matches the 787/1200 the user measured.
 
 Far clip needed so that geometry out to distance D stays visible (ε taken as 6×10⁻⁷ for margin)
 [INFERENCE]: **f_req = n·D / (n − ε·D)**, valid only while D < n/ε.
@@ -199,7 +196,7 @@ anyone noticing: make the sky's horizon band equal the fog colour, and make the 
 ### 2.6 Z-fighting separation rule (used by the checklist)
 
 - **Never coplanar.** Joints overlap by 1–3 cm, and decals or overlays stand off ≥ 1 mm [in-house] (overlap note)
-  + [INFERENCE].
+  [INFERENCE].
 - **PC-only world:** δ ≥ max(1 mm, 2×10⁻⁶·(R + d)). R is the largest |coordinate| in the world, d the viewing
   distance. That is a safety factor of about 30 over the measured floor. The 1 mm floor covers shadow bias, import
   rounding and mesh compression [INFERENCE]. While R + d ≤ 500 m the 1 mm floor governs; beyond that the
@@ -218,7 +215,7 @@ anyone noticing: make the sky's horizon band equal the fog colour, and make the 
 
 ### 3.1 Float32 spacing (ulp) vs coordinate magnitude
 
-ulp(x) = 2^(⌊log₂ x⌋ − 23). The maximum rounding error is ulp/2 [Dawson 2012] (the table matches his values at
+ulp(x) = 2^(⌊log₂ x⌋ − 23). The maximum rounding error is ulp/2 (the table matches his values at
 1, 10, 100, 1000 and 10000).
 
 | \|coordinate\| | 100 m | 128–256 m | 256–512 m (incl. 500) | 512–1024 m (incl. 1000) | 4096–8192 m (incl. 5000) | 8192–16384 m (incl. 10000) |
@@ -252,14 +249,14 @@ times how far from the origin", not depth precision [INFERENCE].
 
 | Symptom | Status |
 |---|---|
-| Polygons and UI "violently shake" far from the origin | Players report it; forum answers attribute it to float precision [VRChat Ask 2024] |
-| PhysBones jitter "when you get very far away from the origin. This is due to floating point precision" | VRChat staff statement [Mr. Imagination Canny 2024] |
+| Polygons and UI "violently shake" far from the origin | Players report it; forum answers attribute it to float precision |
+| PhysBones jitter "when you get very far away from the origin. This is due to floating point precision" | VRChat staff statement |
 | Close-range vertex shimmer (faces, hands, the other avatar while cuddling) | [in-house, measured] (§3.2) |
-| UI cursor jitter, worse at tiny near | [VRChat 2025.4.2] |
-| Distant shadow flicker; Unity's fix is "camera-relative culling" for shadows | [Unity Shadow Distance]. Worlds can't ship that project setting [INFERENCE] |
+| UI cursor jitter, worse at tiny near | |
+| Distant shadow flicker; Unity's fix is "camera-relative culling" for shadows | Worlds can't ship that project setting [INFERENCE] |
 | IK, skinning, world-space particles, physics contacts and pickups at rest degrade the same way | [INFERENCE] (same float32 world-space math) |
 | Network quantization of synced player positions as a cause | No VRChat documentation found. It isn't needed to explain the effect [INFERENCE] |
-| Floating-origin workarounds break static batching, occlusion culling, VRCObjectSync and world-space shaders | [KitKat4191 JetSim FO]. Avoid them in social worlds [INFERENCE] |
+| Floating-origin workarounds break static batching, occlusion culling, VRCObjectSync and world-space shaders | Avoid them in social worlds [INFERENCE] |
 
 ### 3.4 Why "~500 m from spawn" and the radii to use
 
@@ -281,11 +278,11 @@ The user's practice is private rooms ≥ 200 m from the main area [in-house]. Th
 1. |island centre component| + island half-extent **< 256 m** on every axis for cuddle rooms (512 m absolute).
    Example grid: centres at (±220, 0, 0), (0, 0, ±220) and (±220, 0, ±220), rooms ≤ 30 m wide. Adjacent slots are
    then ≥ 220 m apart. Vertical layers at y = ±200 add more slots.
-2. Anything below the main floor must stay above the Scene Descriptor's Respawn Height [VRChat Scene Descriptor].
+2. Anything below the main floor must stay above the Scene Descriptor's Respawn Height.
 3. At 200–300 m, islands sit **inside** a 1000 m far clip. Either seal them (they then work as occluders with
    baked occlusion culling), put them below the ground plane, or put them on their own user layer with
    `LayerCullDistances[layer] ≈ 150` m so they're culled from the main area but drawn when you're inside
-   [VRChat Camera Settings] + [INFERENCE].
+   [INFERENCE].
 
 ---
 
@@ -337,11 +334,11 @@ can't actually stand on. NavMesh alternative: `NavMesh.CalculateTriangulation().
   1000 cost ~3× the frame time of 250–800 [in-house] (terrain-trees note).
 - A longer far lets more renderers pass frustum culling, which means more draw calls and triangles. Budget per
   viewpoint with LODGroups, baked occlusion culling and walls [in-house] (triangle-budget note). Cull small-prop
-  layers early with `LayerCullDistances` [VRChat Camera Settings].
+  layers early with `LayerCullDistances`.
 - Shadow distance is a quality setting. Unity uses the far plane instead only "if the current Camera Far Plane is
-  closer than the Shadow Distance" [Unity Shadow Distance]. Raising far past shadow distance adds no shadow cost
+  closer than the Shadow Distance". Raising far past shadow distance adds no shadow cost
   [INFERENCE].
-- Occlusion culling works only when baked and is on by default [VRChat Camera Settings]. A larger extent means a
+- Occlusion culling works only when baked and is on by default. A larger extent means a
   longer bake and more data [INFERENCE].
 
 ---
@@ -355,7 +352,7 @@ can't actually stand on. NavMesh alternative: `NavMesh.CalculateTriangulation().
 | Inside reach, out to ~3–5× reach radius | Real geometry with LODs | Needs true parallax and stereo [INFERENCE] |
 | Mid band, inside f_eff | Backdrop cards (layered silhouettes) or impostors captured from the real assets | 6-tri cross billboards rendered from the real trees looked identical at ≥ 140–200 m and keep the scene's grading [in-house] (impostor note) |
 | Beyond the parallax limit (§5.2) | **Baked into the skybox** (cubemap or equirect) | Zero cost, always visible, never clipped |
-| Very large, animated or dynamic | A "3D skybox": a miniature sub-scene drawn behind the playable area by a second camera that moves at a fraction of the player | [Unity 3D Skybox] (a URP camera-stacking demo). In a Built-in-RP world this means a second world camera, which costs an extra render [INFERENCE] |
+| Very large, animated or dynamic | A "3D skybox": a miniature sub-scene drawn behind the playable area by a second camera that moves at a fraction of the player | Unity's example is a URP camera-stacking demo. In a Built-in-RP world this means a second world camera, which costs an extra render [INFERENCE] |
 
 ### 5.2 Parallax limit for skybox-baked content
 
@@ -389,7 +386,7 @@ content doesn't move at all. Required depicted distance: **D_min = r / θ_max** 
    runtime, so the fog has to be baked into the capture [INFERENCE].
 4. `Camera.RenderToCubemap(cubeRT)`, which uses "the Camera's position, clear flags and clipping plane
    distances", then `cubeRT.ConvertToEquirect(equirectRT, Camera.MonoOrStereoscopicEye.Mono)` if you want
-   lat-long. Use an HDR ARGBHalf target [Unity RenderToCubemap].
+   lat-long. Use an HDR ARGBHalf target.
 5. Save it as EXR and import it as a Cubemap at **2048 per face** (BC6H ≈ 64 MB; 1024 is blurry through large
    windows) [in-house] (HDRI-import note).
 6. Disable the source geometry or tag it EditorOnly. Keep it as the re-capture source.
@@ -407,10 +404,10 @@ content doesn't move at all. Required depicted distance: **D_min = r / θ_max** 
 
 ### 5.5 Mirrors and the photo camera
 
-- Mirrors set to "From Reference Camera" show the skybox [VRChat Mirror Reflection]. Mirrors render **without
+- Mirrors set to "From Reference Camera" show the skybox. Mirrors render **without
   Unity fog state** [in-house] (fog note). So real distant geometry with Unity fog shows unfogged in mirrors,
   while fog baked into the skybox stays correct. That is an argument for baking [INFERENCE].
-- The photo camera has its own near/far through `VRCCameraSettings.PhotoCamera` [VRChat Camera Settings]. The
+- The photo camera has its own near/far through `VRCCameraSettings.PhotoCamera`. The
   skybox overpaint in §2.5 applies to any skybox-clearing camera whose depth is reversed float, which includes
   mirrors and photos [INFERENCE].
 - Agents' editor screenshots: the Scene view has its own far clip (one was 100 m), and capture cameras have their
@@ -438,6 +435,4 @@ content doesn't move at all. Required depicted distance: **D_min = r / θ_max** 
 
 ---
 
-## Sources
-
-Source keys in this file resolve in [SOURCES.md](../SOURCES.md).
+Sources: ../SOURCES.md (not needed to use this file).

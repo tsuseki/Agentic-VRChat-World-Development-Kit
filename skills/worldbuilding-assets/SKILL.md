@@ -141,7 +141,7 @@ Unity Asset Store items import as `.unitypackage` directly (Window → Package M
 Assets, or double-click the download) and usually ship ready-made materials.
 
 Import `.unitypackage` files through Unity, **never copy them into `Assets/`**. Check
-`git status` after import for GUID clobber (`.omp/knowledge/notes/unitypackage-import-can-overwrite-package-files.md`).
+`git status` after import: a package can overwrite existing files that share its GUIDs.
 
 ## 360 panoramas / skyboxes for a window view — match the CAMERA HEIGHT first
 
@@ -172,4 +172,4 @@ under the balcony; nothing — rotation, scale, fog — corrects it. Filter by v
   **AI-generated** (fine as a 200 m backdrop, mushy through a 5 m window).
 - After assigning any skybox, **re-bake the reflection probes** — glazing reflects it.
 
-Related lessons: [knowledge index → assets-sourcing](../../knowledge/INDEX.md#assets-sourcing)
+Sourcing lessons checklist: [references/lessons-sourcing.md](references/lessons-sourcing.md).

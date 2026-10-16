@@ -127,7 +127,7 @@ Code: `reference/examples.md` (Snippets 4–5).
 
 That split is a knob-layout choice. Light mesh **on the visible surface** → its material emission is a free no-rebake appearance knob, but the face looks flat. Light mesh on a **hidden child** + SSS body → soft gradient, but every appearance tweak costs a bake. If a human is going to say "a bit brighter" three times, pick the first.
 
-**Emitter faces need a gradient, not a flat colour.** Without bloom a flat-emission lamp face reads as a uniform sticker. Give visible emitter faces an emission texture (centre-hot falloff, filament or diffuser pattern) and judge them with post-processing off. For ambient fill prefer concealed cove (lights the ceiling) / cornice (lights the wall) strips whose emitters can't be seen from eye height: they read correctly with or without bloom. [Lura CGWORLD 2024]
+**Emitter faces need a gradient, not a flat colour.** Without bloom a flat-emission lamp face reads as a uniform sticker. Give visible emitter faces an emission texture (centre-hot falloff, filament or diffuser pattern) and judge them with post-processing off. For ambient fill prefer concealed cove (lights the ceiling) / cornice (lights the wall) strips whose emitters can't be seen from eye height: they read correctly with or without bloom.
 
 **SSS (translucent meshes) — the two requirements that aren't obvious:**
 
@@ -156,7 +156,7 @@ Things that are easy to get wrong because nothing in the UI hints at them:
 - **Light Probe Mode matters.** The current manual lists L2 (default, recommended with occlusion probes), L1 and Legacy. L1/L2 bake alongside lightmaps; Legacy gathers cubemaps in a separate, potentially slower pass and can disagree with nonphysical shaders. L2 has project-level ringing removal; shader-only de-ringing is no longer the sole option. Unity 2019.3's Legacy + occlusion-probe issue is historical, not universal.
 - **Checker Preview / Atlas Preview validate texel density *before* baking** — the cheapest possible way to catch "this wall got 12 texels", which no amount of sample tuning will fix.
 - **RTX mode is mandatory on Ampere and newer** GPUs, and Bakery wants the **Game-Ready** driver, not Studio.
-- **Driver R590+ removed OptiX 6 support.** Bakery 1.96's `ftraceRTX.exe` fails with `Error (1546): Failed to load OptiX library`, even with a correctly installed driver. Use an owned newer Bakery with its **OptiX 9** path (1.98 has `ftraceRTX9.exe`), not copied system DLLs. A pre-R590 supported driver is a fallback only if upgrading Bakery is unavailable. Source: [NVIDIA's response to Bakery's developer](https://forums.developer.nvidia.com/t/optix-6-0-0-is-broken-on-driver-591-44/353738). Run the bundled tiny hardware test before committing to a scene bake.
+- **Driver R590+ removed OptiX 6 support.** Bakery 1.96's `ftraceRTX.exe` fails with `Error (1546): Failed to load OptiX library`, even with a correctly installed driver. Use an owned newer Bakery with its **OptiX 9** path (1.98 has `ftraceRTX9.exe`), not copied system DLLs. A pre-R590 supported driver is a fallback only if upgrading Bakery is unavailable. Run the bundled tiny hardware test before committing to a scene bake.
 - **Close Unity before a clean GPU-driver installation.** Saving and pausing is insufficient: live replacement produced a fatal D3D11 swapchain-reset dialog. Reopen afterward; restart HWiNFO too if its memory-junction sensor disappears because it retained the old NVAPI.
 - **Light meshes: fewer, more complex meshes bake faster than many simple ones**, which is the opposite of the usual draw-call intuition. They also do not receive lighting and occupy no lightmap space. Physical intensity conversions: sun = Lux/π, point = Candela/π.
 - The manual itself says *Render Selected Groups* is "currently less convenient than using **Sectors** for partial baking" — if per-area iteration is a core workflow, Sectors is the officially blessed path.
@@ -165,7 +165,7 @@ Things that are easy to get wrong because nothing in the UI hints at them:
 
 A shadowless realtime directional light is additive over lightmaps and penetrates all geometry; ceilings look fine (facing away), which disguises it.
 
-0. **Zero-light baseline (first draft of a new world, or any "glow from nowhere"):** draft-bake with every Light, `BakeryLightMesh` and `BakerySkyLight` disabled. Every non-black pixel is an uncontrolled source: emissive material (intended?), Unlit or toon shader on environment (switch to Standard), skybox reflection on smooth surfaces (add/bake a reflection probe), skybox ambient on probe-lit renderers (add `LightProbeGroup` coverage / rebake probes). Clear the list, then add sources one at a time. [Lura CGWORLD 2024]
+0. **Zero-light baseline (first draft of a new world, or any "glow from nowhere"):** draft-bake with every Light, `BakeryLightMesh` and `BakerySkyLight` disabled. Every non-black pixel is an uncontrolled source: emissive material (intended?), Unlit or toon shader on environment (switch to Standard), skybox reflection on smooth surfaces (add/bake a reflection probe), skybox ambient on probe-lit renderers (add `LightProbeGroup` coverage / rebake probes). Clear the list, then add sources one at a time.
 1. Sample the `.hdr` atlas directly — is the shadow present in the data?
 2. Check renderer `lightmapIndex` / receive-GI settings.
 3. Swap to a plain white material: renders flat **BRIGHT** = additive realtime light; flat **DARK** = missing lightmap.
@@ -193,10 +193,9 @@ with Bakery presets.
 **Scripted bake and wait.** `Lightmapping.BakeAsync()` returns immediately. Poll from separate
 Unity MCP `execute_code` tool calls (never `Thread.Sleep`). `Lightmapping.isRunning == false`
 is **not** done: the files land later. Wait for `LightingData.asset`'s mtime to pass the bake's
-start time (see `.omp/knowledge/notes/lightmap-files-are-written-after-isrunning-goes-false.md`).
-If `buildProgress` sits near 1 % for minutes, grep `Editor.log` for `PathTracer ... 0rpt`: a dead
-GPU bake, not a slow one. Cancel (`Lightmapping.Cancel()`) and switch to `ProgressiveCPU`
-(`.omp/knowledge/notes/progressive-gpu-lightmapper-zero-rays-hang.md`).
+start time. If `buildProgress` sits near 1 % for minutes, grep `Editor.log` for `PathTracer ... 0rpt`:
+a dead GPU bake (zero rays), not a slow one. Cancel (`Lightmapping.Cancel()`) and switch to
+`ProgressiveCPU`.
 
 **Reflection probes, immediately after** (hard rule 6), once the lightmaps are on disk:
 
@@ -275,6 +274,6 @@ foreach (var rp in Object.FindObjectsOfType<ReflectionProbe>(true)) {
   (`LoadRenderSettings` ~13113, `SaveRenderSettings` ~3150, `SampleCount` ~915,
   `sampleDivisor` 244, `ValidateSamples` ~5876). Grep that file before trusting a
   remembered field name — it is the ground truth and it ships with the package.
-- Sources: [SOURCES.md](SOURCES.md).
+- Sources: SOURCES.md (not needed to use this skill).
 
-Related lessons: [knowledge index → lighting-baking](../../knowledge/INDEX.md#lighting-baking), [knowledge index → probes-reflection-and-light](../../knowledge/INDEX.md#probes-reflection-and-light)
+Lessons checklists (one rule per lesson, read before a bake or when lighting looks wrong): [reference/lessons-lighting.md](reference/lessons-lighting.md), [reference/lessons-probes.md](reference/lessons-probes.md).

@@ -193,8 +193,7 @@ Event dispatch has separate constraints:
 
 The SDK 3.10.5 compiler implements these distinctions in
 `Packages/com.vrchat.worlds/Integrations/UdonSharp/Editor/Compiler/CompilationContext.cs`
-(`BuildMethodLayout`). Source: [SDK 3.10.5 release](https://github.com/vrchat/packages/releases/tag/3.10.5)
-and [official network-event requirements](https://creators.vrchat.com/worlds/udon/networking/events/).
+(`BuildMethodLayout`).
 
 **Exception Handling Alternative (defensive programming):**
 

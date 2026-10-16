@@ -41,7 +41,7 @@ Open **VRChat SDK > ClientSim Settings** and uncheck **Enable ClientSim**.
 
 ### What ClientSim Does NOT Simulate
 
-Since [SDK 3.10.5](https://creators.vrchat.com/releases/release-3-10-5/), leaving
+Since SDK 3.10.5, leaving
 Play Mode does not run Udon Unity events such as `OnDisable`. Do not use an
 Editor Play → Edit transition as evidence that gameplay cleanup or persistence
 callbacks execute in VRChat. Test disabling the object during gameplay separately.
@@ -53,16 +53,16 @@ callbacks execute in VRChat. Test disabling the object during gameplay separatel
 | Network congestion (`Networking.IsClogged`) | Rate limiting and congestion behavior cannot be tested |
 | Multi-user sync conflicts | Race conditions and ownership fights are invisible |
 | Camera dolly animations | Camera dolly has no ClientSim preview support |
-| `TeleportTo(..., AlignRoomWithSpawnPoint)` and `GetTrackingData(AvatarRoot)` | Wrong destination / returns world origin in ClientSim ([ClientSim#118](https://github.com/vrchat-community/ClientSim/issues/118)) — verify teleports in Build & Test |
-| `OnBecameVisible` / `OnBecameInvisible` | Since SDK 3.8.2: Invisible never fires, Visible fires twice ([ClientSim#130](https://github.com/vrchat-community/ClientSim/issues/130)) |
-| `SetVelocity` every frame | Other velocity changes that frame are dropped, unlike the client ([ClientSim#129](https://github.com/vrchat-community/ClientSim/issues/129)) |
-| Interact behind a station collider | Blocked in ClientSim, works in client ([ClientSim#142](https://github.com/vrchat-community/ClientSim/issues/142)) |
-| EditorOnly objects | Destroyed later than in a real build, so play mode can still reference them ([ClientSim#137](https://github.com/vrchat-community/ClientSim/issues/137)) |
-| SDK 3.10.5 new project | ClientSim's "Set Input Manager" can revert Active Input Handling to "New" ([ClientSim#143](https://github.com/vrchat-community/ClientSim/issues/143)); set "Both" manually in Player settings |
+| `TeleportTo(..., AlignRoomWithSpawnPoint)` and `GetTrackingData(AvatarRoot)` | Wrong destination / returns world origin in ClientSim — verify teleports in Build & Test |
+| `OnBecameVisible` / `OnBecameInvisible` | Since SDK 3.8.2: Invisible never fires, Visible fires twice |
+| `SetVelocity` every frame | Other velocity changes that frame are dropped, unlike the client |
+| Interact behind a station collider | Blocked in ClientSim, works in client |
+| EditorOnly objects | Destroyed later than in a real build, so play mode can still reference them |
+| SDK 3.10.5 new project | ClientSim's "Set Input Manager" can revert Active Input Handling to "New"; set "Both" manually in Player settings |
 
 ### Persistence in ClientSim
 
-**VRChat SDK → ClientSim PlayerData** lists and edits each player's persisted keys live in Play Mode; **Clear All PlayerData** resets the per-scene JSON store (**Open Local Data Folder** shows it). The store is keyed by scene name, so renaming the scene starts empty. ([docs](https://creators.vrchat.com/worlds/clientsim/playerdata-editor-window))
+**VRChat SDK → ClientSim PlayerData** lists and edits each player's persisted keys live in Play Mode; **Clear All PlayerData** resets the per-scene JSON store (**Open Local Data Folder** shows it). The store is keyed by scene name, so renaming the scene starts empty.
 
 > **Critical**: Always test your world in VRChat before publishing. ClientSim catches logic bugs but cannot validate networking behavior.
 
@@ -110,7 +110,6 @@ Unity launches the specified number of VRChat clients simultaneously. Switch bet
 > screen (close with Task Manager). In each client set Settings > Debug > Logging to *Errors Only* or *Full*
 > (never *Off*), or launch the clients staggered. If a rejoin then crashes even with one client, delete the logs
 > in `%USERPROFILE%\AppData\LocalLow\VRChat\VRChat`. Remove this note once a client release fixes it.
-> ([Canny](https://feedback.vrchat.com/bug-reports/p/1865-2nd-client-always-opens-on-black-screen-when-doing-build-test))
 
 ### Client Roles
 

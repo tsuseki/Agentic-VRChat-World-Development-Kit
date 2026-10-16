@@ -311,7 +311,7 @@ In-scene setup tooling such as light-probe placers, multi-component wiring helpe
 
 ### The IEditorOnly Marker Interface
 
-`VRC.SDKBase.IEditorOnly` is a marker interface with no members (verified against SDK 3.10.3). The [official build-pipeline callbacks and interfaces docs](https://creators.vrchat.com/sdk/build-pipeline-callbacks-and-interfaces/) state that implementing it marks a script as editor-only for SDK validation, so the SDK ignores the component when scanning a world or avatar for incompatible scripts. Non-whitelisted components do not function in the VRChat client (see the [world component whitelist](https://creators.vrchat.com/worlds/whitelisted-world-components/)), so the helper has no runtime effect either way — `IEditorOnly` is about passing SDK validation cleanly and declaring intent.
+`VRC.SDKBase.IEditorOnly` is a marker interface with no members (verified against SDK 3.10.3). The official build-pipeline docs state that implementing it marks a script as editor-only for SDK validation, so the SDK ignores the component when scanning a world or avatar for incompatible scripts. Non-whitelisted components do not function in the VRChat client (world component whitelist), so the helper has no runtime effect either way — `IEditorOnly` is about passing SDK validation cleanly and declaring intent.
 
 ```csharp
 using UnityEngine;
@@ -482,11 +482,11 @@ This inspector is for the plain helper, not for a `UdonSharpBehaviour`, so it do
 ## Build Pipeline Callbacks
 
 For tooling branching on `VRC_SdkBuilder.ActiveBuildType`,
-[SDK 3.10.5](https://creators.vrchat.com/releases/release-3-10-5/) reports `Test`
+SDK 3.10.5 reports `Test`
 during Build & Reload. This is distinct from the callback's world/avatar
 `VRCSDKRequestedBuildType` below. Do not treat a reload as an upload.
 
-The SDK exposes two documented hooks for running custom code when a world or avatar build starts. Both are verified against SDK 3.10.3 and documented on the [official build pipeline page](https://creators.vrchat.com/sdk/build-pipeline-callbacks-and-interfaces/).
+The SDK exposes two documented hooks for running custom code when a world or avatar build starts. Both are verified against SDK 3.10.3, and officially documented.
 
 ### IVRCSDKBuildRequestedCallback
 
@@ -934,7 +934,6 @@ public class UdonSharpProgramAssetAutoGenerator : AssetPostprocessor
 #endif
 ```
 
-> **Credit**: Based on [nemurigi's AssetPostprocessor pattern](https://gist.github.com/nemurigi/dea7c0a1fb94f7b9cf1c36481a459ded) (MIT License).
 > **Template**: A ready-to-use version is available at `assets/templates/UdonSharpProgramAssetAutoGenerator.cs`.
 
 ### Setup Instructions (Only When Automation Is Explicitly in Scope)

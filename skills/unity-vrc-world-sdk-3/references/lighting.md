@@ -323,8 +323,6 @@ VRCCameraSettings.ScreenCamera.DepthTextureMode |= DepthTextureMode.Depth;
 - Reading the property back as `None` does not prove no depth texture renders (a depth light elsewhere is not reflected in it). `PhotoCamera` always has `Depth` on.
 - ClientSim behaviour unverified; check in the client.
 
-Docs: [VRC Camera Settings](https://creators.vrchat.com/worlds/udon/vrc-graphics/vrc-camera-settings)
-
 ---
 
 ## Quick Reference
