@@ -7,7 +7,7 @@ description: Making custom low-poly stylised or realistic trees (olive, maple, c
 
 Proven method: a family of 11 trees (6 olive variants, Japanese maple, Italian cypress, birch clump/single/weeping, ficus, stone pine) at **2.5–3.4k tris each**, gpt-image textures. The user liked the style ("custom olive style") enough to ask for a matching family. He **disliked toon-style trees** (a toon birch and an aspen were rejected) — aim realistic-textured, low-poly silhouette.
 
-Everything is headless Blender **5.1** (`C:\Program Files\Blender Foundation\Blender 5.1\blender.exe`) plus Python 3 with `numpy pillow scipy` for textures. Scripts are in `scripts/`; the Unity shader in `unity/`.
+Everything is headless Blender **5.1** (run through the kit's `blender` tool, `python .omp/scripts/tool.py blender`) plus Python 3 with `numpy pillow scipy` for textures. Scripts are in `scripts/`; the Unity shader in `unity/`.
 
 | Script | Runs in | Job |
 |---|---|---|
@@ -24,15 +24,15 @@ Everything is headless Blender **5.1** (`C:\Program Files\Blender Foundation\Ble
 ## Pipeline
 
 ```
-B="C:/Program Files/Blender Foundation/Blender 5.1/blender.exe"
+B="python .omp/scripts/tool.py blender"   # headless Blender from .omp/local/tools.json
 # 1 textures (see Textures)
 python scripts/process_gpt_textures.py bark bark_src.png TEX/Olive_Bark_Albedo.png TEX/Olive_Bark_Normal.png 3
 python scripts/branch_atlas.py TEX/Olive_Leaves_RGBA.png TEX/Olive_Leaves_Cards.json spray_a.png spray_b.png spray_c.png
 python scripts/check_key_spill.py TEX/Olive_Leaves_RGBA.png
 # 2 build (no LODs by default)
-"$B" -b --factory-startup -P scripts/tree_family_build.py -- Olive --tex TEX --out Assets/Trees/Olive --blend Source/Olive [--qa qa.png] [--config my_species.py] [--lod1]
+$B --script scripts/tree_family_build.py -- Olive --tex TEX --out Assets/Trees/Olive --blend Source/Olive [--qa qa.png] [--config my_species.py] [--lod1]
 # 3 optional: after hand edits in the .blend
-"$B" -b --factory-startup Source/Olive/Olive_Tree.blend -P scripts/tree_finish.py -- Olive ellipsoid --out Assets/Trees/Olive [--sprig]
+$B --blend Source/Olive/Olive_Tree.blend --script scripts/tree_finish.py -- Olive ellipsoid --out Assets/Trees/Olive [--sprig]
 ```
 The build prints `STAT` lines (tris, bounds, bark UV stretch, card attach error, open edges, leaf normal spread) — read them, then render `--qa` and look at it.
 

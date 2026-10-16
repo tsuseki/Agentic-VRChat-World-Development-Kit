@@ -29,15 +29,15 @@ performance at measured budgets. Details: [skills/world-pipeline/SKILL.md](skill
 
 1. Clone this repo as `.omp/` inside the folder that holds your Unity projects:
    `git clone <repo-url> <workspace>/.omp`
-2. Copy `local.example/` to `local/` and fill in `local/config.md`: your paths, GPU and the tools
-   you use for each capability (image generation, image-to-3D, Blender). `local/` is ignored by git;
-   your personal setup never ends up in the repo. Free local options are listed in the template.
+2. Copy `local.example/` to `local/` and fill in `local/config.md` (your paths and GPU). `local/` is
+   ignored by git; your personal setup never ends up in the repo.
 3. Wire your agent host ([docs/hosts.md](docs/hosts.md)):
    - oh-my-pi: nothing to do, it reads `.omp/` directly.
    - Claude Code: `python .omp/scripts/install.py --host claude`
    - Codex, Gemini CLI and other `AGENTS.md` / `.agents/skills` hosts: `python .omp/scripts/install.py --host agents`
-4. Set up Unity, the VRChat SDK, MCP for Unity and the tools package: point your agent at
-   [docs/bootstrap.md](docs/bootstrap.md).
+4. Set up Unity, the VRChat SDK, MCP for Unity, the tools package, the lightmapper and your
+   generation tools (paid services first, free local fallbacks; [docs/tools.md](docs/tools.md)):
+   point your agent at [docs/bootstrap.md](docs/bootstrap.md).
 5. Tell your agent: **"Make me a world."**
 
 ## Layout

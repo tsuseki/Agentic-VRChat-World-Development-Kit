@@ -1,6 +1,6 @@
 ---
 name: "bakery-light-baking"
-description: "Diagnose and fix baked-lighting artifacts (red/green chroma blobs, blue sheen, washed-out bakes) in Unity + Bakery for VRChat worlds; tune emissive fixtures (BakeryLightMesh power, SSS lampshades, lamps that glow but light nothing); includes scripted bake/probe recipes, a two-stage draft/final preset workflow, and the same workflow for Unity's Progressive GPU lightmapper when Bakery isn't installed. Use when: baking lightmaps with Bakery or Progressive, lightmap looks blotchy/noisy/discolored, building or tuning lamps/sconces/emissive props, an emitter's intensity seems to do nothing, iterating on world lighting, setting up fast test bakes, or automating bakes via Unity MCP/editor scripting."
+description: "Diagnose and fix baked-lighting artifacts (red/green chroma blobs, blue sheen, washed-out bakes) in Unity + Bakery for VRChat worlds; tune emissive fixtures (BakeryLightMesh power, SSS lampshades, lamps that glow but light nothing); includes scripted bake/probe recipes, a two-stage draft/final preset workflow, and the free fallbacks when Bakery isn't installed (GLIM, then Unity's Progressive GPU). Use when: baking lightmaps with Bakery, GLIM or Progressive, lightmap looks blotchy/noisy/discolored, building or tuning lamps/sconces/emissive props, an emitter's intensity seems to do nothing, iterating on world lighting, setting up fast test bakes, or automating bakes via Unity MCP/editor scripting."
 ---
 
 # Bakery Light Baking: Artifact Diagnosis & Scripted Bakes
@@ -31,12 +31,12 @@ description: "Diagnose and fix baked-lighting artifacts (red/green chroma blobs,
 
 ## Workspace lighting standard (user rules)
 
-Defaults for every world, Bakery or Progressive. The user may change them for a specific world; the
+Defaults for every world, whichever lightmapper bakes it. The user may change them for a specific world; the
 change and the user's words go in that world's `WORLD.md` Decisions log, and then `WORLD.md` wins.
 
 - **No realtime or Mixed directional light**, even outdoors; lighting is fully baked (no realtime or
   Mixed lights at all). The sun stays in the scene as **Baked** so Bakery can cast from it; aim for
-  large-scale shadows only. Bakery if licensed, else Unity Progressive GPU. Anything that moves needs
+  large-scale shadows only. Bakery if licensed, else GLIM (free), else Unity Progressive GPU. Anything that moves needs
   `LightProbeGroup` coverage.
 - **Cozy/night interiors go darker than instinct.** Deep shadow with small warm pools; when it seems
   done, cut another ~15% before asking, and never raise a level the user approved. "Lamp too bright"
@@ -170,9 +170,46 @@ A shadowless realtime directional light is additive over lightmaps and penetrate
 2. Check renderer `lightmapIndex` / receive-GI settings.
 3. Swap to a plain white material: renders flat **BRIGHT** = additive realtime light; flat **DARK** = missing lightmap.
 
-### Without Bakery: Progressive GPU
+### Without Bakery: GLIM (free)
 
-Worlds without a Bakery licence bake with Unity's lightmapper. Same flow as `.omp/skills/world-pipeline/SKILL.md`
+Lightmapper order: **Bakery** (paid) if the user owns it, else **GLIM** (free, MIT), else Unity's
+**Progressive GPU** (below). GLIM ([z3y/glim](https://github.com/z3y/glim)) is a Vulkan GPU
+lightmapper for the Built-in pipeline that reads normal Unity light components. It does
+non-directional, dominant-direction and MonoSH lightmaps, emissive materials, area/disc lights,
+L2 light probes, VRC Light Volumes, lightmap groups, OIDN denoising and seam stitching. Same flow
+as `.omp/skills/world-pipeline/SKILL.md` D.1 Lighting: draft bake → mood check → final bake →
+reflection probes.
+
+- **Install:** the VPM listing <https://z3y.github.io/vpm-package-listing/> in VCC/ALCOM (or the
+  release zip as a UPM package from disk). Close Unity before updating it. It is young and
+  releases often: **pin one version per project** and update between bakes, never mid-stage. It
+  runs on NVIDIA, AMD and Intel (Vulkan ray queries, software fallback), so it is also the choice
+  when a machine has no NVIDIA GPU for Bakery.
+- **Denoiser:** download Open Image Denoise from <https://github.com/RenderKit/oidn/releases>,
+  extract it, set the user env var `OpenImageDenoise_DIR` to that folder, restart Unity Hub and
+  Unity. Without it GLIM skips denoising silently; check before judging noise.
+- **Bake:** lights set to **Baked** (the lighting standard above holds), static flags and lightmap
+  UVs as usual, then *Tools → Glim → Bake*, adjust the created settings GameObject and press
+  *Generate Lighting*. Before scripting it, list GLIM's types with the Unity MCP `unity_reflect`
+  tool; don't guess its API.
+- **Differences from Bakery and Unity:**
+  - Scale In Lightmap is computed differently: re-check texel density after switching
+    lightmappers.
+  - One lightmap holds the whole scene by default. Add a `Lightmap Group Selector` with a
+    *Create → Lightmap Group (Glim)* asset per area to split it.
+  - Light cookies use RGB, not alpha.
+  - Not supported: double-sided GI, terrain trees, Subtractive mode, meta-pass fallback.
+    Hand-authored LOD groups lightmap only LOD0 (lower LODs fall back to probes; importer-made
+    LODs share UVs and work).
+  - One release broke against VRC Light Volumes 3.x; after updating either, re-bake a test area.
+  - Bakery components (`BakeryLightMesh`, `BakerySkyLight`, Bakery lightmap groups) do nothing
+    here: emitters are emissive materials or Unity area lights. Moving a Bakery scene to GLIM is a
+    re-setup of every group and light mesh, not a switch.
+- Reflection probes after the bake exactly as below (hard rule 6).
+
+### Without Bakery or GLIM: Progressive GPU
+
+Worlds without Bakery or GLIM bake with Unity's lightmapper. Same flow as `.omp/skills/world-pipeline/SKILL.md`
 D.1 Lighting: draft bake → mood check → final bake → reflection probes.
 
 **Presets** (`var s = Lightmapping.lightingSettings;` then set fields; create a `LightingSettings`

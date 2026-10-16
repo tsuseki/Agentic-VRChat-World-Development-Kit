@@ -115,7 +115,7 @@ Countermeasures:
 ✅ Recommended settings:
 
 Lighting Settings:
-├── Lightmapper: Bakery when licensed, else Progressive GPU (`.omp/skills/bakery-light-baking/SKILL.md`)
+├── Lightmapper: Bakery when licensed, else GLIM (free), else Progressive GPU (`.omp/skills/bakery-light-baking/SKILL.md`)
 ├── Lightmap Resolution: 10-20 texels/unit
 ├── Lightmap Compression: Normal
 └── Directional Mode: per `.omp/skills/bakery-light-baking/SKILL.md` (Android port: see `.omp/skills/vrchat-android-worlds/SKILL.md`)

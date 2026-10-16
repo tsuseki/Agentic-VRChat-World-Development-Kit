@@ -10,7 +10,8 @@ Assumes [bootstrap.md](bootstrap.md) is done on this machine.
 3. **Install the agent tools package**: add
    `"com.awdk.agenttools": "file:<workspace>/.omp/unity-package/com.awdk.agenttools"`
    to `Packages/manifest.json`, let Unity compile, confirm the console has no `error CS`.
-4. **Lightmapper**: import Bakery if the user owns it; otherwise Progressive GPU.
+4. **Lightmapper**: Bakery if the user owns it; otherwise GLIM (free); Progressive GPU only when neither
+   works ([bootstrap.md §3](bootstrap.md#3-wire-it)).
 5. **Brief**: copy [.omp/templates/WORLD.template.md](../templates/WORLD.template.md) to the project root
    as `WORLD.md` (the code block inside it is the file body). Create the project's own `AGENTS.md`
    with machine facts (local asset library path, Unity instance name, owned paid packages).

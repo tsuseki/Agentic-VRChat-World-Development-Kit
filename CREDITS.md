@@ -123,6 +123,10 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
 
   The four above are reviewed in `.omp/skills/unity-vrc-world-sdk-3/references/community-world-tooling.md`
   (VizVid also in `references/audio-video.md`).
+- **Generation backends** wired by `scripts/tool.py` (no code copied; API docs only): OpenAI Images
+  API, Google Gemini API, [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (GPL-3.0) with
+  Qwen-Image-2512 / Qwen-Image-Edit-2511 (Apache-2.0), [Tripo API](https://developers.tripo3d.com),
+  [Meshy API](https://docs.meshy.ai), [TRELLIS.2](https://github.com/microsoft/TRELLIS.2) (MIT).
 - **z3y** — [GLIM](https://github.com/z3y/glim) Vulkan GPU lightmapper. Used by
   `.omp/knowledge/notes/glim-vendor-portable-gpu-lightmapper.md`.
 - **MerlinVR** — [VRC-Bakery-Adapter](https://github.com/MerlinVR/VRC-Bakery-Adapter); **zulubo** —

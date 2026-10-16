@@ -24,9 +24,9 @@ design. Read `.omp/skills/vrchat-world-optimization/SKILL.md` ("Decimation gate"
 `AGENTS.md` first.
 
 > **Headless only.** Never open or drive the interactive Blender window. Run everything as
-> `& "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --factory-startup -P script.py`
-> (blender-modeler's proven recipe; grep stdout for your own OK marker, third-party addon noise is
-> harmless). Renders come from the same background run.
+> `python .omp/scripts/tool.py blender --script script.py [--blend file.blend] -- <args>` (runs the
+> Blender from `.omp/local/tools.json` with `-b --factory-startup`; grep stdout for your own OK
+> marker, third-party addon noise is harmless). Renders come from the same background run.
 
 > **Unity is one shared editor.** Read-only `execute_code` calls are fine while another agent works;
 > anything that imports, reimports, swaps meshes or saves the scene waits until the editor owner

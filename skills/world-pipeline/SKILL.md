@@ -118,10 +118,10 @@ in phase A and approved once at A.4; it is the user's last decision before D.3.
 | Item | Stage | Artefact (in `Design/lock/` unless noted) | Made by | Scored by |
 |---|---|---|---|---|
 | Brief: world kind, event type and function, purpose, archetypes and people each, capacity, reference eye height, cuddling, mood, realism, darkness, the style answers, the interactions list | A.2 | WORLD.md Brief | orchestrator | user confirms |
-| Concept | A.3 | style track: the picked text → image concept art; layout track: the picked shell layout (`SHELL_PICK` + `layout/vN.json`) and its plain captures; pitch with strengths and tradeoffs | world-architect (`image-gen` provider text → image; Unity blockout + captures) | style: none, user picks; layout: layout-reviewer ranks the shell layouts /10 → user picks |
-| Palette sheet | A.3 (style round) | `NN_palette.png` | world-architect (`image-edit` provider, lock images as references) | none: user picks |
-| Materials sheet (floors per zone, walls, trims and frames, fabrics, metals) | A.3 (style round) | `NN_materials.png` | world-architect (`image-edit` provider, lock images as references) | none: user picks |
-| Lighting and time-of-day sheet (darkness level, warm/cool, light sources per archetype) | A.3 (style round) | `NN_lighting.png` | world-architect (`image-edit` provider, lock images as references) | none: user picks |
+| Concept | A.3 | style track: the picked text → image concept art; layout track: the picked shell layout (`SHELL_PICK` + `layout/vN.json`) and its plain captures; pitch with strengths and tradeoffs | world-architect (`image-gen` tool text → image; Unity blockout + captures) | style: none, user picks; layout: layout-reviewer ranks the shell layouts /10 → user picks |
+| Palette sheet | A.3 (style round) | `NN_palette.png` | world-architect (`image-edit` tool, lock images as references) | none: user picks |
+| Materials sheet (floors per zone, walls, trims and frames, fabrics, metals) | A.3 (style round) | `NN_materials.png` | world-architect (`image-edit` tool, lock images as references) | none: user picks |
+| Lighting and time-of-day sheet (darkness level, warm/cool, light sources per archetype) | A.3 (style round) | `NN_lighting.png` | world-architect (`image-edit` tool, lock images as references) | none: user picks |
 
 The images show the world's **general feel**: there is no picture per room. The shells are locked
 as the `SHELL_PICK` blockout and its JSON, never taken from an image. The floor plan, greybox and

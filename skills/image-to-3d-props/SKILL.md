@@ -79,17 +79,17 @@ Tripo also offers an official **DCC Bridge** that sends an already-generated Stu
 Unity or Blender. It transfers; it is not a generation API. It recognizes only the first
 launched editor instance — confirm the receiving project. Keep **Generate Colliders = false**.
 
-Any wrapper scripts (e.g. an image-to-3D API client with an explicit "allow billing" flag, or an
-image-generation helper) are examples to adapt to your own setup, not something this kit ships.
+### Running it: the `image-to-3d` tool
 
-### Your setup: providers
-
-Generate through the `image-to-3d` provider named in `.omp/local/config.md` (Providers), following
-its own routes and spending rules; any paid route needs explicit approval for that spend. Face
-limits and low-poly modes constrain geometry, not final rigging quality. Reference images come from
-the `image-gen` provider (or `image-edit` when references are used), see `.omp/local/config.md`.
-Avatar clothing needs fitting and skinning on a duplicate, not static lightmapping
-(`.omp/agents/blender-modeler.md` "Avatar work").
+Generate with `python .omp/scripts/tool.py image-to-3d` (`.omp/docs/tools.md`): `--image` for one
+view, or `--front/--left/--back/--right` for multiview, `--faces` for the face limit, `--output
+<prop>.glb`. The user's `.omp/local/tools.json` decides which service runs. Exit 4 means the
+backend spends money: get the user's approval for this generation (the design approval of step 4
+is not a spend approval unless they said so), then re-run with `--approve-spend`. Exit 3 hands the
+step to you or the user. A printed task id lets `--resume` fetch a timed-out task without paying
+again. Reference images come from the `image-gen` / `image-edit` tools. Face limits and low-poly
+modes constrain geometry, not final rigging quality. Avatar clothing needs fitting and skinning on
+a duplicate, not static lightmapping (`.omp/agents/blender-modeler.md` "Avatar work").
 
 ## 6. Import into Unity
 

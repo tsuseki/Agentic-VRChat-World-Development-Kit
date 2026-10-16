@@ -23,7 +23,7 @@ Read first, in order: `.omp/skills/world-pipeline/SKILL.md` ("Plan → Build →
 |---|---|
 | C.1 Build-out | `.omp/skills/spatial-design/references/spatial-design.md` (see Build-out below), `worldbuilding-assets`, `vrchat-world-gotchas` |
 | C.2 Interactions & playability | `unity-vrc-udon-sharp`, `vrc-udon-workflow`, `unity-vrc-world-sdk-3`, `clip-planes` (clip planes, fog, world extent) |
-| D.1 Lighting | `bakery-light-baking` (its "Without Bakery: Progressive GPU" section if Bakery isn't installed) |
+| D.1 Lighting | `bakery-light-baking` (its "Without Bakery: GLIM" or "Progressive GPU" section when Bakery isn't installed) |
 | D → C fix | the skill of the stage the fix belongs to |
 
 ## Plan → Build → Review

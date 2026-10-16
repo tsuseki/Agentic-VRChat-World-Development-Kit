@@ -12,10 +12,17 @@ below finds each in one hop.
 
 **Personal layer.** `.omp/local/` holds this machine's owner setup and is never committed to the kit:
 read `.omp/local/AGENTS.local.md` now if it exists (it overrides defaults here); settings such as
-paths, the asset library and the image / image-to-3D providers are in `.omp/local/config.md`;
-personal notes in `.omp/local/notes/`, personal skills in `.omp/local/skills/`. Anything specific
-to one person or machine (names, absolute paths, accounts, owned packs, hardware) goes there, never
-in the shared files; the pre-commit leak check enforces this. Template: `.omp/local.example/`.
+paths and the asset library are in `.omp/local/config.md`, the backends behind the generation
+tools in `.omp/local/tools.json`; personal notes in `.omp/local/notes/`, personal skills in
+`.omp/local/skills/`. Anything specific to one person or machine (names, absolute paths, accounts,
+owned packs, hardware) goes there, never in the shared files; the pre-commit leak check enforces
+this. Template: `.omp/local.example/`.
+
+**Generation tools have fixed names.** Skills and agents call `image-gen`, `image-edit`,
+`image-to-3d` and `blender` through `python .omp/scripts/tool.py <tool> ...`, never a product.
+Each user picks what runs behind each name (paid services first, free local ones as fallbacks);
+guide and setup: [`.omp/docs/tools.md`](docs/tools.md). Exit code 3 hands the step to you or the
+user, exit code 4 means ask the user to approve the spend.
 
 ## Scope and prerequisites
 
@@ -72,12 +79,12 @@ The reviewer may leave `__CapCam__` **and an active realtime directional `__CapL
 | Materials, textures, shaders | [`.omp/skills/materials-shaders/SKILL.md`](skills/materials-shaders/SKILL.md) |
 | Model a custom prop; avatar exports to Blender, avatar clothing | agent `blender-modeler` ("Avatar work"); [`.omp/skills/lowpoly-tree-generation/SKILL.md`](skills/lowpoly-tree-generation/SKILL.md) |
 | Make an existing rigid model cheaper (tris, materials) without a visible change or a re-bake | agent `blender-optimizer`; [`.omp/skills/vrchat-world-optimization/SKILL.md`](skills/vrchat-world-optimization/SKILL.md) |
-| Image-to-3D props, GLB scale and placement | [`.omp/skills/image-to-3d-props/SKILL.md`](skills/image-to-3d-props/SKILL.md); the `image-to-3d` provider in `.omp/local/config.md` |
-| Generate images (concepts, references, textures, outfits) | the `image-gen` / `image-edit` providers in `.omp/local/config.md` (template and free local setup: [`.omp/local.example/config.md`](local.example/config.md)) |
+| Image-to-3D props, GLB scale and placement | [`.omp/skills/image-to-3d-props/SKILL.md`](skills/image-to-3d-props/SKILL.md); the `image-to-3d` tool ([`.omp/docs/tools.md`](docs/tools.md)) |
+| Generate images (concepts, references, textures, outfits) | the `image-gen` / `image-edit` tools ([`.omp/docs/tools.md`](docs/tools.md)) |
 | Scene setup, VRC components, build and upload | [`.omp/skills/unity-vrc-world-sdk-3/SKILL.md`](skills/unity-vrc-world-sdk-3/SKILL.md) |
 | Android/Quest/iOS version of a world: intake decision, port-friendly design choices, porting a finished PC world (mobile shaders, ASTC and lightmap-encoding overrides, EasyQuestSwitch, mobile budgets, Build & Test on device, same-blueprint upload) | [`.omp/skills/vrchat-android-worlds/SKILL.md`](skills/vrchat-android-worlds/SKILL.md) |
 | UdonSharp code, sync, workspace code conventions | [`.omp/skills/unity-vrc-udon-sharp/SKILL.md`](skills/unity-vrc-udon-sharp/SKILL.md), [`.omp/skills/vrc-udon-workflow/SKILL.md`](skills/vrc-udon-workflow/SKILL.md) |
-| Lightmap bake, Bakery or Progressive GPU; lighting standard (no realtime/Mixed, darker interiors, probes) | [`.omp/skills/bakery-light-baking/SKILL.md`](skills/bakery-light-baking/SKILL.md) "Workspace lighting standard" |
+| Lightmap bake: Bakery (paid), else GLIM (free), else Progressive GPU; lighting standard (no realtime/Mixed, darker interiors, probes) | [`.omp/skills/bakery-light-baking/SKILL.md`](skills/bakery-light-baking/SKILL.md) "Workspace lighting standard" |
 | Low FPS, perf comparison, performance budgets, editor-vs-VR benchmark | agent `perf-optimizer` ("Default budgets"); [`.omp/skills/vrchat-world-optimization/SKILL.md`](skills/vrchat-world-optimization/SKILL.md); `.omp/local/benchmarks/<hostname>.json` + `.omp/scripts/perf_grade.py` |
 | Drive the Unity Editor from an agent (MCP calls, long jobs, saving, captures) | [`.omp/skills/unity-mcp-scripting/SKILL.md`](skills/unity-mcp-scripting/SKILL.md) |
 | Something behaves oddly | [`.omp/skills/vrchat-world-gotchas/SKILL.md`](skills/vrchat-world-gotchas/SKILL.md), then grep `.omp/knowledge/notes/` |

@@ -1,0 +1,22 @@
+{
+ "_readme": "Backends behind the kit's fixed tool names. Each tool lists backends in order: the first that works is used, so paid services go first and free ones after as fallbacks. Delete the entries you don't have. Keys live in environment variables (key_env) or a key file under .omp/local/ (key_file), never in this file. Guide: .omp/docs/tools.md. Test: python .omp/scripts/tool.py check",
+ "image-gen": [
+  {"backend": "openai", "key_env": "OPENAI_API_KEY", "model": "gpt-image-2.5-sunburst"},
+  {"backend": "gemini", "key_env": "GEMINI_API_KEY", "model": "gemini-nano-banana-2.1"},
+  {"backend": "comfyui", "url": "http://127.0.0.1:8188", "workflow": "local/comfyui/qwen-image-2512.json"}
+ ],
+ "image-edit": [
+  {"backend": "openai", "key_env": "OPENAI_API_KEY", "model": "gpt-image-2.5-sunburst"},
+  {"backend": "gemini", "key_env": "GEMINI_API_KEY", "model": "gemini-nano-banana-2.1"},
+  {"backend": "comfyui", "url": "http://127.0.0.1:8188", "workflow": "local/comfyui/qwen-image-edit-2511.json"}
+ ],
+ "image-to-3d": [
+  {"backend": "tripo", "key_env": "TRIPO_API_KEY", "model": "v3.1-20260211", "confirm_spend": true},
+  {"backend": "meshy", "key_env": "MESHY_API_KEY", "confirm_spend": true},
+  {"backend": "command", "name": "trellis2",
+   "python": "<python of your TRELLIS.2 environment>", "cwd": "<your TRELLIS.2 clone>",
+   "args": ["{kit}/scripts/trellis2_glb.py", "--image", "{image}", "--faces", "{faces}", "--output", "{output}"],
+   "timeout": 1800}
+ ],
+ "blender": {"path": "blender"}
+}

@@ -176,8 +176,8 @@ another round).
 
 **Style rounds on the picked look.** A handful of `image-edit` images conditioned on
 the approved lock images: palette, materials, lighting and time of day. **Never a picture per room.** No
-reviewer: the user picks directly. world-architect generates them with the `image-edit` provider (`image-gen` for text-only images), see
-`.omp/local/config.md`; check the provider works once per session. Per round:
+reviewer: the user picks directly. world-architect generates them with the `image-edit` tool (`image-gen` for text-only images) through
+`python .omp/scripts/tool.py` (`.omp/docs/tools.md`); run `tool.py check image-gen image-edit` once per session. Per round:
 
 1. **Prompt** one file per image in `Design/_prompts/genNN-style/<letter>_<view>.prompt.txt` (images to `Design/concepts/genNN-style/`): what the image fixes
    (palette, materials, light, overall view), the brief's mood, realism and darkness, the style facts

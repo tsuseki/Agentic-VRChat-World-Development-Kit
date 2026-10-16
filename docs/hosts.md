@@ -52,12 +52,13 @@ through the host's extra-skills setting.
 `.omp/scripts/unity_mcp.py <tool> '<json>'` is a minimal stdio MCP client the agent can call from a shell
 (`--list`, `--schema <tool>`, `--args-file`). See `.omp/scripts/README.md`.
 
-## Your own tools (images, image-to-3D, modelling)
+## Your own tools (images, image-to-3D, Blender)
 
-Skills ask for a capability, never a product. Name yours in `.omp/local/config.md` → Providers
-(`image-gen`, `image-edit`, `image-to-3d`, `3d-modeling`, `unity`): an MCP tool, a command or a
-skill your host has. The template ([local.example/config.md](../local.example/config.md)) lists
-free local options (ComfyUI + Qwen-Image, TRELLIS.2, Blender) and hosted ones.
+Skills call fixed tool names (`image-gen`, `image-edit`, `image-to-3d`, `blender`) through
+`python .omp/scripts/tool.py`; which service or program runs behind each is set per machine in
+`.omp/local/tools.json`, paid services first and free local ones as fallbacks. Setup and every
+backend: [tools.md](tools.md). Tools only your agent host can call (an MCP image tool, a host
+image skill) plug in as `agent` hand-offs, so the skills stay the same on every host.
 
 ## Recommended tools and model tiers per agent
 

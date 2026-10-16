@@ -335,7 +335,7 @@ Define the performance target from the supported devices, representative scenes,
 
 ```text
 ✅ Recommended settings:
-├── Lightmapper: Bakery when licensed, else Progressive GPU (`.omp/skills/bakery-light-baking/SKILL.md`)
+├── Lightmapper: Bakery when licensed, else GLIM (free), else Progressive GPU (`.omp/skills/bakery-light-baking/SKILL.md`)
 ├── Lightmap Resolution: 10-20 texels/unit (PC) / 5-10 (Quest)
 ├── Light Mode: Baked only; 0 Realtime/Mixed lights (workspace rule)
 └── Light Probes: Place along player paths

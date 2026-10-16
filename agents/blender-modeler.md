@@ -10,11 +10,11 @@ thinking-level: high
 
 > **HEADLESS ONLY (project rule, 2026-09-02).** Do not open or drive the interactive Blender
 > window, and do not leave a GUI instance running. Use background Blender for everything:
-> either the Blender MCP `execute_blender_code_for_cli` tool, or invoke it yourself from
-> bash with the recipe this project already proved:
+> either the Blender MCP `execute_blender_code_for_cli` tool, or the kit's `blender` tool, which
+> runs the Blender set in `.omp/local/tools.json` as `blender -b --factory-startup --python`:
 >
 > ```
-> & "C:\Program Files\Blender Foundation\Blender 5.1\blender.exe" -b --factory-startup -P script.py
+> python .omp/scripts/tool.py blender --script script.py [--blend file.blend] -- <script args>
 > ```
 >
 > `--factory-startup` matters: broken third-party addons spam tracebacks on load. That noise is
@@ -100,7 +100,7 @@ one"):
   the image generator here: it does not produce seamless tiles.
 - **Unique pieces go on one generated-image atlas per prop family.** Pelts and hides with their shapes,
   cushion and fabric patterns, gourds, drum heads, carved runes, painted signs and leaf sprays.
-  Use the `image-gen` provider (see `.omp/local/config.md`) for orthographic, flat-lit, shadow-free sheets. Cutouts (leaves,
+  Use the `image-gen` tool (`python .omp/scripts/tool.py image-gen`, `.omp/docs/tools.md`) for orthographic, flat-lit, shadow-free sheets. Cutouts (leaves,
   fringes, hanging fibres) go on a flat #FF00FF background and through the `leaf` path of
   `.omp/skills/lowpoly-tree-generation/scripts/process_gpt_textures.py`. Pack each family into one
   atlas: one material and one draw call per family. Keep the prompts next to the textures.
@@ -254,8 +254,8 @@ Numbers lie; renders don't.
   In edit mode use **bmesh** and flush changes back. Update the depsgraph before
   reading computed values (world matrices, modifier results).
 - **The `*_for_cli` tools and any long op time out around 120 s.** For heavy work
-  — big bakes, dense decimation, large exports — write a Python script and run
-  `blender.exe --background <file.blend> --python <script.py>` via `Bash`
+  — big bakes, dense decimation, large exports — write a Python script and run it with
+  `python .omp/scripts/tool.py blender --blend <file.blend> --script <script.py>`
   instead of pushing it through the socket. Report the exact command you ran.
 - Don't destructively modify or delete without it being clearly in-scope; when
   unsure, render the current state and ask rather than overwrite.

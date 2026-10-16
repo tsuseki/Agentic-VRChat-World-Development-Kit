@@ -13,7 +13,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Bake with Progressive GPU by default and switch a scene to Progressive CPU (or Bakery) only when Editor.log shows `PathTracer … 0rpt`; never trust `buildProgress`** — Progressive GPU can schedule zero rays on large scenes and hang the editor at about 1% (see SKILL.md §Without Bakery).
 - **Treat a bake as finished only when `LightingData.asset`'s mtime passes the bake start, or when re-measured hashes differ** — `isRunning == false` and the "Total bake time" line both arrive before the EXRs are written, so an early check makes a good bake look like it changed nothing.
 - **Iterate with a DRAFT preset (low texels and samples, same bounces) or the Samples Multiplier. After a preset switch, run a full Render, and run a separate probe pass after selected-group bakes** — selected-group bakes are refused after any geometry or atlas-resolution change and skip light probes. GI cost grows with the square of the sample count (see SKILL.md §Two-stage workflow).
-- **Consider GLIM (Vulkan, free) when a contributor has no NVIDIA GPU, but trial it away from the deadline path** — Bakery needs OptiX, and its groups and light meshes do not carry over to GLIM.
+- **GLIM (Vulkan, free) is the lightmapper when Bakery isn't owned or the GPU isn't NVIDIA: pin its version per project and move a Bakery scene to it only off the deadline path** — Bakery needs OptiX, and its groups and light meshes do not carry over to GLIM (see SKILL.md §Without Bakery: GLIM).
 
 ## Lightmap groups, atlas share and texel density
 

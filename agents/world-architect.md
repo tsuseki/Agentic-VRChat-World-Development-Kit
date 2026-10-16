@@ -135,7 +135,7 @@ are B.1/B.2 work.
 
 *Style track: text → image only.* Text-to-image concept art per idea (mood and
 identity: arrival/overall view and one intimate view) from the brief and tagged references, with
-the `image-gen` provider (see `.omp/local/config.md`). Short subject prompts with the style line first and
+the `image-gen` tool (`python .omp/scripts/tool.py image-gen`, see `.omp/docs/tools.md`). Short subject prompts with the style line first and
 last; run the generations in parallel. Show the **lived-in, furnished world, never empty
 spaces** (hangout/cuddle worlds: couches, day-beds, cushions, furs, rugs, low tables, stools,
 shelves, plants, lamps, props) and the style's materials and light sources. When refining, change
@@ -150,7 +150,7 @@ the look and the layout. Rename the picked root `SHELL_PICK` (delete the other `
 after A.4); it and its JSON are the geometry authority for B.
 
 **A.3 style rounds (until the user approves).** Generate text → image with
-the `image-edit` provider (references are used; see `.omp/local/config.md`), or whatever image model the host provides,
+the `image-edit` tool (references are used: `--reference` per image; see `.omp/docs/tools.md`), or an image tool the run hands back to you (exit 3),
 conditioned on the tagged `mood`, `lighting`, `palette` and `materials` references and the
 approved lock images: a palette sheet, a materials sheet, a lighting and time-of-day view.
 **Never a picture per room**, and no furniture layouts to

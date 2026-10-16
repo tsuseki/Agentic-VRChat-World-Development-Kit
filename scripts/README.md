@@ -14,6 +14,16 @@ Wires the kit into a host that does not read `.omp/` itself: links skills (kit a
 `.omp/local/skills/`) into `.claude/skills/` or `.agents/skills/`, copies agents to `.claude/agents/`,
 and points the host's `CLAUDE.md` / `AGENTS.md` at `.omp/AGENTS.md`. Idempotent. See `docs/hosts.md`.
 
+## tool.py
+
+```
+python .omp/scripts/tool.py image-gen|image-edit|image-to-3d|blender|check ...
+```
+
+The generation tools the skills call by fixed name; the backends behind each come from
+`.omp/local/tools.json` (paid first, free fallbacks). Contract, backends and exit codes:
+`docs/tools.md`.
+
 ## leak_check.py
 
 ```
