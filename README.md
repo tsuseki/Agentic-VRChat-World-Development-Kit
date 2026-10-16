@@ -1,4 +1,4 @@
-# Agentic World Development Kit (AWDK)
+# Agentic VRChat World Development Kit (AWDK)
 
 A kit that lets a coding agent build a polished **VRChat world** in Unity from a conversation:
 a staged pipeline with visual review gates, specialised subagents, skills, a Unity Editor tools

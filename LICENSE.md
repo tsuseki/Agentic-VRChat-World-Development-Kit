@@ -4,7 +4,7 @@ Copyright (c) 2026 the AWDK contributors.
 
 Required Notice: Copyright (c) 2026 the AWDK contributors. Licensed under PolyForm Noncommercial 1.0.0 (software) and CC BY-NC-SA 4.0 (documentation) with the Output Exception below; see LICENSE.md.
 
-The Agentic World Development Kit (AWDK) is **free for personal and other noncommercial use. You may
+The Agentic VRChat World Development Kit (AWDK) is **free for personal and other noncommercial use. You may
 not sell the kit**, and the worlds you make with it are yours to sell.
 
 ## What you may do

@@ -6,7 +6,7 @@
   "unity": "2022.3",
   "keywords": ["vrchat", "world", "agent", "mcp", "z-fighting", "audit"],
   "author": {
-    "name": "Agentic World Development Kit contributors"
+    "name": "Agentic VRChat World Development Kit contributors"
   },
   "dependencies": {}
 }
