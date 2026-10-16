@@ -54,12 +54,12 @@ CONFIG = Path(os.environ.get("AWDK_TOOLS_CONFIG", KIT / "local" / "tools.json"))
 TOOLS = ("image-gen", "image-edit", "image-to-3d")
 VIEWS = ("front", "left", "back", "right")
 
-ASPECTS = {  # name -> (gpt-image size, gemini ratio, comfyui size)
-    "square": ((1024, 1024), "1:1", (1328, 1328)),
-    "landscape": ((1536, 1024), "3:2", (1584, 1056)),
-    "portrait": ((1024, 1536), "2:3", (1056, 1584)),
-    "wide": ((1536, 864), "16:9", (1664, 928)),
-    "tall": ((864, 1536), "9:16", (928, 1664)),
+ASPECTS = {  # name -> (gpt-image size, gemini ratio, comfyui size: ~1 MP, multiples of 32)
+    "square": ((1024, 1024), "1:1", (1024, 1024)),
+    "landscape": ((1536, 1024), "3:2", (1248, 832)),
+    "portrait": ((1024, 1536), "2:3", (832, 1248)),
+    "wide": ((1536, 864), "16:9", (1344, 768)),
+    "tall": ((864, 1536), "9:16", (768, 1344)),
 }
 GEMINI_RATIOS = ("1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9")
 
@@ -167,7 +167,7 @@ def size_for(aspect: str, column: int):
         return min(GEMINI_RATIOS, key=lambda r: abs(math.log(int(r.split(':')[0]) / int(r.split(':')[1])) - target))
     if column == 0:  # gpt-image: multiples of 16
         return (w // 16 * 16, h // 16 * 16)
-    return (w, h)
+    return (w // 32 * 32, h // 32 * 32)  # comfyui: latent sizes in multiples of 32
 
 
 def poll(fetch, done, *, every: float, timeout: float, what: str):
@@ -250,6 +250,55 @@ def gemini_image(cfg: dict, req: dict) -> dict:
     return {"output": write_out(req["output"], base64.b64decode(imgs[-1])), "meta": meta}
 
 
+def grow_reference_inputs(workflow: dict, loads: list[str], count: int) -> None:
+    """Add LoadImage nodes for extra references on a node with numbered image inputs (image_1, image_2...)."""
+    first = loads[0]
+    for node in workflow.values():
+        ins = node.get("inputs", {})
+        for key, val in list(ins.items()):
+            m = re.fullmatch(r"(.*?)(\d+)", key)
+            if not (m and isinstance(val, list) and str(val[0]) == first and m.group(2) == "1"):
+                continue
+            for i in range(len(loads) + 1, count + 1):
+                new_id = f"{first}_{i}"
+                workflow[new_id] = {"class_type": "LoadImage", "inputs": {"image": ""}}
+                ins[f"{m.group(1)}{i}"] = [new_id, 0]
+            return
+    raise ToolError(f"workflow has {len(loads)} LoadImage nodes and no numbered image input to add "
+                    f"more; it can't take {count} references")
+
+
+def ensure_comfyui(cfg: dict, url: str) -> None:
+    """Reach ComfyUI; when it is down and the config has "start", launch it detached and wait."""
+    try:
+        http("GET", url + "/system_stats", timeout=5)
+        return
+    except ToolError:
+        if not cfg.get("start"):
+            raise
+    if urllib.parse.urlsplit(url).hostname not in ("127.0.0.1", "localhost"):
+        raise ToolError(f"ComfyUI at {url} is down; auto-start only runs for a loopback url")
+    log_path = kit_path(cfg.get("start_log", "local/comfyui/comfyui.log"))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    flags = (subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP) if os.name == "nt" else 0
+    with open(log_path, "ab") as logf:
+        proc = subprocess.Popen([os.path.expandvars(a) for a in cfg["start"]],
+                                cwd=cfg.get("start_cwd") and kit_path(cfg["start_cwd"]),
+                                stdout=logf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                creationflags=flags, close_fds=True)
+    log(f"comfyui: started (pid {proc.pid}), waiting for {url}")
+    end = time.monotonic() + cfg.get("start_timeout", 240)
+    while time.monotonic() < end:
+        if proc.poll() is not None:
+            raise ToolError(f"ComfyUI exited during startup (code {proc.returncode}); see {log_path}")
+        try:
+            http("GET", url + "/system_stats", timeout=5)
+            return
+        except ToolError:
+            time.sleep(2)
+    raise ToolError(f"ComfyUI not ready after {cfg.get('start_timeout', 240)} s; see {log_path}")
+
+
 def comfy_prompt_node(workflow: dict, link) -> dict | None:
     """Follow a conditioning link back (through ReferenceLatent-style nodes) to the text encoder."""
     for _ in range(6):
@@ -267,7 +316,12 @@ def comfy_fill(workflow: dict, values: dict, refs: list[str]) -> str:
     text = json.dumps(workflow)
     filled = []
     if "{{image" not in text:
-        loads = sorted((k for k, n in workflow.items() if n.get("class_type") == "LoadImage"), key=int)
+        def node_key(k):
+            return [(0, int(p), "") if p.isdigit() else (1, 0, p) for p in re.split(r"[:_]", k)]
+        loads = sorted((k for k, n in workflow.items() if n.get("class_type") == "LoadImage"), key=node_key)
+        if loads and len(refs) > len(loads):
+            grow_reference_inputs(workflow, loads, len(refs))
+            loads = sorted((k for k, n in workflow.items() if n.get("class_type") == "LoadImage"), key=node_key)
         if len(loads) != len(refs):
             raise ToolError(f"workflow has {len(loads)} LoadImage nodes but {len(refs)} reference "
                             "images were given; use a workflow made for this many references")
@@ -327,7 +381,7 @@ def comfyui_image(cfg: dict, req: dict) -> dict:
     workflow = json.loads(wf_path.read_text(encoding="utf-8"))
     if "nodes" in workflow and "links" in workflow:
         raise ToolError("workflow is in UI format; export it with Workflow -> Export (API)")
-    http("GET", url + "/system_stats", timeout=10)
+    ensure_comfyui(cfg, url)
     uploaded = []
     for i, r in enumerate(req["references"], 1):
         body, ctype = multipart({"overwrite": "true"}, {"image": r})
@@ -364,7 +418,8 @@ def comfyui_image(cfg: dict, req: dict) -> dict:
                every=2, timeout=cfg.get("timeout", 900), what=f"ComfyUI prompt {pid}")
     q = urllib.parse.urlencode({"filename": img["filename"], "subfolder": img.get("subfolder", ""), "type": "output"})
     data = http("GET", f"{url}/view?{q}")
-    meta = {"workflow": cfg["workflow"], "size": f"{w}x{h}", "seed": values["seed"], "filled": how}
+    meta = {"workflow": cfg["workflow"], "seed": values["seed"], "filled": how,
+            "size": f"{w}x{h}" if "size" in how or "placeholders" in how else "set by the workflow"}
     if req["transparent"]:
         meta["warning"] = "no transparent output; key out a flat background colour instead"
     return {"output": write_out(req["output"], data), "meta": meta}
@@ -662,10 +717,18 @@ def check(tools: list[str]) -> int:
                                 "tripo": "TRIPO_API_KEY", "meshy": "MESHY_API_KEY"}[b])
                     status = "key present (not spent)" + (", needs approval per use" if e.get("confirm_spend") else "")
                 elif b == "comfyui":
-                    http("GET", e.get("url", "http://127.0.0.1:8188").rstrip("/") + "/system_stats", timeout=5)
                     if not kit_path(e.get("workflow", "")).is_file():
                         raise ToolError(f"workflow {e.get('workflow')} not found")
-                    status = "server up, workflow found"
+                    try:
+                        http("GET", e.get("url", "http://127.0.0.1:8188").rstrip("/") + "/system_stats", timeout=5)
+                        status = "server up, workflow found"
+                    except ToolError:
+                        if not e.get("start"):
+                            raise
+                        exe = os.path.expandvars(e["start"][0])
+                        if not (shutil.which(exe) or Path(exe).is_file()):
+                            raise ToolError(f"server down and start command {exe} not found")
+                        status = "server down, starts on first use; workflow found"
                 elif b == "command":
                     first = os.path.expandvars((e.get("args") or [""])[0]).replace("{kit}", str(KIT))
                     for exe in filter(None, [e.get("python"), first]):

@@ -125,7 +125,7 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   (VizVid also in `references/audio-video.md`).
 - **Generation backends** wired by `scripts/tool.py` (no code copied; API docs only): OpenAI Images
   API, Google Gemini API, [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (GPL-3.0) with
-  Qwen-Image-2512 / Qwen-Image-Edit-2511 (Apache-2.0), [Tripo API](https://developers.tripo3d.com),
+  Qwen-Image-2512 / Qwen-Image-Edit-2511 (Apache-2.0) or [Qwen-Image 2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1) (Qwen Research License, non-commercial; the shipped `scripts/comfyui/` workflows follow its Comfy-Org reference graph), [Tripo API](https://developers.tripo3d.com),
   [Meshy API](https://docs.meshy.ai), [TRELLIS.2](https://github.com/microsoft/TRELLIS.2) (MIT).
 - **z3y** — [GLIM](https://github.com/z3y/glim) Vulkan GPU lightmapper. Used by
   `.omp/knowledge/notes/glim-vendor-portable-gpu-lightmapper.md`.

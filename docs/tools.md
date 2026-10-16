@@ -74,23 +74,34 @@ Nano Banana through the Gemini API (`/v1beta/interactions`). Key:
 
 ### comfyui (free, local)
 
-Any ComfyUI workflow, run through ComfyUI's HTTP API. Setup:
+Any ComfyUI workflow, run through ComfyUI's HTTP API. Two model choices:
 
-1. Install ComfyUI (<https://www.comfy.org/download>, or the portable build from
-   <https://github.com/comfyanonymous/ComfyUI>) and start it (default `http://127.0.0.1:8188`).
-2. *Workflow → Browse Templates*: open **Qwen-Image 2512** (text → image) and **Qwen-Image-Edit
-   2511** (references); let it download the models it lists. FP8 weights want about 20 GB of
-   VRAM + RAM combined; GGUF Q4 builds (<https://unsloth.ai/docs/models/tutorials/qwen-image-2512>)
-   run in about 14 GB. Licence Apache-2.0.
-3. Run each template once in the UI, then *Workflow → Export (API)* to
-   `.omp/local/comfyui/qwen-image-2512.json` and `.omp/local/comfyui/qwen-image-edit-2511.json`.
-4. Set `url` and `workflow` in `tools.json`, then `tool.py check`.
+- **Qwen-Image 2.1** (<https://huggingface.co/Comfy-Org/Qwen-Image-2.1>): one model for
+  text → image and editing with up to 10 references. The kit ships ready API workflows for it:
+  `.omp/scripts/comfyui/qwen-image-2.1-t2i.json` and `.omp/scripts/comfyui/qwen-image-2.1-edit.json`
+  (int8 diffusion model and int8 Qwen3-VL encoder, bf16 VAE; fits a 24 GB GPU; needs a ComfyUI
+  recent enough to have the `TextEncodeQwenImage21` node). **Licence: Qwen Research License,
+  non-commercial research and evaluation only**; commercial use needs a separate licence from
+  Qwen. An edit's output follows the first reference's aspect ratio.
+- **Qwen-Image-2512** (text → image) and **Qwen-Image-Edit-2511** (references), Apache-2.0, so
+  usable commercially. Open their templates under *Workflow → Browse Templates*, let them download
+  the models (FP8 wants about 20 GB of VRAM + RAM; GGUF Q4 builds,
+  <https://unsloth.ai/docs/models/tutorials/qwen-image-2512>, run in about 14 GB), run each once,
+  then *Workflow → Export (API)* to `.omp/local/comfyui/`.
 
-The router fills the exported workflow by itself: the prompt goes into the text encoder feeding
-the sampler's `positive` input, the size into the `Empty…Latent` node, a fresh seed into the
-sampler, and the reference images into the `LoadImage` nodes in node-id order (the workflow must
-have exactly as many `LoadImage` nodes as references passed). When a workflow is unusual, put
-placeholders in the JSON instead: `{{prompt}}`, `{{negative}}`, `{{width}}`, `{{height}}`,
+Install ComfyUI (<https://www.comfy.org/download>, or the portable build from
+<https://github.com/comfyanonymous/ComfyUI>), set `url` and `workflow` in `tools.json`, then
+`tool.py check`. To have the tool start ComfyUI when it is down, add `start` (the launch command as
+a list, e.g. `["<comfy python>", "<ComfyUI>/main.py", "--listen", "127.0.0.1", "--port", "8188",
+"--disable-auto-launch"]`), `start_cwd`, and optionally `start_log` and `start_timeout` (seconds,
+default 240). It only auto-starts on a loopback url and leaves the server running afterwards.
+
+The router fills a workflow by itself: the prompt goes into the text encoder feeding the sampler's
+`positive` input, the size into the `Empty…Latent` node (multiples of 32, about 1 MP), a fresh
+seed into the sampler, and the reference images into the `LoadImage` nodes in node-id order. With
+more references than `LoadImage` nodes it adds nodes when the encoder has numbered image inputs
+(`images.image_1`, `image_2`, ...); otherwise the counts must match. When a workflow is unusual,
+put placeholders in the JSON instead: `{{prompt}}`, `{{negative}}`, `{{width}}`, `{{height}}`,
 `{{seed}}`, `{{image1}}`, `{{image2}}`, ...
 
 ### tripo
