@@ -16,6 +16,9 @@
 #   side=[dict(n, z=(lo,hi), len, ang, r, tip, gnarl, up)]  extra trunk limbs/stubs at given heights (no children)
 #   vines=dict(count, size, z=(lo,hi))   hanging sprig cards under depth>=1 branches (epiphytes / draped foliage)
 #   lod1_cards (0.6), lod1_size (1.35)   LOD1 card count and size factors
+#   lod1_subset=dict(keep=0.5, grow=1.3)   LOD1 = LOD0 thinned in place instead of rebuilt: same skeleton and card
+#       draws, every other tube ring, lod1_sides, all tip cards plus a `keep` share of the rest, `grow` x larger and
+#       unfolded. No visible pop at the LOD switch (a rebuilt LOD1 re-scatters every card). Sprig crowns only.
 #   bark_tile (0.6)   metres per bark texture repeat (use the scan's real width, e.g. 1.8 for Poly Haven barks)
 #   bark_tile_min, bark_tile_r   repeat scaled by tube radius (bark_tile at >= bark_tile_r, down to bark_tile_min);
 #       every tube also gets a random UV offset (seeded) so neighbouring limbs never repeat the same features
@@ -536,14 +539,17 @@ def terminal_ends(branches):
     return [b for b in branches if getattr(b, "cont", None) is None
             and not any(dep > b.depth and (p - b.pts[-1]).length < 0.2 for p, dep in starts)]
 
-def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False):
+def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
+    """keep (lod1_subset): place the LOD0 cards with the LOD0 random sequence, but build only the tip cards plus
+    a `keep` share of the others, `grow` times larger around the same attach point (LOD1 = LOD0 thinned)."""
     C = CFG["crown"]
     cells = json.load(open(TEX + f"{TEXN}_Leaves_Cards.json"))["cells"]
     md = C["mindepth"]
     if lod1 and CFG.get("lod1_mindepth") is not None: md = CFG["lod1_mindepth"]
     twigs = [b for b in branches if b.depth >= md and not getattr(b, "sides", None)]
     lens = [sum((b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)) for b in twigs]
-    cards = []
+    cards = []  # every placed card (counts drive the loops below); dropped subset cards have first = None
+    krng = random.Random(7919)  # own sequence: the subset choice never shifts the placement draws
     def place(b, t, d0, hang=False, nrm=None, exact=True):
         A, r, d = point_at(b, t)
         sz = size * rng.uniform(0.85, 1.15)
@@ -566,7 +572,9 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False):
             q = sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True)
             if any(in_clear(q[0].lerp(q[1], i / 4).lerp(q[3].lerp(q[2], i / 4), j / 4)) for i in range(5) for j in range(5)):
                 return False
-        first, grid, att = sprig_card(bm, uvl, A, d, roll, sz, fold, cell)
+        if keep is not None and t < 0.95 and krng.random() >= keep.get("keep", 0.5):
+            cards.append((None, None, None, b, t)); return True
+        first, grid, att = sprig_card(bm, uvl, A, d, roll, sz * (keep.get("grow", 1.3) if keep else 1.0), fold, cell)
         cards.append((first, grid, att, b, t)); return True
     cards_cells = cells
     bm.verts.ensure_lookup_table()
@@ -641,12 +649,12 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False):
             n0 = len(cards); place(b, t, d, nrm=(f + rand_unit(rng) * 0.35).normalized(), exact=False)
             made += len(cards) - n0
         size = base
-    return cards
+    return [c for c in cards if c[0] is not None]
 
-def crown(bm, uvl, branches, rng, count, size, fold, lod1=False):
+def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
     C = CFG["crown"]; mode = C["mode"]
     if mode == "sprig":
-        return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1)
+        return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep)
     if mode == "twig":
         tips = [b for b in branches if b.depth >= C.get("mindepth", 1)]
         centre = Vector((0, 0, CFG["height"] * 0.7)); made = 0
@@ -684,7 +692,8 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False):
 
 def make_lod(name, seed, lod1):
     branches = build_skeleton(seed)
-    if lod1:
+    sub = CFG.get("lod1_subset") if lod1 else None  # LOD1 = the LOD0 tree thinned in place (no pop at the switch)
+    if lod1 and not sub:
         for b in branches:
             keep = list(range(0, len(b.pts) - 1, 2)) + [len(b.pts) - 1]
             b.pts = [b.pts[k] for k in keep]; b.radii = [b.radii[k] for k in keep]
@@ -698,7 +707,7 @@ def make_lod(name, seed, lod1):
     if CFG.get("merge"):  # each limb flows into its best-aligned last child: one tube, no tapered spike at the fork
         merge_continuations(branches, CFG["merge"])
     sm = CFG.get("smooth")
-    if sm and not lod1:  # after the skeleton: child bases and card roots stay where the seed put them
+    if sm and (not lod1 or sub):  # after the skeleton: child bases and card roots stay where the seed put them
         for b in branches:
             if getattr(b, "merged_into", None) is not None: continue
             if b.depth <= sm.get("depth", 1) and len(b.pts) > 2 and not getattr(b, "sides", None):
@@ -735,11 +744,19 @@ def make_lod(name, seed, lod1):
         elif b.depth == 0: sides = St[0]
         elif b.depth < deep or deep == 1: sides = St[1]
         else: sides = St[2]
+        full = (b.pts, b.radii)
+        if sub and len(b.pts) > 2:  # every other ring on the tube only; the cards stay rooted on the full axis
+            ks = list(range(0, len(b.pts) - 1, 2)) + [len(b.pts) - 1]
+            b.pts = [b.pts[k] for k in ks]; b.radii = [b.radii[k] for k in ks]
         tube(bm, b, sides, CFG.get("lobe", 0.16), CFG.get("caps", False))  # lobe: trunk cross-section wobble (lumpy base)
+        b.pts, b.radii = full
     C = CFG["crown"]
-    cards = crown(bm, uvl, branches, random.Random(seed + 11),
-          int(C["count"] * (CFG.get("lod1_cards", 0.6) if lod1 else 1.0)),
-          C["size"] * (CFG.get("lod1_size", 1.35) if lod1 else 1.0), 0.0 if lod1 else C["fold"], lod1)
+    if sub:  # same count, size and draws as LOD0; sprig_crown builds a subset, larger, unfolded
+        cards = crown(bm, uvl, branches, random.Random(seed + 11), C["count"], C["size"], 0.0, False, sub)
+    else:
+        cards = crown(bm, uvl, branches, random.Random(seed + 11),
+              int(C["count"] * (CFG.get("lod1_cards", 0.6) if lod1 else 1.0)),
+              C["size"] * (CFG.get("lod1_size", 1.35) if lod1 else 1.0), 0.0 if lod1 else C["fold"], lod1)
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(ob)
     cylinder_uvs(ob)
