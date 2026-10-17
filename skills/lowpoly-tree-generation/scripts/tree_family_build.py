@@ -16,9 +16,9 @@
 #   side=[dict(n, z=(lo,hi), len, ang, r, tip, gnarl, up)]  extra trunk limbs/stubs at given heights (no children)
 #   vines=dict(count, size, z=(lo,hi))   hanging sprig cards under depth>=1 branches (epiphytes / draped foliage)
 #   lod1_cards (0.6), lod1_size (1.35)   LOD1 card count and size factors
-#   lod1_subset=dict(keep=0.5, grow=1.3)   LOD1 = LOD0 thinned in place instead of rebuilt: same skeleton and card
+#   lod1_subset=dict(keep=1.0, grow=1.0)   LOD1 = LOD0 thinned in place instead of rebuilt: same skeleton and card
 #       draws, every other tube ring, lod1_sides, all tip cards plus a `keep` share of the rest, `grow` x larger and
-#       unfolded. No visible pop at the LOD switch (a rebuilt LOD1 re-scatters every card). Sprig crowns only.
+#       unfolded. keep=1, grow=1 (bark-only LOD1) keeps the silhouette within a few cm; thinning cards opens holes.
 #   bark_tile (0.6)   metres per bark texture repeat (use the scan's real width, e.g. 1.8 for Poly Haven barks)
 #   bark_tile_min, bark_tile_r   repeat scaled by tube radius (bark_tile at >= bark_tile_r, down to bark_tile_min);
 #       every tube also gets a random UV offset (seeded) so neighbouring limbs never repeat the same features
