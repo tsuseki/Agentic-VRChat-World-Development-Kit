@@ -223,13 +223,15 @@ def in_clear(p):
             if (p - (a + ab * t)).length <= v["r"]: return True
     return False
 
-def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, keep_out=True, up_end=None):
+def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, keep_out=True, up_end=None, flat=0.0):
     pts, radii = [start.copy()], [r0]
     d = direction.normalized(); p = start.copy()
     for i in range(1, segs + 1):
         n = det_noise_vector(p * 1.7 + Vector((depth * 3.1, seed * 0.37, 0.5)))
         u = up if up_end is None else up + (up_end - up) * (i - 1) / max(1, segs - 1)  # up_end: bias ramps along it
         d = (d + n * gnarl + UP * u).normalized()
+        if flat and Vector((d.x, d.y, 0.0)).length > 1e-6:  # flat: each segment levels out toward horizontal
+            d = Vector((d.x, d.y, d.z * (1.0 - flat))).normalized()
         p = p + d * (length / segs)
         if depth > 0: p.z = max(p.z, 0.25)  # drooping twigs never reach the ground
         ri = r0 + (r1 - r0) * i / segs
@@ -439,7 +441,7 @@ def build_skeleton(seed):
                     continue  # no branch starts in (or with its thickness / buried base cone reaching into) a volume
                 c = grow(p - d * min(0.03, r), cd, ln, rr, P["tip"] * rr if P["tip"] > 0.05 else P["tip"],
                          P.get("segs", 4 if lv == 0 else 3), lv + 1, out, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
-                         up_end=P.get("up_end"))
+                         up_end=P.get("up_end"), flat=P.get("flat", 0.0))
                 if c: nxt.append(c)
         parents = nxt
     side_limbs(False)  # stubs etc.: no children
@@ -598,6 +600,10 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         else:
             d = ((-UP + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * C["upbias"])).normalized()
         roll, cell = nrm if nrm is not None else rand_unit(rng), rng.choice(cards_cells)
+        fl = C.get("flat", 0.0) if C["mode"] == "sprig" and not hang else 0.0
+        if fl:  # flat (sprig): cards lie toward horizontal with their face toward the sky (layered flat crowns)
+            if Vector((d.x, d.y, 0.0)).length > 1e-6: d = Vector((d.x, d.y, d.z * (1.0 - fl))).normalized()
+            roll = roll.lerp(UP, fl).normalized()
         if exact and CFG.get("clear"):  # the real card surface (its back overhang and corners too) must stay out of the volumes
             q = sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True)
             if any(in_clear(q[0].lerp(q[1], i / 4).lerp(q[3].lerp(q[2], i / 4), j / 4)) for i in range(5) for j in range(5)):
