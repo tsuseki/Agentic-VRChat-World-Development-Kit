@@ -1,13 +1,13 @@
 ---
 name: lowpoly-tree-generation
-description: Making custom low-poly stylised or realistic trees (olive, maple, cypress, birch, ficus, pine, any species) for VRChat/Unity worlds in Blender — scripted skeleton + tube bark + alpha-cutout leaf cards, image-gen leaf/bark textures, crown-proxy canopy normals, ~2.5–3.3k tris, FBX export and Unity import/lighting setup.
+description: Making custom low-poly stylised or realistic trees (olive, maple, cypress, birch, ficus, pine, any species) for VRChat/Unity worlds or for sale as assets in Blender — scripted skeleton + tube bark with merged fork joints + alpha-cutout leaf cards, image-gen leaf/bark textures, crown-proxy canopy normals, ~2.5–3.3k tris, FBX export, Unity import/lighting setup, and a distribution pack (one material per tree, LOD0/LOD1/billboard LOD2, LODGroup prefabs).
 ---
 
 # Low-poly tree generation (Blender script pipeline)
 
 Proven method: a family of 11 trees (6 olive variants, Japanese maple, Italian cypress, birch clump/single/weeping, ficus, stone pine) at **2.5–3.4k tris each**, gpt-image textures. The user liked the style ("custom olive style") enough to ask for a matching family. He **disliked toon-style trees** (a toon birch and an aspen were rejected) — aim realistic-textured, low-poly silhouette.
 
-Everything is headless Blender **5.1** (run through the kit's `blender` tool, `python .omp/scripts/tool.py blender`) plus Python 3 with `numpy pillow scipy` for textures. Scripts are in `scripts/`; the Unity shader in `unity/`.
+Everything is headless Blender **5.1** (run through the kit's `blender` tool, `python .omp/scripts/tool.py blender`) plus Python 3 with `numpy pillow scipy` for textures. Scripts are in `scripts/`; the Unity shaders in `unity/` (`FoliageCutout.shader` for the two-material world setup, `TreeAtlas.shader` for the one-material pack).
 
 | Script | Runs in | Job |
 |---|---|---|
@@ -19,6 +19,9 @@ Everything is headless Blender **5.1** (run through the kit's `blender` tool, `p
 | `branch_atlas.py` | Python | 2×2 leaf-spray atlas with stem base pinned to cell bottom-centre + JSON |
 | `check_key_spill.py` | Python | key-colour spill check on every mip |
 | `tree_family_textures.py` | Python | fallback textures from CC0 scans (Poly Haven + ambientCG), pre-gpt pass |
+| `tree_atlas.py` | Python | one texture set per species: bark into the free quadrant of the leaf atlas → `<Tex>_Atlas_RGBA.png` (2048), `<Tex>_Atlas_Normal.png` (1024), `<Tex>_Atlas.json` (bark rect) |
+| `tree_booth_pack.py` | Blender | distribution pack from a `--lod1` build: bark UVs tagged, one material on LOD0/LOD1, billboard render + LOD2 quads, FBX with `_LOD0/_LOD1/_LOD2` |
+| `tree_billboard_fix.py` | Python | billboard sheet: colour of every non-opaque texel = nearest opaque texel (no dark mip fringe) |
 | `prompts/*.txt` | — | the exact image-gen prompts used |
 
 ## Pipeline
@@ -29,10 +32,14 @@ B="python .omp/scripts/tool.py blender"   # headless Blender from .omp/local/too
 python scripts/process_gpt_textures.py bark bark_src.png TEX/Olive_Bark_Albedo.png TEX/Olive_Bark_Normal.png 3
 python scripts/branch_atlas.py TEX/Olive_Leaves_RGBA.png TEX/Olive_Leaves_Cards.json spray_a.png spray_b.png spray_c.png
 python scripts/check_key_spill.py TEX/Olive_Leaves_RGBA.png
-# 2 build (no LODs by default)
+# 2 build (no LODs by default; --lod1 for a distribution pack or a very large world)
 $B --script scripts/tree_family_build.py -- Olive --tex TEX --out Assets/Trees/Olive --blend Source/Olive [--qa qa.png] [--config my_species.py] [--lod1]
 # 3 optional: after hand edits in the .blend
 $B --blend Source/Olive/Olive_Tree.blend --script scripts/tree_finish.py -- Olive ellipsoid --out Assets/Trees/Olive [--sprig]
+# 4 distribution pack (see "Distribution pack"): one material + billboard LOD2
+python scripts/tree_atlas.py TEX Olive
+$B --blend Source/Olive/Olive_Tree.blend --script scripts/tree_booth_pack.py -- Olive --atlas Olive --out PACK [--bb 512]
+python scripts/tree_billboard_fix.py PACK/Olive_Billboard_raw.png PACK/Olive_Billboard.png
 ```
 The build prints `STAT` lines (tris, bounds, bark UV stretch, card attach error, open edges, leaf normal spread) — read them, then render `--qa` and look at it.
 
@@ -43,7 +50,7 @@ The build prints `STAT` lines (tris, bounds, bark UV stretch, card attach error,
 - `seed=None` → `pick_seed()` scores seeds 1–59 for centred crown, target width/height, no twigs below ground.
 
 ### 2. Bark mesh (`tube`)
-- One tube per branch, ring by ring; sides 7 / 5 / 4 by depth. `lobe` (0.3–0.36 olive, 0.08 birch/ficus, 0.16 default) wobbles the trunk cross-section for a gnarled base; trunk base ring flattened to z=0.
+- One tube per branch, ring by ring; sides by depth (`sides=(trunk, inner, deepest)`, default 7 / 5 / 4). **For new trees use `sides=(6, 4, 4)`**: the user wants "4 max 6 sides, very low poly"; smooth shading plus merged joints carry the roundness. `lobe` (0.3–0.36 olive, 0.08 birch/ficus, 0.16 default) wobbles the trunk cross-section for a gnarled base; trunk base ring flattened to z=0.
 - `taper=True`: each end narrows to 3 mm over its last 40 %, starting past the last child fork (so child bases never poke out). `caps=True`: 2 cm pointed cone on every end; child bases closed by a cone buried in the parent. No open rings, no flat discs.
 - **Fork joints: use `merge` on every new tree.** Without it a limb whose last child starts near its end tapers to a spike past the fork while the child starts thick beside it: the user saw "a lot of these weird joints" (spikes, elbows, loose base cones). `merge=dict(at=0.7, ang=50, blend=2, round=1, round_bend=20)` continues each such limb into its best-aligned last child as ONE tube (radius blended over 2 points, the joint corner cut once); a child turning more than `ang` is swung rigidly with its subtree to `ang` first, so hairpins become bends. The child keeps its `Br` (cards, attach check, its own children) but is not meshed. Same tri count or less (olive 1.9k → 1.86k bark at 6/4/4 sides). A chain is meshed with its head's side count, so keep sides low: 6/4/4 (the user's limit is 4–6). Clipping branches crossing each other is fine; don't add geometry to avoid it. `smooth=dict(bend, depth, iters)` (corner-cut whole limbs) and higher `round` roughly +40 % bark tris for little visible gain. Pin `seed` when rebuilding an approved tree (`STAT <name> seed N`).
 
@@ -98,7 +105,15 @@ Names the builder expects: `<tex>_Bark_Albedo.png`, `<tex>_Bark_Normal.png`, `<t
 ## Tri budgets (measured)
 LOD0 2.5–3.4k (olive 3.3k: 1.8k bark + 1.5k leaf; cypress 2.6k: 0.6k + 2.0k). Optional LOD1 0.7–1k. Compare: the stock trees they replaced were 15–16k each.
 
-**LODs: off by default.** In worlds under ~300 m across trees are always seen at LOD0 range, so a LOD1 + LODGroup is only extra memory and bake/probe complexity (Bakery skips LODGroup renderers without per-LOD setup). Use `--lod1` (exports `_Tree_LOD0`/`_LOD1` in one FBX: 5/4/3 sides, half the deepest twigs, 60 % cards at 1.35× size, unfolded) only for very large worlds, then add a LODGroup (transition heights are a per-world choice; check them in VR).
+**LODs in a world: off by default.** In worlds under ~300 m across trees are always seen at LOD0 range, so a LOD1 + LODGroup is only extra memory and bake/probe complexity (Bakery skips LODGroup renderers without per-LOD setup). Use `--lod1` (exports `_Tree_LOD0`/`_LOD1` in one FBX: 5/4/3 sides, half the deepest twigs, 60 % cards at 1.35× size, unfolded) only for very large worlds, then add a LODGroup (transition heights are a per-world choice; check them in VR). **Assets for sale always ship LOD0/LOD1/LOD2**: buyers build worlds of every size (see "Distribution pack").
+
+## Distribution pack (assets for sale, e.g. BOOTH)
+One material per LOD mesh, three LODs, one prefab per tree. Measured on the 6 olives: LOD0 3.0–4.1k, LOD1 1.2–2.2k, LOD2 36 tris; GPU memory per species 6.9 MB (2048² BC7 atlas + 1024² normal) plus 0.7 MB per tree for its billboard, vs 7.6 MB for the old bark + leaf sets.
+- **One material, one atlas (`tree_atlas.py`).** A material has one albedo slot, so "four 1k textures" means one 2048² atlas with four 1024² cells: 3 leaf sprays + bark (same memory as 4 × 1k). Bark goes into the quadrant no card uses (`--cell` to force; the script refuses a used or non-empty cell). Bark cell layout per side: 16 px alpha-0 gutter (bark colour edge-extended) next to the leaf cells, 32 px wrap padding, then the tile; the normal atlas holds the bark normal in the same cell at half resolution, flat elsewhere. So `branch_atlas.py` should get **3 sprays** for a pack species.
+- **Tiling bark inside a cell (`TreeAtlas.shader`).** The pack shifts bark UVs by `u += 100` (`--tag`); the shader treats `uv.x ≥ _BarkTag/2` as bark, maps `frac(uv − tag)` into `_BarkRect` (from `<Tex>_Atlas.json`) and samples with `tex2Dgrad` on the unwrapped UVs, so bark repeats along the trunk with no mip seam and no extra vertices. Bark never clips (the gutter is alpha 0); leaves clip at `_Cutoff` 0.45, Cull Off, `_UseMeshNormalsBothSides` 1. One draw call per tree instead of two.
+- **Billboard LOD2 (`tree_booth_pack.py`).** Two orthographic Cycles renders of LOD0 (front along +Y, side along −X), unlit albedo (Emission from the textures, leaf alpha > 0.45, Standard view transform, transparent film), side by side in a 1024×512 sheet; LOD2 = two crossed vertical 3×3-grid quads over the same square (side quad runs along +Y so it matches the side camera's image right) with crown-ellipsoid normals, so it shades like the canopy. Billboard material uses the same shader (UVs < 1 → leaf path). An edge-on quad shows a vertical light/dark stripe; invisible at the LOD2 switch distance (~75 m for a 7 m tree).
+- **Packaging in Unity.** FBX meshes named `<Species>_Tree_LOD0/1/2` → Unity builds the LODGroup on import. Prefab (variant of the model) per tree with transitions **0.30 / 0.10 / 0.012** (Unity's default 0.25 / 0.01 keeps LOD1 to the horizon), fade none; LOD0 receives GI from lightmaps, LOD1/LOD2 from light probes (Unity bakes only LOD0; tell buyers); LOD2 casts no shadows; static flags Contribute GI, Batching, Reflection Probe, Occludee. Atlas texture: Alpha Is Transparency, Preserve Coverage at 0.45, Clamp, max 2048; normal atlas Normal map max 1024; billboards max 1024. Remap FBX materials `<Tex>_Tree` and `<Species>_Billboard` to the material assets.
+- Layout used: `Assets/LowPolyTrees/{Shaders, <Species family>/{Models, Materials, Textures, Prefabs}}`.
 
 ## Big trees around walkways (treehouse, 2026-10)
 Giant jungle trees (70–100 m, crowns r 12–28 m, houses inside the crown) use the same builder plus optional CFG keys (all off by default):
@@ -123,8 +138,7 @@ For night worlds grade the leaf atlas once (a per-world `grade_atlas.py` next to
 
 ## Unity setup
 - FBX: Scale 1, **Normals Import**, Generate Lightmap UVs **off** (UV2 comes from Blender), Add Colliders off, Read/Write off, mesh compression off. Materials extracted/assigned manually.
-- Bark material: Standard, albedo + normal, tiling 1.
-- Leaf material: `unity/FoliageCutout.shader` (Cull Off, explicit `clip()` — the `alphatest` pragma blended leaves against bright HDR backgrounds and burned them white; addshadow + meta pass so bakes use the leaf silhouette). `_Cutoff` 0.45, Smoothness 0 (glossy leaves rim against the sky), `_UseMeshNormalsBothSides` 1, optional `_AlphaToCoverage` with MSAA.
+- Two-material world setup: bark material Standard, albedo + normal, tiling 1; leaf material `unity/FoliageCutout.shader` (Cull Off, explicit `clip()` — the `alphatest` pragma blended leaves against bright HDR backgrounds and burned them white; addshadow + meta pass so bakes use the leaf silhouette). `_Cutoff` 0.45, Smoothness 0 (glossy leaves rim against the sky), `_UseMeshNormalsBothSides` 1, optional `_AlphaToCoverage` with MSAA. One-material pack: `TreeAtlas.shader`, see "Distribution pack".
 - Leaf texture: Alpha Is Transparency on, **Mip Maps Preserve Coverage on, alpha reference 0.45** (= cutoff, so the crown doesn't thin out in the distance), max 2048, Clamp.
 - **No colliders** on trees (walk-through; add one thin BoxCollider on the trunk only if the world needs it). No seat stations.
 - Static: one renderer holds bark + leaves → mark Contribute GI / lightmap static (+ Reflection Probe Static); leaves are **lightmapped, not probe-lit**. Give it enough lightmap scale for the canopy.
