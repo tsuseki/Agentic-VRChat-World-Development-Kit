@@ -3,10 +3,14 @@
 Leaf atlases: chroma-key the flat background to a hard 1-bit alpha, despill the key colour from the
 leaf edges, erode one pixel to drop the fringe, then flood the leaf colour into the transparent area
 (nearest-pixel dilation) so mipmaps never pull in background colour -> no halos.
+Keys: magenta, green (foliage), cyan, blue, yellow (flowers whose colour is near magenta/green; see SKILL.md).
+edge_despill=N: despill only the opaque pixels within N px of the matte edge (default 0 = every pixel). The
+whole-image despill also strips the key's channels from plant colours that lean towards the key (pink/purple
+petals on magenta, green leaves on green); spill only sits at the edge.
 Bark: make tileable (half-offset + edge-weighted blend), resize to 1024, derive a tangent-space
 OpenGL normal map from the blurred luminance.
 
-  python process_gpt_textures.py leaf <src.png> <dst_RGBA.png> <magenta|green> [triple]
+  python process_gpt_textures.py leaf <src.png> <dst_RGBA.png> <magenta|green|cyan|blue|yellow> [triple] [--edge-despill]
   python process_gpt_textures.py bark <src.png> <dst_albedo.png> <dst_normal.png> <strength>
 """
 import sys
@@ -14,14 +18,22 @@ import numpy as np
 from PIL import Image, ImageFilter
 from scipy import ndimage
 
+# key -> (keyness: high on the key colour, <= 0 on the plant; channels the despill subtracts the excess from)
+KEYS = {
+    "magenta": (lambda r, g, b: np.minimum(r, b) - g, (0, 2)),
+    "green": (lambda r, g, b: g - np.maximum(r, b), (1,)),
+    "cyan": (lambda r, g, b: np.minimum(g, b) - r, (1, 2)),
+    "blue": (lambda r, g, b: b - np.maximum(r, g), (2,)),
+    "yellow": (lambda r, g, b: np.minimum(r, g) - b, (0, 1)),
+}
+EDGE_DESPILL = 4  # px band for --edge-despill
 
-def leaf(src, dst, key, triple=False, soft=False):
+
+def leaf(src, dst, key, triple=False, soft=False, edge_despill=0):
     im = np.array(Image.open(src).convert("RGB")).astype(np.float32)
     r, g, b = im[..., 0], im[..., 1], im[..., 2]
-    if key == "magenta":
-        keyness = np.minimum(r, b) - g          # high on magenta, <0 on plants
-    else:
-        keyness = g - np.maximum(r, b)          # high on chroma green
+    kf, chans = KEYS[key]
+    keyness = kf(r, g, b)
     # threshold from the border (pure background) statistics
     border = np.concatenate([keyness[:8].ravel(), keyness[-8:].ravel(), keyness[:, :8].ravel(), keyness[:, -8:].ravel()])
     thr = np.median(border) * 0.45
@@ -34,13 +46,12 @@ def leaf(src, dst, key, triple=False, soft=False):
         sizes = ndimage.sum(alpha, lab, range(1, n + 1))
         alpha = np.isin(lab, np.nonzero(sizes >= 60)[0] + 1)
     alpha = ndimage.binary_erosion(alpha, iterations=1)
-    # despill
-    if key == "magenta":
-        ex = np.clip(np.minimum(r, b) - g, 0, None)
-        im[..., 0] -= ex; im[..., 2] -= ex
-    else:
-        ex = np.clip(g - np.maximum(r, b), 0, None)
-        im[..., 1] -= ex
+    # despill (whole image, or only the opaque band inside the matte edge)
+    ex = np.clip(keyness, 0, None)
+    if edge_despill:
+        ex = ex * (alpha & ndimage.binary_dilation(~alpha, iterations=edge_despill))
+    for c in chans:
+        im[..., c] -= ex
     im = np.clip(im, 0, 255)
     idx = ndimage.distance_transform_edt(~alpha, return_distances=False, return_indices=True)
     rgb = im[idx[0], idx[1]]
@@ -104,6 +115,7 @@ def bark(src, dst_a, dst_n, strength):
 
 if __name__ == "__main__":
     if sys.argv[1] == "leaf":
-        leaf(sys.argv[2], sys.argv[3], sys.argv[4], len(sys.argv) > 5 and sys.argv[5] == "triple")
+        leaf(sys.argv[2], sys.argv[3], sys.argv[4], "triple" in sys.argv[5:],
+             edge_despill=EDGE_DESPILL if "--edge-despill" in sys.argv else 0)
     else:
         bark(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]))

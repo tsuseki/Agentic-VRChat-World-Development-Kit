@@ -2,10 +2,12 @@
 1024x1024 cell of a 2048x2048 atlas (2x2 grid), each with its stem base pinned to the cell's
 bottom-centre so sprig cards can root that point exactly on a branch axis.
 
-  python branch_atlas.py <out_RGBA.png> <out.json> <src_a.png> [src_b.png ...] [--key magenta|green]
+  python branch_atlas.py <out_RGBA.png> <out.json> <src_a.png> [src_b.png ...] [--key magenta|green|cyan|blue|yellow]
+                         [--edge-despill]
 
 Each source is keyed with process_gpt_textures.leaf(soft=True) (anti-aliased matte, despill, colour
-dilation); colour is otherwise untouched. The stem end is measured as the centroid x of the opaque
+dilation; --edge-despill: despill only next to the matte edge, for flowers near the key colour);
+colour is otherwise untouched. The stem end is measured as the centroid x of the opaque
 pixels in the bottom STEM_ROWS rows. The fan is scaled (uniformly, no warp) and translated so that point
 lands exactly on its cell's bottom-centre: u = cell centre, v = cell bottom. The other three sides keep
 MARGIN px of transparency. JSON (UV, v up): {"cells": [{"rect": [u0, v0, u1, v1], "attach": [u, v]}]}
@@ -16,11 +18,12 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from process_gpt_textures import leaf
+from process_gpt_textures import leaf, EDGE_DESPILL
 
 ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
 KEY = sys.argv[sys.argv.index("--key") + 1] if "--key" in sys.argv else "magenta"
 if KEY in ARGS: ARGS.remove(KEY)
+EDGE = EDGE_DESPILL if "--edge-despill" in sys.argv else 0
 SOURCES = ARGS[2:6]
 SIZE, CELL, MARGIN, STEM_ROWS = 2048, 1024, 16, 3
 
@@ -39,7 +42,7 @@ def main(out_png, out_json):
     tmpdir = tempfile.mkdtemp(prefix="branch_atlas_")  # private per run: parallel runs never share files
     for i, src in enumerate(SOURCES):
         tmp = os.path.join(tmpdir, f"spray_{i}.png")
-        leaf(src, tmp, KEY, soft=True)
+        leaf(src, tmp, KEY, soft=True, edge_despill=EDGE)
         im = Image.open(tmp); im.load()
         x_src, _ = stem_end(np.array(im.split()[3]))
         before = x_src - im.width / 2
