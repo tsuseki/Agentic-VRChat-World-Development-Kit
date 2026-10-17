@@ -20,6 +20,12 @@
 #   bark_tile_min, bark_tile_r   repeat scaled by tube radius (bark_tile at >= bark_tile_r, down to bark_tile_min);
 #       every tube also gets a random UV offset (seeded) so neighbouring limbs never repeat the same features
 #   sides (7,5,4) / lod1_sides (5,4,3)   tube sides for trunk / inner levels / deepest level
+#   smooth=dict(bend=12, depth=1, iters=2)   round the skeleton: corner-cut every bend sharper than `bend` deg on
+#       branches of depth <= `depth` (iters passes, 1/4 cuts; ends kept). Adds rings only where limbs kink, so
+#       gnarled olives read as curved wood instead of jointed sticks. Off by default (keeps old trees identical).
+#   merge=dict(at=0.7, ang=50, blend=2, round=1, round_bend=20, depth=(0, 99), straighten=True)   sympodial joints:
+#       a limb whose last fork is past `at` of its length continues into its best-aligned child as one tube (no
+#       spike past the fork); see merge_continuations(). Recommended for every new tree.
 #   lod1_mindepth   LOD1 drops the deepest level and roots its cards on this depth
 #   clear_drop (0)   drop a branch the keep-out volumes cut to less than this share of its length
 #   limbs=[dict(root, tip, r=(r0, r1), gnarl, children, arch, epiphytes)]   explicit limbs (tree-local, root on the
@@ -40,7 +46,7 @@
 #   bark_macro=dict(scale, amount)   low-frequency value variation baked into the vertex colour of the bark
 #       (multiply in the bark shader; leaves get white); breaks the tiling over big trunks
 import bpy, bmesh, math, random, itertools, sys, os
-from mathutils import Vector, noise
+from mathutils import Vector, Quaternion, noise
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 def _opt(k, d=None): return argv[argv.index(k) + 1] if k in argv else d
@@ -224,10 +230,89 @@ def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, ke
     if len(pts) < segs + 1: radii = [r0 + (radii[-1] - r0) * k / (len(pts) - 1) for k in range(len(pts))]
     b = Br(pts, radii, depth); out.append(b); return b
 
+def smooth_path(pts, radii, thr, iters):
+    """Chaikin corner cut on interior points bending more than thr rad; first/last point stay put."""
+    for _ in range(iters):
+        np_, nr = [pts[0]], [radii[0]]
+        for i in range(1, len(pts) - 1):
+            a, b = pts[i] - pts[i - 1], pts[i + 1] - pts[i]
+            if a.length < 1e-6 or b.length < 1e-6 or a.angle(b) <= thr:
+                np_.append(pts[i]); nr.append(radii[i]); continue
+            np_ += [pts[i] - a * 0.25, pts[i] + b * 0.25]
+            nr += [radii[i] + (radii[i - 1] - radii[i]) * 0.25, radii[i] + (radii[i + 1] - radii[i]) * 0.25]
+        np_.append(pts[-1]); nr.append(radii[-1])
+        if len(np_) == len(pts): break
+        pts, radii = np_, nr
+    return pts, radii
+
 def point_at(b, f):
     x = f * (len(b.pts) - 1); i = min(int(x), len(b.pts) - 2); t = x - i
     p = b.pts[i].lerp(b.pts[i + 1], t); r = b.radii[i] + (b.radii[i + 1] - b.radii[i]) * t
     d = (b.pts[i + 1] - b.pts[i]).normalized(); return p, r, d
+
+def merge_continuations(branches, M):
+    """Sympodial growth: a branch whose last fork sits near its end continues into that child (the best
+    aligned one) as one tube. The parent drops its stub past the fork, takes the child's axis, and blends
+    its radius into the child's over `blend` points; the child keeps its Br (cards, attach checks, its own
+    children) but is not meshed (merged_into). M = dict(at=0.7, ang=65, blend=2, round=0, depth=(0, 99)).
+    A best child turning more than `ang` off the parent's end is first swung (with its whole subtree, rigidly,
+    about its base) to exactly `ang`, so the limb bends instead of leaving a hairpin with spikes."""
+    at, ang, nb = M.get("at", 0.7), math.radians(M.get("ang", 65)), M.get("blend", 2)
+    dmin, dmax = M.get("depth", (0, 99))  # parent depths allowed to continue (each chain is meshed with its head's sides)
+    kids_of = {}  # raw skeleton: child -> parent by nearest axis point (before any merge moves points)
+    for c in branches:
+        if c.depth == 0: continue
+        best = None
+        for b in branches:
+            if b.depth != c.depth - 1: continue
+            k = min(range(len(b.pts)), key=lambda i: (b.pts[i] - c.pts[0]).length)
+            d = (b.pts[k] - c.pts[0]).length
+            if best is None or d < best[0]: best = (d, b)
+        if best: kids_of.setdefault(id(best[1]), []).append(c)
+    def subtree(x):
+        out, st = [], [x]
+        while st:
+            y = st.pop(); out.append(y); st += kids_of.get(id(y), [])
+        return out
+    for b in sorted(branches, key=lambda x: -x.depth):
+        if getattr(b, "sides", None) or getattr(b, "keep", False) or len(b.pts) < 2: continue
+        if not dmin <= b.depth <= dmax: continue
+        seg = [(b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)]
+        L = sum(seg); cum = [0.0]
+        for x in seg: cum.append(cum[-1] + x)
+        kids = []
+        for c in branches:
+            if c.depth != b.depth + 1 or getattr(c, "merged_into", None) is not None or getattr(c, "sides", None): continue
+            k = min(range(len(b.pts)), key=lambda i: (b.pts[i] - c.pts[0]).length)
+            if (b.pts[k] - c.pts[0]).length < b.radii[k] + 0.1: kids.append((k, c))
+        if not kids: continue
+        klast = max(k for k, _ in kids)
+        if cum[klast] / L < at: continue
+        end_d = (b.pts[-1] - b.pts[-2]).normalized()
+        cand = [(end_d.angle((c.pts[1] - c.pts[0]).normalized()), k, c) for k, c in kids if k == klast and len(c.pts) > 1]
+        if not cand: continue
+        a, k, c = min(cand, key=lambda x: x[0])
+        if a > ang:
+            if not M.get("straighten", True): continue
+            cd = (c.pts[1] - c.pts[0]).normalized(); axis = end_d.cross(cd)
+            if axis.length < 1e-6: continue
+            q = Quaternion(axis.normalized(), -(a - ang)); o = c.pts[0].copy()
+            for y in subtree(c):
+                y.pts = [o + q @ (p - o) for p in y.pts]
+                if y.depth > 0:
+                    for p in y.pts: p.z = max(p.z, 0.25)
+        k = max(k, 1)  # keep at least the parent's first segment
+        ratio = b.radii[k - 1] / max(c.radii[0], 1e-4)
+        b.lobe_end = cum[k - 1]
+        b.pts = b.pts[:k] + [p.copy() for p in c.pts]
+        b.radii = b.radii[:k] + [r * (ratio + (1.0 - ratio) * min(1.0, j / max(nb, 1))) for j, r in enumerate(c.radii)]
+        rd = M.get("round", 0)  # corner-cut only the joint (window around the fork): a curve, not an elbow
+        if rd:
+            i0, i1 = max(0, k - 2), min(len(b.pts), k + 3)
+            wp, wr = smooth_path(b.pts[i0:i1], b.radii[i0:i1], math.radians(M.get("round_bend", 15)), rd)
+            b.pts = b.pts[:i0] + wp + b.pts[i1:]; b.radii = b.radii[:i0] + wr + b.radii[i1:]
+            b.lobe_end += 0.0
+        b.cont = c; c.merged_into = b
 
 def build_skeleton(seed):
     rng = random.Random(seed); out = []
@@ -371,9 +456,16 @@ def tube(bm, br, sides, lobe_amt, cap):
         else:
             n = (prev_n - t * prev_n.dot(t)).normalized()
         prev_n = n; b = t.cross(n); ring = []
+        lb = lobe_amt if br.depth == 0 else 0.0
+        if CFG.get("merge") or CFG.get("smooth"):  # extra rings: phase by arc length, fade along a merged limb
+            ph = 1.7 * acc / 0.45
+            le = getattr(br, "lobe_end", None)
+            if le is not None: lb *= max(0.0, 1.0 - (acc - le) / 0.6) if acc > le else 1.0
+        else:
+            ph = 1.7 * i
         for s in range(sides):
             a = 2 * math.pi * s / sides
-            lobe = 1.0 + (lobe_amt * math.sin(3 * a + 1.7 * i) if br.depth == 0 else 0.0)
+            lobe = 1.0 + lb * math.sin(3 * a + ph)
             q = p + (n * math.cos(a) + b * math.sin(a)) * r * lobe
             if i == 0 and br.depth == 0: q.z = 0.0
             ring.append(bm.verts.new(q))
@@ -438,10 +530,11 @@ def orient_normal(rng, d, flat):
     return r.lerp(u.normalized(), flat).normalized()
 
 def terminal_ends(branches):
-    """Branches whose end does not continue into a child branch (their tips need foliage)."""
+    """Branches whose end does not continue into a child branch (their tips need foliage). A merged parent
+    (cont) shares its continuation's end, which is counted on the continuation."""
     starts = [(b.pts[0], b.depth) for b in branches]
-    return [b for b in branches
-            if not any(dep > b.depth and (p - b.pts[-1]).length < 0.2 for p, dep in starts)]
+    return [b for b in branches if getattr(b, "cont", None) is None
+            and not any(dep > b.depth and (p - b.pts[-1]).length < 0.2 for p, dep in starts)]
 
 def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False):
     C = CFG["crown"]
@@ -602,6 +695,14 @@ def make_lod(name, seed, lod1):
                 [b for b in branches if md <= b.depth < deep and not getattr(b, "sides", None)][::2]
         else:
             branches = [b for b in branches if b.depth < deep] + [b for b in branches if b.depth == deep][::2]
+    if CFG.get("merge"):  # each limb flows into its best-aligned last child: one tube, no tapered spike at the fork
+        merge_continuations(branches, CFG["merge"])
+    sm = CFG.get("smooth")
+    if sm and not lod1:  # after the skeleton: child bases and card roots stay where the seed put them
+        for b in branches:
+            if getattr(b, "merged_into", None) is not None: continue
+            if b.depth <= sm.get("depth", 1) and len(b.pts) > 2 and not getattr(b, "sides", None):
+                b.pts, b.radii = smooth_path(b.pts, b.radii, math.radians(sm.get("bend", 12)), sm.get("iters", 2))
     if CFG.get("taper"):  # every branch end narrows smoothly to TIP_R over its last 40%: no cut/capped ends
         for b in branches:
             if b.depth == 0 and CFG.get("fork"): continue  # the trunk ends inside its fork limbs, no spear tip
@@ -612,8 +713,11 @@ def make_lod(name, seed, lod1):
             for x in seg: cum.append(cum[-1] + x)
             # the taper starts beyond the last child fork, so a child's base never sticks out of a thinned parent
             f0 = 0.6
+            chain, x = [], getattr(b, "cont", None)
+            while x is not None: chain.append(x); x = getattr(x, "cont", None)
+            heads = {b.depth + 1} | {x.depth + 1 for x in chain}
             for c in branches:
-                if c.depth != b.depth + 1: continue
+                if c.depth not in heads or c in chain: continue
                 k = min(range(len(b.pts)), key=lambda i: (b.pts[i] - c.pts[0]).length)
                 if (b.pts[k] - c.pts[0]).length < b.radii[k] + 0.1: f0 = max(f0, cum[k] / L + 0.08)
             f0 = min(f0, 0.9)
@@ -625,6 +729,7 @@ def make_lod(name, seed, lod1):
     deep = max(b.depth for b in branches)
     S0, S1 = CFG.get("sides", (7, 5, 4)), CFG.get("lod1_sides", (5, 4, 3))
     for b in branches:
+        if getattr(b, "merged_into", None) is not None: continue  # its axis is the tail of its parent's tube
         St = S1 if lod1 else S0
         if getattr(b, "sides", None): sides = b.sides
         elif b.depth == 0: sides = St[0]
