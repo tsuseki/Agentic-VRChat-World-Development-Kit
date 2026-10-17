@@ -36,10 +36,11 @@ def stem_end(alpha):
 def main(out_png, out_json):
     atlas = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     cells = []
+    tmpdir = tempfile.mkdtemp(prefix="branch_atlas_")  # private per run: parallel runs never share files
     for i, src in enumerate(SOURCES):
-        tmp = os.path.join(tempfile.gettempdir(), f"branch_atlas_{i}.png")
+        tmp = os.path.join(tmpdir, f"spray_{i}.png")
         leaf(src, tmp, KEY, soft=True)
-        im = Image.open(tmp)
+        im = Image.open(tmp); im.load()
         x_src, _ = stem_end(np.array(im.split()[3]))
         before = x_src - im.width / 2
         im = im.crop(im.split()[3].point(lambda v: 255 if v > 0 else 0).getbbox())

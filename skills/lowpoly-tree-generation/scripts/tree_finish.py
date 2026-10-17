@@ -1,7 +1,7 @@
 # Finishing stage for an already-built tree .blend (re-run on an approved .blend after hand edits,
 # or to retrofit UVs/normals). Headless:
 #   blender -b --factory-startup <Species>_Tree.blend -P tree_finish.py -- <Species> <proxy> --out <dir> [--sprig]
-# <proxy>: ellipsoid | capsule | hull. Works on <Species>_Tree, or <Species>_Tree_LOD0/LOD1 if present.
+# <proxy>: ellipsoid | capsule | cone | hull. Works on <Species>_Tree, or <Species>_Tree_LOD0/LOD1 if present.
 # Steps:
 #   1. (--sprig) cap every branch end with a short pointed cone (no open/flat ends) and add leaf
 #      cards on any branch end that no card covers, so no limb ends bare in the air

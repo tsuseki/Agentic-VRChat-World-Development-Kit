@@ -5,6 +5,8 @@ so the canopy shades as one soft mass instead of hundreds of flat cards. Bark ke
 Proxy kinds:
   'ellipsoid' : UV sphere scaled to the leaf-vertex bounding box (spherical / flattened crowns)
   'capsule'   : tall ellipsoid for columnar crowns (same fit, kept separate for clarity in reports)
+  'cone'      : analytic cone, apex at the top of the leaf bounding box, base radius = its half-width
+                (conifers: spruce, fir, sugi, hinoki)
   'hull'      : icosphere shrink-wrapped onto the convex hull of the leaf vertices, then smoothed
                 (clumpy, irregular crowns)
 The Data Transfer modifier is applied, so the custom split normals live in the mesh and are written
@@ -68,13 +70,14 @@ def _apply_all(o):
     o.select_set(False)
 
 
-def align_card_winding(ob, proxy):
+def align_card_winding(ob, proxy, nfun=None):
     """Flip every leaf card whose front face points into the crown, so its geometric front agrees with
     the transferred (outward) normal. Otherwise renderers that flip the shading normal on back faces
     (Cycles; a VFACE-flipping two-sided foliage shader) turn half the cards' volume normals inward
-    and the crown renders near-black. Cards are the connected islands of leaf faces (1-2 quads)."""
+    and the crown renders near-black. Cards are the connected islands of leaf faces (1-2 quads).
+    nfun(point) -> outward normal replaces the proxy mesh lookup (analytic proxies such as the cone)."""
     from mathutils.bvhtree import BVHTree
-    tree = BVHTree.FromObject(proxy, bpy.context.evaluated_depsgraph_get())
+    tree = BVHTree.FromObject(proxy, bpy.context.evaluated_depsgraph_get()) if nfun is None else None
     bm = bmesh.new(); bm.from_mesh(ob.data); bm.faces.ensure_lookup_table()
     seen, flip = set(), []
     for f in bm.faces:
@@ -88,7 +91,7 @@ def align_card_winding(ob, proxy):
                         seen.add(h.index); stack.append(h)
         n = sum((g.normal * g.calc_area() for g in island), Vector())
         c = sum((g.calc_center_median() for g in island), Vector()) / len(island)
-        loc, pn, _, _ = tree.find_nearest(c)
+        pn = nfun(c) if nfun is not None else tree.find_nearest(c)[1]
         if pn is not None and n.dot(pn) < 0:
             flip.extend(island)
     bmesh.ops.reverse_faces(bm, faces=flip, flip_multires=False)
@@ -96,16 +99,69 @@ def align_card_winding(ob, proxy):
     return len(flip)
 
 
+def _analytic(ob, nf, cluster, crown_mix, dims):
+    """Write nf(vertex) as the custom normal of every leaf loop (bark keeps its own); cluster: see
+    transfer_crown_normals."""
+    me = ob.data
+    loops = [n.vector.copy() for n in me.corner_normals]
+    for p in me.polygons:
+        p.use_smooth = True
+    cent = {}
+    if cluster:
+        key = lambda q: (int(q.x // cluster), int(q.y // cluster), int(q.z // cluster))
+        acc = {}
+        for p in me.polygons:
+            if p.material_index == 1:
+                k = key(p.center); a = acc.setdefault(k, [Vector(), 0]); a[0] += p.center; a[1] += 1
+        cent = {k: v / n for k, (v, n) in acc.items()}
+    for p in me.polygons:
+        if p.material_index != 1:
+            continue
+        cc = cent.get(key(p.center)) if cluster else None
+        for li in p.loop_indices:
+            q = me.vertices[me.loops[li].vertex_index].co
+            n = nf(q)
+            if cc is not None:
+                o = q - cc
+                o = o.normalized() if o.length > 1e-4 else n
+                n = (n * crown_mix + o * (1 - crown_mix) + Vector((0, 0, 0.25))).normalized()
+            loops[li] = n
+    me.normals_split_custom_set(loops)
+    return dims
+
+
+def _cone_fn(c, r):
+    """Outward normal of the cone through the leaf bbox: apex at its top centre, base ellipse = its half-extents
+    at its bottom. n = normalize(radial * cos(a) + up * sin(a)), a = cone half-angle atan(R / H), R = mean
+    base radius, radial = horizontal ellipse gradient (straight up on the axis)."""
+    import math
+    a = math.atan2((r.x + r.y) / 2, max(2 * r.z, 1e-6)); ca, sa = math.cos(a), math.sin(a)
+    def nf(q):
+        d = q - c; g = Vector((d.x / r.x ** 2, d.y / r.y ** 2, 0.0))
+        if g.length < 1e-6:
+            return Vector((0.0, 0.0, 1.0))
+        return (g.normalized() * ca + Vector((0.0, 0.0, sa))).normalized()
+    return nf
+
+
 def transfer_crown_normals(ob, kind, inflate=1.05, cluster=None, crown_mix=0.35):
     """Apply proxy normals to leaf cards of `ob`; returns the proxy dimensions for reporting.
-    cluster (m, ellipsoid/capsule only): cards are binned into cells of that size and each leaf vertex's
-    normal points out of ITS cell's card centroid, mixed with crown_mix of the crown ellipsoid and a little
+    cluster (m, ellipsoid/capsule/cone only): cards are binned into cells of that size and each leaf vertex's
+    normal points out of ITS cell's card centroid, mixed with crown_mix of the crown proxy and a little
     up, so every leaf clump shades as its own small dome instead of the whole crown as one bubble."""
+    if ob.data.has_custom_normals:  # re-run on a finished mesh: zero vectors = back to default normals
+        ob.data.normals_split_custom_set([(0.0, 0.0, 0.0)] * len(ob.data.loops))
+    if kind == "cone":  # analytic only: no proxy mesh, the card winding uses the same cone normal
+        vids, pts = _leaf_points(ob)
+        lo = Vector((min(q.x for q in pts), min(q.y for q in pts), min(q.z for q in pts)))
+        hi = Vector((max(q.x for q in pts), max(q.y for q in pts), max(q.z for q in pts)))
+        c, r = (lo + hi) / 2, (hi - lo) / 2
+        nf = _cone_fn(c, r)
+        align_card_winding(ob, None, nf)
+        return _analytic(ob, nf, cluster, crown_mix, tuple(round(2 * x, 2) for x in r))
     proxy = make_proxy(ob, kind, inflate)
     for p in proxy.data.polygons:
         p.use_smooth = True
-    if ob.data.has_custom_normals:  # re-run on a finished mesh: zero vectors = back to default normals
-        ob.data.normals_split_custom_set([(0.0, 0.0, 0.0)] * len(ob.data.loops))
     align_card_winding(ob, proxy)
     vids, pts = _leaf_points(ob)
     if kind in ("ellipsoid", "capsule"):
@@ -114,34 +170,13 @@ def transfer_crown_normals(ob, kind, inflate=1.05, cluster=None, crown_mix=0.35)
         lo = Vector((min(q.x for q in pts), min(q.y for q in pts), min(q.z for q in pts)))
         hi = Vector((max(q.x for q in pts), max(q.y for q in pts), max(q.z for q in pts)))
         c, r = (lo + hi) / 2, (hi - lo) / 2
-        me = ob.data
-        loops = [n.vector.copy() for n in me.corner_normals]
-        for p in me.polygons:
-            p.use_smooth = True
-        cent = {}
-        if cluster:
-            key = lambda q: (int(q.x // cluster), int(q.y // cluster), int(q.z // cluster))
-            acc = {}
-            for p in me.polygons:
-                if p.material_index == 1:
-                    k = key(p.center); a = acc.setdefault(k, [Vector(), 0]); a[0] += p.center; a[1] += 1
-            cent = {k: v / n for k, (v, n) in acc.items()}
-        for p in me.polygons:
-            if p.material_index != 1:
-                continue
-            cc = cent.get(key(p.center)) if cluster else None
-            for li in p.loop_indices:
-                q = me.vertices[me.loops[li].vertex_index].co; d = q - c
-                n = Vector((d.x / r.x ** 2, d.y / r.y ** 2, d.z / r.z ** 2)).normalized()
-                if cc is not None:
-                    o = q - cc
-                    o = o.normalized() if o.length > 1e-4 else n
-                    n = (n * crown_mix + o * (1 - crown_mix) + Vector((0, 0, 0.25))).normalized()
-                loops[li] = n
-        me.normals_split_custom_set(loops)
-        dims = tuple(round(2 * x, 2) for x in r)
+        def nf(q):
+            d = q - c
+            return Vector((d.x / r.x ** 2, d.y / r.y ** 2, d.z / r.z ** 2)).normalized()
+        dims = _analytic(ob, nf, cluster, crown_mix, tuple(round(2 * x, 2) for x in r))
         bpy.data.objects.remove(proxy, do_unlink=True)
         return dims
+    # hull: Data Transfer from the shrink-wrapped proxy mesh
     vg = ob.vertex_groups.new(name="leaves"); vg.add(list(vids), 1.0, 'REPLACE')
     for p in ob.data.polygons:
         p.use_smooth = True  # bark was smooth already; leaf cards must be smooth to hold custom normals

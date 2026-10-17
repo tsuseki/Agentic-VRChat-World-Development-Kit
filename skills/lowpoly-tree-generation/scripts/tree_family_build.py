@@ -48,6 +48,15 @@
 #   bark_tex (= tex)   bark texture set name when several leaf sets share one bark
 #   bark_macro=dict(scale, amount)   low-frequency value variation baked into the vertex colour of the bark
 #       (multiply in the bark shader; leaves get white); breaks the tiling over big trunks
+#   levels[i] segs (4 on the first level, else 3): segments per limb (fewer = cheaper bark on many-limbed conifers)
+#   conifers: levels[i] whorl=k (k limbs per height, evenly around the parent), ang_end=(lo, hi) (angle range at
+#       at[1]; `ang` holds at at[0]: drooping low limbs, rising top ones), up_end (up bias ramps from `up` to it
+#       along each limb: drooping tips); crown size_top (card size x this at `height`, spire), ground (m, hanging
+#       cards shrink/skip to stay above it); proxy="cone"
+#   bend (0.0)   upward pull per stem segment (a leaning palm trunk curving up), stem_segs (6) segments per stem
+#   crown mode "rosette" (palms, tree ferns, bananas): fronds radiating from every stem top; see rosette_crown()
+#       and SKILL.md. levels=[] allowed (no branches). crown atlas=True|[cells] (twig/ellipsoid/spindle): each card
+#       shows one cell of <tex>_Leaves_Cards.json; tangent (0..1, ellipsoid): cards lie along the shell (topiary)
 import bpy, bmesh, math, random, itertools, sys, os
 from mathutils import Vector, Quaternion, noise
 
@@ -214,12 +223,13 @@ def in_clear(p):
             if (p - (a + ab * t)).length <= v["r"]: return True
     return False
 
-def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, keep_out=True):
+def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, keep_out=True, up_end=None):
     pts, radii = [start.copy()], [r0]
     d = direction.normalized(); p = start.copy()
     for i in range(1, segs + 1):
         n = det_noise_vector(p * 1.7 + Vector((depth * 3.1, seed * 0.37, 0.5)))
-        d = (d + n * gnarl + UP * up).normalized()
+        u = up if up_end is None else up + (up_end - up) * (i - 1) / max(1, segs - 1)  # up_end: bias ramps along it
+        d = (d + n * gnarl + UP * u).normalized()
         p = p + d * (length / segs)
         if depth > 0: p.z = max(p.z, 0.25)  # drooping twigs never reach the ground
         ri = r0 + (r1 - r0) * i / segs
@@ -330,7 +340,8 @@ def build_skeleton(seed):
         d = Vector((math.cos(az) * le, math.sin(az) * le, 1.0))
         base = Vector((math.cos(az) * spread, math.sin(az) * spread, 0.0))
         sc = 1.0 if k == 0 or cnt < 4 else rng.uniform(0.7, 1.0)
-        parents.append(grow(base, d, rng.uniform(*L) * sc, r0 * sc, r1 * sc, 6, 0, out, gn, 0.0, seed + k))
+        parents.append(grow(base, d, rng.uniform(*L) * sc, r0 * sc, r1 * sc, CFG.get("stem_segs", 6), 0, out, gn,
+                            CFG.get("bend", 0.0), seed + k))
     trunk = out[0]; TL = sum((trunk.pts[i + 1] - trunk.pts[i]).length for i in range(len(trunk.pts) - 1))
     def side_limbs(grown):  # extra trunk limbs at absolute heights; grown=True ones get the upper levels' children
         made = []
@@ -397,16 +408,29 @@ def build_skeleton(seed):
                 if c: nxt.append(c)
             trunk.radii[-1] = rt * 0.8  # the leader (0.85 x) sheathes the trunk end
         for b in parents:
-            n = P["n"]
+            n = P["n"]; wk = P.get("whorl")
             for j in range(n):
-                f = P["at"][0] + (P["at"][1] - P["at"][0]) * (j / max(1, n - 1)) if n > 1 else P["at"][1]
-                f = min(1.0, f + rng.uniform(-0.04, 0.04))
-                p, r, d = point_at(b, f)
-                az = rng.uniform(0, 2 * math.pi) if n > 3 else (j / n) * 2 * math.pi + rng.uniform(-0.6, 0.6)
+                if wk:  # whorls (conifers): wk limbs per height, evenly spread around the parent, staggered per whorl
+                    nw = -(-n // wk)
+                    if j % wk == 0:
+                        w = j // wk
+                        fw = P["at"][0] + (P["at"][1] - P["at"][0]) * (w / max(1, nw - 1)) if nw > 1 else P["at"][1]
+                        fw = min(1.0, fw + rng.uniform(-0.02, 0.02)); azw = rng.uniform(0, 2 * math.pi)
+                    f = fw; p, r, d = point_at(b, f)
+                    az = azw + 2 * math.pi * (j % wk) / wk + rng.uniform(-0.25, 0.25)
+                else:
+                    f = P["at"][0] + (P["at"][1] - P["at"][0]) * (j / max(1, n - 1)) if n > 1 else P["at"][1]
+                    f = min(1.0, f + rng.uniform(-0.04, 0.04))
+                    p, r, d = point_at(b, f)
+                    az = rng.uniform(0, 2 * math.pi) if n > 3 else (j / n) * 2 * math.pi + rng.uniform(-0.6, 0.6)
                 perp = d.orthogonal().normalized(); perp.rotate(__import__("mathutils").Quaternion(d, az))
                 outw = Vector((p.x, p.y, 0));
                 if outw.length > 0.05 and lv == 0 and n <= 3: perp = (perp + outw.normalized() * CFG.get("outward", 1.2)).normalized()
-                a = math.radians(rng.uniform(*P["ang"]))
+                if "ang_end" in P:  # angle range moves from `ang` (at[0]) to `ang_end` (at[1]): drooping lower limbs
+                    h = max(0.0, min(1.0, (f - P["at"][0]) / max(1e-6, P["at"][1] - P["at"][0])))
+                    a = math.radians(rng.uniform(*(x + (y - x) * h for x, y in zip(P["ang"], P["ang_end"]))))
+                else:
+                    a = math.radians(rng.uniform(*P["ang"]))
                 cd = (d * math.cos(a) + perp * math.sin(a)).normalized()
                 ln = rng.uniform(*P["len"]) * CFG.get("len_scale", 1.0)  # olives: long sweeping limbs
                 if CFG.get("len_taper"): ln *= 1.0 - CFG["len_taper"] * f  # columnar: shorter limbs higher up
@@ -414,7 +438,8 @@ def build_skeleton(seed):
                 if CFG.get("clear") and (in_clear(p) or any(in_clear(p + e * (rr * 1.5 + 0.3)) for e in (UP, -UP, -cd))):
                     continue  # no branch starts in (or with its thickness / buried base cone reaching into) a volume
                 c = grow(p - d * min(0.03, r), cd, ln, rr, P["tip"] * rr if P["tip"] > 0.05 else P["tip"],
-                         4 if lv == 0 else 3, lv + 1, out, P["gnarl"], P["up"], seed * 7 + j + lv * 31)
+                         P.get("segs", 4 if lv == 0 else 3), lv + 1, out, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
+                         up_end=P.get("up_end"))
                 if c: nxt.append(c)
         parents = nxt
     side_limbs(False)  # stubs etc.: no children
@@ -486,23 +511,26 @@ def tube(bm, br, sides, lobe_amt, cap):
     if cap:  # pointed cone closes the branch end (no open ring / flat disc)
         ring = rings[-1][0]
         t = (br.pts[-1] - br.pts[-2]).normalized()
-        k = 0.35 if (br.depth == 0 and CFG.get("fork")) else 2.5  # forked trunk: a low crotch dome, not a spear
+        # forked trunk: a low crotch dome, not a spear; palm stem under a rosette: a blunt cone hidden in the frond bases
+        k = 0.35 if (br.depth == 0 and CFG.get("fork")) else 1.0 if (br.depth == 0 and CFG["crown"]["mode"] == "rosette") else 2.5
         apex = bm.verts.new(br.pts[-1] + t * max(br.radii[-1] * k, 0.02))
         for s in range(sides):
             f = bm.faces.new((ring[s], ring[(s + 1) % sides], apex)); f.material_index = 0
 
-def card(bm, uvl, base, d, nrm, s, fold):
+def card(bm, uvl, base, d, nrm, s, fold, cell=None):
+    """cell (atlas cell dict from <tex>_Leaves_Cards.json): UVs span that cell instead of the whole texture."""
     d = d.normalized(); nrm = (nrm - d * nrm.dot(d)).normalized(); side = nrm.cross(d)
     w = side * s * 0.5; base = base - d * s * 0.05; top = base + d * s; fv = nrm * s * fold
+    u0, v0, u1, v1 = cell["rect"] if cell else (0.0, 0.0, 1.0, 1.0)
     if fold > 0:
         vs = [bm.verts.new(x) for x in (base - w, base + fv, base + w, top + w, top + fv, top - w)]
         for idx, us in (((0, 1, 4, 5), (0, .5, .5, 0)), ((1, 2, 3, 4), (.5, 1, 1, .5))):
             f = bm.faces.new([vs[k] for k in idx]); f.material_index = 1
-            for loop, u, v in zip(f.loops, us, (0, 0, 1, 1)): loop[uvl].uv = (u, v)
+            for loop, u, v in zip(f.loops, us, (0, 0, 1, 1)): loop[uvl].uv = (u0 + u * (u1 - u0), v0 + v * (v1 - v0))
     else:
         vs = [bm.verts.new(x) for x in (base - w, base + w, top + w, top - w)]
         f = bm.faces.new(vs); f.material_index = 1
-        for loop, uv in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))): loop[uvl].uv = uv
+        for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))): loop[uvl].uv = (u0 + u * (u1 - u0), v0 + v * (v1 - v0))
 
 def sprig_card(bm, uvl, A, d, roll, s, fold, cell, dry=False):
     """Card whose atlas stem-base attach point lands exactly on A (a point on a branch axis).
@@ -553,6 +581,8 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     def place(b, t, d0, hang=False, nrm=None, exact=True):
         A, r, d = point_at(b, t)
         sz = size * rng.uniform(0.85, 1.15)
+        if C.get("size_top") is not None:  # cards shrink toward the top (conifer spire): size x size_top at `height`
+            sz *= 1.0 + (C["size_top"] - 1.0) * max(0.0, min(1.0, A.z / CFG["height"]))
         if CFG.get("clear"):
             if in_clear(A): return False
             ok = False
@@ -571,6 +601,12 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         if exact and CFG.get("clear"):  # the real card surface (its back overhang and corners too) must stay out of the volumes
             q = sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True)
             if any(in_clear(q[0].lerp(q[1], i / 4).lerp(q[3].lerp(q[2], i / 4), j / 4)) for i in range(5) for j in range(5)):
+                return False
+        if C.get("ground") is not None:  # hanging cards stay above this height: shrink, then skip
+            for _ in range(5):
+                if min(x.z for x in sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True)) >= C["ground"]: break
+                sz *= 0.75
+            else:
                 return False
         if keep is not None and t < 0.95 and krng.random() >= keep.get("keep", 0.5):
             cards.append((None, None, None, b, t)); return True
@@ -651,10 +687,96 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         size = base
     return [c for c in cards if c[0] is not None]
 
+def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C):
+    """One rosette frond: a strip of C['segs'] quads (2 per segment when folded) along a drooping arc. It leaves A
+    (a point on the stem axis) along `rad` (unit, perpendicular to `axis`) at `tilt` deg above it and bends `droop` deg
+    down toward the tip (bend ~ s^droop_pow), the cross direction rolling `twist` deg about the spine by the tip.
+    The atlas cell's attach point (bottom-centre, branch_atlas.py) sits on A; the cell top is the tip; `crop` = share
+    of the cell width used, `aspect` squeezes the width (1 = undistorted texture). fold > 0: the frond edges hang
+    below the midrib (Λ section). Returns (first vertex, grid, attach) like sprig_card, or None if it hits the ground."""
+    segs = C.get("segs", 4); u0, v0, u1, v1 = cell["rect"]
+    au = (cell["attach"][0] - u0) / (u1 - u0); av = (cell["attach"][1] - v0) / (v1 - v0)
+    crop = min(C.get("crop", 1.0), 2 * min(au, 1 - au))
+    W = L / max(1.0 - av, 1e-3) * (u1 - u0) / (v1 - v0) * crop * C.get("aspect", 1.0)
+    side0 = axis.cross(rad).normalized(); dp = C.get("droop_pow", 1.5)
+    for _ in range(12):  # a frond may not reach the ground: relax its droop until it clears
+        pts, dirs = [A.copy()], []
+        for i in range(segs):
+            e = math.radians(tilt - droop * ((i + 0.5) / segs) ** dp)
+            dirs.append(rad * math.cos(e) + axis * math.sin(e)); pts.append(pts[-1] + dirs[-1] * (L / segs))
+        if min(p.z for p in pts) >= 0.1: break
+        droop *= 0.8
+    else:
+        return None
+    rows = []
+    for k, p in enumerate(pts):
+        t = (dirs[max(0, k - 1)] + dirs[min(segs - 1, k)]).normalized()
+        sd = (side0 - t * side0.dot(t)).normalized(); sd.rotate(Quaternion(t, math.radians(twist) * k / segs))
+        nv = t.cross(sd); hang = nv * fold * W
+        rows.append((p - sd * W / 2 - hang, p, p + sd * W / 2 - hang))
+    lus = (0.0, 0.5, 1.0) if fold > 0 else (0.0, 1.0)
+    grid = ((0, 0), (.5, 0), (1, 0), (1, 1), (.5, 1), (0, 1)) if fold > 0 else ((0, 0), (1, 0), (1, 1), (0, 1))
+    first = len(bm.verts); vv = []
+    for k, row in enumerate(rows):  # rows 0 and 1 in grid order (attach_report reads the first quad by it)
+        cols = (row if fold > 0 else (row[0], row[2]))
+        order = list(range(len(lus)))[::-1] if k == 1 else list(range(len(lus)))
+        made = {j: bm.verts.new(cols[j]) for j in order}; vv.append([made[j] for j in range(len(lus))])
+    def uv(j, k): return (u0 + (au + (lus[j] - 0.5) * crop) * (u1 - u0), v0 + (av + (1 - av) * k / segs) * (v1 - v0))
+    for k in range(segs):
+        for j in range(len(lus) - 1):
+            q = ((j, k), (j + 1, k), (j + 1, k + 1), (j, k + 1))
+            f = bm.faces.new([vv[b][a] for a, b in q]); f.material_index = 1
+            for loop, (a, b) in zip(f.loops, q): loop[uvl].uv = uv(a, b)
+    return first, grid, (0.5, 0.0)
+
+def rosette_crown(bm, uvl, branches, rng, fold):
+    """Palm / tree fern / banana: fronds radiating from every stem top (terminal end above minz). Per head: `count`
+    fronds on a golden-angle spiral (or interleaved over `spread` deg), age 0 (youngest, top, upright) .. 1 (oldest,
+    `zone` m lower, flattest, most drooping); optional upright `young` spears and hanging `dead` fronds."""
+    C = CFG["crown"]
+    cells = json.load(open(TEX + f"{TEXN}_Leaves_Cards.json"))["cells"]
+    live = [cells[i] for i in C.get("cells", range(len(cells)))]
+    blen = lambda b: sum((b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1))
+    heads = [b for b in terminal_ends(branches) if b.pts[-1].z >= C.get("minz", 0.0) * 0.8]
+    Lmax = max(blen(b) for b in heads); cards = []
+    jit = C.get("jitter", 6.0); spread = C.get("spread", 360.0)
+    for b in heads:
+        Lb = blen(b); sc = (Lb / Lmax) ** C.get("stem_scale", 0.7)
+        axis = point_at(b, 1.0)[2].lerp(UP, C.get("upright", 0.6)).normalized()
+        e1 = axis.orthogonal().normalized(); e2 = axis.cross(e1)
+        az0 = rng.uniform(0, 2 * math.pi); n = max(3, round(C["count"] * sc))
+        specs = [("live", i / max(1, n - 1)) for i in range(n)]
+        Y, D = C.get("young"), C.get("dead")
+        specs += [("young", 0.0)] * (Y["n"] if Y else 0) + [("dead", 1.0)] * (D["n"] if D else 0)
+        for i, (kind, age) in enumerate(specs):
+            if spread >= 360: az = az0 + i * math.radians(137.508)
+            else: az = az0 + math.radians(((i * 0.618034) % 1.0 - 0.5) * spread)
+            rad = e1 * math.cos(az) + e2 * math.sin(az)
+            S = {"live": C, "young": Y, "dead": D}[kind]
+            lo, hi = S["tilt"]; tilt = hi + (lo - hi) * age + rng.uniform(-jit, jit)
+            dlo, dhi = S["droop"]; droop = max(0.0, dlo + (dhi - dlo) * age + rng.uniform(-jit, jit))
+            L = rng.uniform(*C["length"]) * sc * (S.get("length", 1.0) if kind != "live" else 1.0)
+            tw = rng.uniform(-1, 1) * C.get("twist", 0.0)
+            z = Lb - C.get("top", 0.0) - C.get("zone", 0.3) * age
+            if kind == "dead": z -= rng.uniform(0, D.get("zone", 0.4))
+            if kind == "young": tilt = rng.uniform(lo, hi)
+            A = point_at(b, max(0.0, min(1.0, z / Lb)))[0]
+            cell = cells[S["cell"]] if kind != "live" and S.get("cell") is not None else rng.choice(live)
+            r = frond(bm, uvl, A, axis, rad, L, tilt, droop, tw, fold, cell, C)
+            if r: cards.append(r + (b, 1.0))
+    return cards
+
 def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
     C = CFG["crown"]; mode = C["mode"]
     if mode == "sprig":
         return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep)
+    if mode == "rosette":  # lod1_subset (keep): fronds identical to LOD0 (unfolding moves the edges by fold x width)
+        return rosette_crown(bm, uvl, branches, rng, C.get("fold", 0.0) if keep is not None else fold)
+    cells = None  # atlas: each card shows one cell of <tex>_Leaves_Cards.json instead of the whole texture
+    if C.get("atlas"):
+        cells = json.load(open(TEX + f"{TEXN}_Leaves_Cards.json"))["cells"]
+        if C["atlas"] is not True: cells = [cells[i] for i in C["atlas"]]
+    pick = lambda: rng.choice(cells) if cells else None
     if mode == "twig":
         tips = [b for b in branches if b.depth >= C.get("mindepth", 1)]
         centre = Vector((0, 0, CFG["height"] * 0.7)); made = 0
@@ -665,7 +787,8 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
             out = p - centre; out.z *= 0.4; out.normalize()
             d = (out * C["out"] + Vector((rng.uniform(-.6, .6), rng.uniform(-.6, .6), rng.uniform(*C["upr"])))).normalized()
             if p.z + d.z * size * 1.25 < 0.15: continue  # hanging card would touch the ground
-            card(bm, uvl, p, d, orient_normal(rng, d, C["flat"]), size * rng.uniform(0.8, 1.2), fold); made += 1
+            nrm = orient_normal(rng, d, C["flat"]); s = size * rng.uniform(0.8, 1.2)
+            card(bm, uvl, p, d, nrm, s, fold, pick()); made += 1
         return
     for _ in range(count):
         if mode == "spindle":
@@ -686,9 +809,15 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
             p = c + Vector((v.x * R.x, v.y * R.y, v.z * R.z)) * k
             out = Vector((v.x / R.x, v.y / R.y, v.z / R.z)).normalized()
             d = (out * 0.6 + UP * 0.45 + rand_unit(rng) * 0.35).normalized()
+            tg = C.get("tangent", 0.0)  # clipped topiary: cards lie along the shell surface, facing out
+            if tg:
+                dt = d - out * d.dot(out)
+                if dt.length > 1e-4: d = d.lerp(dt.normalized(), tg).normalized()
             p = p - d * size * 0.45
             nrm = orient_normal(rng, d, C.get("flat", 0.0))
-        card(bm, uvl, p, d, nrm, size * rng.uniform(0.85, 1.15), fold)
+            if tg: nrm = nrm.lerp(out, tg)
+        s = size * rng.uniform(0.85, 1.15)
+        card(bm, uvl, p, d, nrm, s, fold, pick())
 
 def make_lod(name, seed, lod1):
     branches = build_skeleton(seed)
@@ -702,7 +831,7 @@ def make_lod(name, seed, lod1):
             md = CFG["lod1_mindepth"]  # no twigs, every other branch of the level the LOD1 cards sit on
             branches = [b for b in branches if b.depth < md or getattr(b, "sides", None)] + \
                 [b for b in branches if md <= b.depth < deep and not getattr(b, "sides", None)][::2]
-        else:
+        elif deep > 0:  # (a branchless palm keeps all its stems)
             branches = [b for b in branches if b.depth < deep] + [b for b in branches if b.depth == deep][::2]
     if CFG.get("merge"):  # each limb flows into its best-aligned last child: one tube, no tapered spike at the fork
         merge_continuations(branches, CFG["merge"])
@@ -752,11 +881,11 @@ def make_lod(name, seed, lod1):
         b.pts, b.radii = full
     C = CFG["crown"]
     if sub:  # same count, size and draws as LOD0; sprig_crown builds a subset, larger, unfolded
-        cards = crown(bm, uvl, branches, random.Random(seed + 11), C["count"], C["size"], 0.0, False, sub)
+        cards = crown(bm, uvl, branches, random.Random(seed + 11), C["count"], C.get("size", 1.0), 0.0, False, sub)
     else:
         cards = crown(bm, uvl, branches, random.Random(seed + 11),
               int(C["count"] * (CFG.get("lod1_cards", 0.6) if lod1 else 1.0)),
-              C["size"] * (CFG.get("lod1_size", 1.35) if lod1 else 1.0), 0.0 if lod1 else C["fold"], lod1)
+              C.get("size", 1.0) * (CFG.get("lod1_size", 1.35) if lod1 else 1.0), 0.0 if lod1 else C.get("fold", 0.0), lod1)
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(ob)
     cylinder_uvs(ob)
@@ -792,7 +921,7 @@ def pick_seed():
         xs = [t.x for t in tips]; ys = [t.y for t in tips]; zs = [t.z for t in tips]
         cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
         w = (max(xs) - min(xs) + max(ys) - min(ys)) / 2
-        lowest = min(p.z for b in br if b.depth >= 1 for p in b.pts)
+        lowest = min((p.z for b in br if b.depth >= 1 for p in b.pts), default=0.0)
         score = math.hypot(cx, cy) + abs(w - CFG["width"] * 0.8) * 0.5 + abs(max(zs) - CFG["height"] * 0.92) + max(0, -lowest) * 5
         if best is None or score < best[0]: best = (score, sd)
     return best[1]
@@ -872,7 +1001,7 @@ def attach_report(o):
                 dd = (A - (p0 + seg * t)).length
                 if dd < best[0]: best = (dd, b.radii[i] + (b.radii[i + 1] - b.radii[i]) * t)
         dist.append(best[0]); bad += best[0] > max(best[1], 1e-4)
-    tips = [b for b in terminal_ends(branches) if b.pts[-1].z >= CFG["crown"]["minz"] * 0.8]
+    tips = [b for b in terminal_ends(branches) if b.pts[-1].z >= CFG["crown"].get("minz", 0.0) * 0.8]
     rooted = {id(c[3]) for c in cards if c[4] >= 0.95}
     return dict(cards=len(cards), attach_max_mm=round(max(dist) * 1000, 3),
                 attach_median_mm=round(statistics.median(dist) * 1000, 3), out_of_tolerance=bad,
