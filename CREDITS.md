@@ -159,6 +159,9 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   [ORL Shaders](https://shaders.orels.sh/docs/orl-standard/base-shader); **z3y** —
   [Graphlit](https://github.com/z3y/Graphlit) (successor of the archived [z3y/shaders](https://github.com/z3y/shaders)).
   Offered only on user request. Used by `.omp/skills/bakery-light-baking/`.
+- **Silent (s-ilent)** — [Crispy Foliage](https://gitlab.com/s-ilent/crispy-foliage), MIT. Used by
+  `.omp/knowledge/notes/fade-edge-on-leaf-cards-at-glancing-angles.md`,
+  `.omp/skills/lowpoly-tree-generation/references/lessons-trees.md`, `.omp/skills/lowpoly-tree-generation/SKILL.md`.
 - **vrchat-community** — [ClientSim](https://github.com/vrchat-community/ClientSim) issues,
   [EasyQuestSwitch](https://github.com/vrchat-community/EasyQuestSwitch). Used by
   `.omp/skills/unity-vrc-udon-sharp/references/testing.md`, `.omp/skills/vrchat-android-worlds/`.

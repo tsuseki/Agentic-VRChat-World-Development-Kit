@@ -71,8 +71,9 @@ call for the 10 s window. Without Roslyn installed it silently falls back to a C
   files written to disk need `AssetDatabase.ImportAsset(path, ForceUpdate | ForceSynchronousImport)`.
 - **Measure across calls**, e.g. FPS from `Time.frameCount` / `Time.realtimeSinceStartup` deltas ~8 s
   apart; tris and draw calls from `UnityEditor.UnityStats` via reflection.
-- `AssetDatabase.MoveAssetToTrash` can trip the server's safety blocklist; use the Unity MCP
-  `manage_asset` tool's `delete` action.
+- **Delete assets with the Unity MCP `manage_asset` tool's `delete` action, never from `execute_code`**:
+  `AssetDatabase.DeleteAsset` there hung and killed the calling session, and `MoveAssetToTrash` can
+  trip the server's safety blocklist.
 - **Embedding C# in a Python/IPython cell:** never start a line with `ident = !expr`; IPython rewrites
   it as a shell capture even inside a string literal. Write `ident = (!expr);`. Passing C# through a
   shell: use `unity_mcp.py --args-file` to avoid quoting damage.

@@ -155,3 +155,4 @@ For night worlds grade the leaf atlas once (a per-world `grade_atlas.py` next to
 `STAT` tris in budget, `open_bark_edges_above_ground 0`, `floating_bark_components 0` (every LOD; bark islands not connected to the ground-rooted bark, `tree_checks.py` also checks saved blends), `tips_uncovered 0`, `attach out_of_tolerance 0`, bark stretch max/min ≲ 3, leaf normal spread < 0.7; `--qa` render; in Unity a composition review from eye height and from below at night.
 
 Blender and mesh lessons checklist: [asset-import/references/lessons-blender-and-geometry.md](../asset-import/references/lessons-blender-and-geometry.md).
+Tree lessons checklist: [references/lessons-trees.md](references/lessons-trees.md).

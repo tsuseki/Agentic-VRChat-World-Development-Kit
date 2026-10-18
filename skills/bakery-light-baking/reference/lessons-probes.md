@@ -14,6 +14,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 
 - **Run the Bakery probe pass right after a full Render whenever geometry or layout changed (a probe-only render is fine after editing only `probePositions`), close every `VRCSdkControlPanel` window first, reset a latched `userCanceled`, then verify `bakedProbes` variance and `GetInterpolatedProbe` at 2–3 rooms** — the pass can die silently (geometry-changed abort, or the SDK panel throwing on the temp scene) leaving a full-count but flat probe set and dynamic objects ~20× too dark; completion flags lie.
 - **Snapshot the shared `<scene>_probes.asset` before baking an alternate (night) state, restore it after, then reopen the scene** — lightmaps are per state but probes are one asset; `AssetDatabase.Refresh` doesn't rebind the cached probes. Fingerprint: every probe agrees on chromaticity to three decimals; compare brightness with `SphericalHarmonicsL2.Evaluate` over 6 axes, not the DC term.
+- **After swapping objects that shaded the probes (e.g. tree crowns), re-bake the probes; until then soften each probe's L1 term so its darkest direction is ≥ 30 % of L0, editing `LightmapSettings.lightProbes` of the open scene only, after saving** — the old crowns baked a downward-pointing L1 that darkens the new crowns' upward leaves; loading a second copy of the LightingData asset crashed Unity inside the light-probe update.
 
 ## Probe coverage and placement
 
