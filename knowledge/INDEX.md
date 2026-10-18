@@ -6,7 +6,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 - [lighting-baking](#lighting-baking) (66)
 - [probes-reflection-and-light](#probes-reflection-and-light) (21)
-- [materials-textures-shaders](#materials-textures-shaders) (36)
+- [materials-textures-shaders](#materials-textures-shaders) (37)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (27)
 - [import-fbx-prefabs](#import-fbx-prefabs) (15)
 - [placement-layout-design](#placement-layout-design) (45)
@@ -127,6 +127,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Banding on big dark surfaces is 8-bit backbuffer quantization, fixed with a screen-space dither](notes/dark-gradient-banding-is-8bit-quantization.md) — Contour bands across a large dark gradient are usually 8-bit backbuffer quantization rather than a bake defect; no texture or rebake fixes it, a multiplicative screen-space dither does.
 - [Cloned pieces sharing one mesh read as a repeating pattern; offset UVs per renderer](notes/cloned-pieces-with-identical-uvs-read-as-a-pattern.md) — N clones sharing one mesh show the same texture patch and read as wallpaper; vary _MainTex_ST offsets per renderer, and check the texture's pattern suits the surface before retiling.
 - [Convert ambientCG PBR sets to Unity Standard offline, and tame _GlossMapScale](notes/ambientcg-to-standard-material-conversion.md) — Pack inverted roughness into the metallic map alpha, use the GL normal, and drop _GlossMapScale well below 1.0 or polished stone turns into a black mirror.
+- [Cutout leaf cards shimmer in VR at MSAA 4x; fix with alpha to coverage plus a far-only mip bias and cutoff drop](notes/vr-leaf-shimmer-far-only-prefilter.md) — Alpha-cutout leaves ~1 px wide flicker as the head turns; MSAA alone does nothing and A2C alone ~8 %. Ramping a +0.35 mip bias and a −0.05 A2C cutoff drop in only once the leaf texture is minified past mip 1 cut flicker above a supersampled reference ~45–70 % at 6–40 m, kept crown coverage within 1 point and left near leaves untouched; measured with a sub-pixel camera-yaw metric.
 - [Do not clear a MaterialPropertyBlock another system owns](notes/dont-clobber-existing-material-property-blocks.md) — Restoring with SetPropertyBlock(null) clears the block rather than restoring it; check HasPropertyBlock() in the base state before adding a renderer to a toggle list.
 - [Edge-on leaf cards smear into streaks up close; fade cards at glancing angles](notes/fade-edge-on-leaf-cards-at-glancing-angles.md) — Cards seen edge-on smear into streaks within ~1 m; Crispy Foliage's 'Fade at Glancing Angles' (_EdgeFade 1) removes them with only 1–2 % pixel change at distance; 0.5 is a middle setting if edge-on cards turn into dots.
 - [Fill a card crown with bigger cards and smaller-leaved sprays, never with dense clump sprays or extra cards](notes/bigger-cards-smaller-leaves-fill-crowns.md) — Dense foliage-clump sprays plus extra cards measured fuller but read as stacked textures and were rejected; drawing each spray as a bigger open branch with leaves ~1/16 of the image height and scaling cards ×1.6 kept real leaf size and gave a fuller silhouette that was approved.
