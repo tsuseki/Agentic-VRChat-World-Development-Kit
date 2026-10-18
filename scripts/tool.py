@@ -677,18 +677,69 @@ def blender_path(cfg: dict) -> str:
     return found
 
 
+def _pid_alive(pid: int) -> bool:
+    if os.name == "nt":  # os.kill(pid, 0) would terminate the process on Windows
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        code = ctypes.c_ulong()
+        ok = k.GetExitCodeProcess(h, ctypes.byref(code)); k.CloseHandle(h)
+        return bool(ok) and code.value == 259  # STILL_ACTIVE
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        pass
+    return True
+
+
+def _blender_slot(limit: int) -> Path:
+    """Machine-wide cap on concurrent headless Blender runs (many agents at once froze the owner's PC).
+    A slot is a lock file holding the owning tool.py pid; files of dead pids are reclaimed."""
+    d = Path(tempfile.gettempdir()) / "awdk_blender_slots"
+    d.mkdir(exist_ok=True)
+    waited = False
+    while True:
+        for i in range(limit):
+            p = d / f"slot{i}.lock"
+            try:
+                fd = os.open(p, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                try:
+                    owner = int(p.read_text() or 0)
+                except (OSError, ValueError):
+                    continue  # being written right now
+                if owner and not _pid_alive(owner):
+                    p.unlink(missing_ok=True)
+                continue
+            os.write(fd, str(os.getpid()).encode()); os.close(fd)
+            return p
+        if not waited:
+            log(f"waiting for a Blender slot ({limit} running)")
+            waited = True
+        time.sleep(3)
+
+
 def run_blender(args, extra: list[str]) -> int:
-    exe = blender_path(load_config())
+    cfg = load_config()
+    exe = blender_path(cfg)
     argv = [exe, "-b", "--factory-startup"]
     if args.blend:
         argv.append(args.blend)
     argv += ["--python", args.script, "--", *extra]
+    limit = int(os.environ.get("AWDK_BLENDER_SLOTS") or cfg.get("blender", {}).get("max_parallel", 2))
+    slot = _blender_slot(max(1, limit))
     log("running: " + " ".join(argv))
     try:
         return subprocess.run(argv, timeout=args.timeout or None).returncode
     except subprocess.TimeoutExpired:
         log(f"Blender timed out after {args.timeout} s")
         return 1
+    finally:
+        slot.unlink(missing_ok=True)
 
 
 def check(tools: list[str]) -> int:
