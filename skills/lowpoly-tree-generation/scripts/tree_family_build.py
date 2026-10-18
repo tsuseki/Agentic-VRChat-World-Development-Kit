@@ -62,7 +62,7 @@ from mathutils import Vector, Quaternion, noise
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 def _opt(k, d=None): return argv[argv.index(k) + 1] if k in argv else d
-NAME = argv[0]; LOD1 = "--lod1" in argv; QA = _opt("--qa")
+NAME = argv[0]; LOD1 = "--lod1" in argv; QA = _opt("--qa"); QA = QA and os.path.abspath(QA)  # Blender resolves relative render paths oddly
 TEXDIR = os.path.abspath(_opt("--tex", ".")) + "/"
 OUT = os.path.abspath(_opt("--out", ".")) + "/"
 SRC = os.path.abspath(_opt("--blend", OUT)) + "/"
@@ -1055,6 +1055,7 @@ bpy.ops.wm.save_as_mainfile(filepath=SRC + f"{NAME}_Tree.blend", relative_remap=
 
 if QA:  # internal check only
     sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.samples = 24; sc.cycles.use_denoising = True
+    sc.cycles.transparent_max_bounces = 128  # stacked alpha cards: the default 8 renders black leaf patches
     sc.render.resolution_x, sc.render.resolution_y = 720, 900
     world = bpy.data.worlds.new("w"); sc.world = world; world.use_nodes = True
     world.node_tree.nodes["Background"].inputs[0].default_value = (0.55, 0.58, 0.62, 1)
