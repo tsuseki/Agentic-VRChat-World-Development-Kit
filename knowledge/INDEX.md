@@ -4,7 +4,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## Topics
 
-- [lighting-baking](#lighting-baking) (61)
+- [lighting-baking](#lighting-baking) (62)
 - [probes-reflection-and-light](#probes-reflection-and-light) (20)
 - [materials-textures-shaders](#materials-textures-shaders) (33)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (26)
@@ -75,6 +75,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [ShadowsOnly sun-leak occluders must sit behind the visible wall, never inside the room](notes/shadows-only-occluders-must-sit-behind-the-shell.md) — Reusing blockout boxes as ShadowsOnly occluders bakes walls solid black when the box sits on the room side of the visible face, and shared interior walls cannot carry an occluder at all.
 - [Single-face walls leak sunlight; add thick ShadowsOnly occluders](notes/zero-thickness-walls-leak-sun-use-shadow-only-occluders.md) — One-sided faces cast no shadow from behind, and even TwoSided zero-thickness walls leak a bright band at wall/ceiling seams; re-enable the blockout boxes as ShadowsOnly occluders.
 - [Small emissive fixtures light nothing in a bake; give them a real Light](notes/small-emissive-fixtures-need-a-real-light.md) — Baked emissive contribution scales with emitter area, so a point-like emissive lens under about 0.25 m2 lights nothing and needs a baked Light component.
+- [Small flush wall fittings blotch when lightmapped; make them probe-lit](notes/small-flush-wall-fittings-probe-lit-not-lightmapped.md) — A 9 x 14 cm switch plate gets 3-4 lightmap texels and bakes a half-black smear, so wall plates, outlets and vents are probe-lit; moving one exposes its baked contact shadow, and the probe-lit plate needs a gamma-encoded tint to match the wall.
 - [Static objects with no Bakery lightmap group selector land on a tiny 16x16 implicit lightmap](notes/bakery-objects-without-group-selector-bake-at-16x16.md) — In a scene with explicit Bakery groups, a ContributeGI object with no BakeryLightmapGroupSelector on itself or an ancestor drops into an implicit group that can resolve to 16x16 — lit flat or black, yet every "is it lightmapped" check passes.
 - [Tell dark geometry from a baked shadow by re-rendering the same pixel with the renderer disabled](notes/toggle-renderer-to-tell-dark-geometry-from-baked-shadow.md) — To decide whether a dark band is a baked shadow or simply dark geometry, render twice from a fixed camera with the suspect renderer on and off and compare the same pixel — not against "the surface either side".
 - [Tiled terrain at ~1 texel/m casts no readable shadows and shows a seam at every tile](notes/tiled-terrain-low-texel-density-kills-contact-shadows.md) — At ~1 texel/metre nothing throws a ground shadow and props read pasted on; separate tile renderers are independent charts, so each boundary shows a bright bleed line that fixSeams cannot stitch.
