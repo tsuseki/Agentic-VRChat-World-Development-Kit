@@ -1,9 +1,17 @@
-"""Leaf-spray atlas: up to four keyed branch photos (gpt-image on a flat key colour), one per
-1024x1024 cell of a 2048x2048 atlas (2x2 grid), each with its stem base pinned to the cell's
-bottom-centre so sprig cards can root that point exactly on a branch axis.
+"""Leaf-spray atlas: keyed branch photos (gpt-image on a flat key colour), one per atlas cell, each with its stem
+base pinned to the cell's bottom-centre so sprig cards can root that point exactly on a branch axis.
 
   python branch_atlas.py <out_RGBA.png> <out.json> <src_a.png> [src_b.png ...] [--key magenta|green|cyan|blue|yellow]
-                         [--edge-despill] [--defringe]
+                         [--edge-despill] [--defringe] [--layout <layout.json>]
+
+Default (no --layout): up to four 1024x1024 cells of a 2048x2048 atlas (2x2 grid).
+--layout: cells from a layout file (image-space pixels, y down), one source per cell, e.g. the column layout with
+a bark strip on the right and rectangular leaf cells:
+  {"size": 2048, "bark_w": 512, "cells": [[x, y, w, h], ...]}
+The bark strip (x >= size - bark_w) is left transparent here; tree_atlas.py --layout column fills it. Cards built
+from rectangular cells get the cell's width/height (tree_family_build.py), so leaves are not distorted. Keep 8 px
+transparent at the atlas top and bottom (cells inside [8, size - 8] in y) so the texture's vertical Repeat never
+bleeds a stem into a tip. The layout is copied into the JSON ("layout").
 
 Each source is keyed with process_gpt_textures.leaf(soft=True) (anti-aliased matte, despill, colour
 dilation; --edge-despill: despill only next to the matte edge, for flowers near the key colour; --defringe:
@@ -21,13 +29,22 @@ from scipy import ndimage
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from process_gpt_textures import leaf, EDGE_DESPILL
 
-ARGS = [a for a in sys.argv[1:] if not a.startswith("--")]
-KEY = sys.argv[sys.argv.index("--key") + 1] if "--key" in sys.argv else "magenta"
-if KEY in ARGS: ARGS.remove(KEY)
+def _opt(k):
+    return sys.argv[sys.argv.index(k) + 1] if k in sys.argv else None
+
+KEY = _opt("--key") or "magenta"
+LAYOUT_FILE = _opt("--layout")
+ARGS = [a for i, a in enumerate(sys.argv[1:], 1)
+        if not a.startswith("--") and sys.argv[i - 1] not in ("--key", "--layout")]
 EDGE = EDGE_DESPILL if "--edge-despill" in sys.argv else 0
 DEFRINGE = "--defringe" in sys.argv
-SOURCES = ARGS[2:6]
-SIZE, CELL, MARGIN, STEM_ROWS = 2048, 1024, 16, 3
+MARGIN, STEM_ROWS = 16, 3
+if LAYOUT_FILE:
+    LAYOUT = json.load(open(LAYOUT_FILE))
+    SIZE = LAYOUT["size"]; CELLS = [tuple(c) for c in LAYOUT["cells"]]
+else:
+    LAYOUT = None; SIZE = 2048; CELLS = [(c * 1024, r * 1024, 1024, 1024) for r in range(2) for c in range(2)]
+SOURCES = ARGS[2:2 + len(CELLS)]
 
 
 def stem_end(alpha):
@@ -43,6 +60,7 @@ def main(out_png, out_json):
     cells = []
     tmpdir = tempfile.mkdtemp(prefix="branch_atlas_")  # private per run: parallel runs never share files
     for i, src in enumerate(SOURCES):
+        cx0, cy0, cw, ch = CELLS[i]
         tmp = os.path.join(tmpdir, f"spray_{i}.png")
         leaf(src, tmp, KEY, soft=True, edge_despill=EDGE, defringe=DEFRINGE)
         im = Image.open(tmp); im.load()
@@ -51,17 +69,15 @@ def main(out_png, out_json):
         im = im.crop(im.split()[3].point(lambda v: 255 if v > 0 else 0).getbbox())
         xe, _ = stem_end(np.array(im.split()[3]))
         half = max(xe, im.width - xe)
-        k = min((CELL / 2 - MARGIN - 4) / half, (CELL - MARGIN - 4) / im.height)  # fit with 4 px slack so resampling never reaches the margin
+        k = min((cw / 2 - MARGIN - 4) / half, (ch - MARGIN - 4) / im.height)  # fit with 4 px slack so resampling never reaches the margin
         im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))), Image.LANCZOS)
         a = np.array(im.split()[3])
         xe, ye = stem_end(a)
-        col, row = i % 2, i // 2
-        cx0, cy0 = col * CELL, row * CELL
-        ox = cx0 + CELL // 2 - int(round(xe))           # stem centroid -> cell centre column
-        oy = cy0 + CELL - 1 - ye                         # last opaque row -> cell bottom row
+        ox = cx0 + cw // 2 - int(round(xe))           # stem centroid -> cell centre column
+        oy = cy0 + ch - 1 - ye                         # last opaque row -> cell bottom row
         atlas.alpha_composite(im, (ox, oy))
-        cells.append({"rect": [cx0 / SIZE, 1 - (cy0 + CELL) / SIZE, (cx0 + CELL) / SIZE, 1 - cy0 / SIZE],
-                      "attach": [(cx0 + CELL / 2) / SIZE, 1 - (cy0 + CELL) / SIZE],
+        cells.append({"rect": [cx0 / SIZE, 1 - (cy0 + ch) / SIZE, (cx0 + cw) / SIZE, 1 - cy0 / SIZE],
+                      "attach": [(cx0 + cw / 2) / SIZE, 1 - (cy0 + ch) / SIZE],
                       "stem_offset_px_before": round(float(before), 2)})
     arr = np.array(atlas).astype(np.float32)
     solid = arr[..., 3] >= 250  # colour of every non-opaque texel comes from the opaque core
@@ -70,15 +86,17 @@ def main(out_png, out_json):
     Image.fromarray(arr.astype(np.uint8), "RGBA").save(out_png)
     alpha = arr[..., 3]
     for i, c in enumerate(cells):
-        col, row = i % 2, i // 2
-        cx = alpha[row * CELL:(row + 1) * CELL, col * CELL:(col + 1) * CELL]
+        cx0, cy0, cw, ch = CELLS[i]
+        cx = alpha[cy0:cy0 + ch, cx0:cx0 + cw]
         xe, ye = stem_end(cx)
-        c["stem_offset_px_after"] = round(float(xe + 0.5 - CELL / 2), 2)   # pixel centre vs cell centre line
-        c["stem_rows_from_bottom"] = int(CELL - 1 - ye)
+        c["stem_offset_px_after"] = round(float(xe + 0.5 - cw / 2), 2)   # pixel centre vs cell centre line
+        c["stem_rows_from_bottom"] = int(ch - 1 - ye)
         band = np.zeros(cx.shape, bool); band[:MARGIN] = True; band[:, :MARGIN] = band[:, -MARGIN:] = True
         c["border_alpha_px_top_left_right"] = int(((cx > 0) & band).sum())
         print("CELL", c)
-    json.dump({"cells": cells}, open(out_json, "w"), indent=1)
+    out = {"cells": cells}
+    if LAYOUT: out["layout"] = LAYOUT
+    json.dump(out, open(out_json, "w"), indent=1)
 
 
 if __name__ == "__main__":

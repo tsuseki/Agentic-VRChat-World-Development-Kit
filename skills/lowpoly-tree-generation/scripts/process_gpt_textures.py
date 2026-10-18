@@ -102,9 +102,10 @@ def leaf(src, dst, key, triple=False, soft=False, edge_despill=0, defringe=False
         idx = ndimage.distance_transform_edt(~a2, return_distances=False, return_indices=True)
         img = Image.fromarray(np.dstack([arr[..., :3][idx[0], idx[1]], np.where(a2, 255, 0)]).astype(np.uint8), "RGBA")
     if img.width != 2048:
-        # upscale colour smoothly, alpha re-thresholded to stay hard
-        c = img.convert("RGB").resize((2048, 2048), Image.LANCZOS)
-        a = img.split()[3].resize((2048, 2048), Image.BICUBIC if soft else Image.BILINEAR)
+        # upscale to 2048 wide keeping the aspect (portrait sprays for 3:4 cells); colour smooth, alpha re-thresholded to stay hard
+        size = (2048, round(2048 * img.height / img.width))
+        c = img.convert("RGB").resize(size, Image.LANCZOS)
+        a = img.split()[3].resize(size, Image.BICUBIC if soft else Image.BILINEAR)
         if not soft:
             a = a.point(lambda v: 255 if v >= 128 else 0)
         c.putalpha(a); img = c

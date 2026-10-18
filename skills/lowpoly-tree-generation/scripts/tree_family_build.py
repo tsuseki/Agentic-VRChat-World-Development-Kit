@@ -17,6 +17,10 @@
 #                                    (<= 30 % of the stem; `steps` rings), plus a closed skirt ring `skirt` m below ground
 #   side=[dict(n, z=(lo,hi), len, ang, r, tip, gnarl, up)]  extra trunk limbs/stubs at given heights (no children)
 #   vines=dict(count, size, z=(lo,hi))   hanging sprig cards under depth>=1 branches (epiphytes / draped foliage)
+#   low_tips=dict(min=3, n=4, reach=1.0, size=0.6, ground=0.1, cut=0.3)   bare low limbs (sprig): every terminal limb
+#       chain carrying fewer than `min` cards gets `n` more over its outer `reach` m (one at the tip), card length
+#       `size`, kept above `ground`; chains lying entirely below `cut` m (ground limbs, never leafy) are not meshed.
+#       Added after every other card with its own random sequence: no other card moves. Off = identical builds.
 #   lod1_cards (0.6), lod1_size (1.35)   LOD1 card count and size factors
 #   lod1_subset=dict(keep=1.0, grow=1.0)   LOD1 = LOD0 thinned in place instead of rebuilt: same skeleton and card
 #       draws, every other tube ring, lod1_sides, all tip cards plus a `keep` share of the rest, `grow` x larger and
@@ -585,10 +589,11 @@ def tube(bm, br, sides, lobe_amt, cap):
             f = bm.faces.new((ring[s], ring[(s + 1) % sides], apex)); f.material_index = 0
 
 def card(bm, uvl, base, d, nrm, s, fold, cell=None):
-    """cell (atlas cell dict from <tex>_Leaves_Cards.json): UVs span that cell instead of the whole texture."""
-    d = d.normalized(); nrm = (nrm - d * nrm.dot(d)).normalized(); side = nrm.cross(d)
-    w = side * s * 0.5; base = base - d * s * 0.05; top = base + d * s; fv = nrm * s * fold
+    """cell (atlas cell dict from <tex>_Leaves_Cards.json): UVs span that cell instead of the whole texture; the card
+    width follows the cell's width/height (square atlas: UV ratio = pixel ratio; square cells = square cards)."""
     u0, v0, u1, v1 = cell["rect"] if cell else (0.0, 0.0, 1.0, 1.0)
+    d = d.normalized(); nrm = (nrm - d * nrm.dot(d)).normalized(); side = nrm.cross(d)
+    w = side * s * 0.5 * (u1 - u0) / (v1 - v0); base = base - d * s * 0.05; top = base + d * s; fv = nrm * s * fold
     if fold > 0:
         vs = [bm.verts.new(x) for x in (base - w, base + fv, base + w, top + w, top + fv, top - w)]
         for idx, us in (((0, 1, 4, 5), (0, .5, .5, 0)), ((1, 2, 3, 4), (.5, 1, 1, .5))):
@@ -600,17 +605,19 @@ def card(bm, uvl, base, d, nrm, s, fold, cell=None):
         for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))): loop[uvl].uv = (u0 + u * (u1 - u0), v0 + v * (v1 - v0))
 
 def sprig_card(bm, uvl, A, d, roll, s, fold, cell, dry=False):
-    """Card whose atlas stem-base attach point lands exactly on A (a point on a branch axis).
+    """Card whose atlas stem-base attach point lands exactly on A (a point on a branch axis); s = card length,
+    width = s x the cell's width/height (square cells: square cards).
     dry: only return its corner points (0,0), (1,0), (1,1), (0,1), nothing is created."""
     d = d.normalized(); n = (roll - d * roll.dot(d)).normalized(); side = n.cross(d)
     u0, v0, u1, v1 = cell["rect"]
     au = (cell["attach"][0] - u0) / (u1 - u0); av = (cell["attach"][1] - v0) / (v1 - v0)
+    sw = s * (u1 - u0) / (v1 - v0)
     fv = n * s * fold
-    O = A - (side * (au - 0.5) * s + d * av * s + fv * max(0.0, 1.0 - abs(au - 0.5) * 2))
+    O = A - (side * (au - 0.5) * sw + d * av * s + fv * max(0.0, 1.0 - abs(au - 0.5) * 2))
     grid = ((0, 0), (.5, 0), (1, 0), (1, 1), (.5, 1), (0, 1)) if fold > 0 else ((0, 0), (1, 0), (1, 1), (0, 1))
-    if dry: return [O + side * (lu - 0.5) * s + d * lv * s for lu, lv in ((0, 0), (1, 0), (1, 1), (0, 1))]
+    if dry: return [O + side * (lu - 0.5) * sw + d * lv * s for lu, lv in ((0, 0), (1, 0), (1, 1), (0, 1))]
     first = len(bm.verts)
-    vs = [bm.verts.new(O + side * (lu - 0.5) * s + d * lv * s + (fv if lu == 0.5 else Vector())) for lu, lv in grid]
+    vs = [bm.verts.new(O + side * (lu - 0.5) * sw + d * lv * s + (fv if lu == 0.5 else Vector())) for lu, lv in grid]
     quads = ((0, 1, 4, 5), (1, 2, 3, 4)) if fold > 0 else ((0, 1, 2, 3),)
     for q in quads:
         f = bm.faces.new([vs[k] for k in q]); f.material_index = 1
@@ -633,6 +640,28 @@ def terminal_ends(branches):
     starts = [(b.pts[0], b.depth) for b in branches]
     return [b for b in branches if getattr(b, "cont", None) is None
             and not any(dep > b.depth and (p - b.pts[-1]).length < 0.2 for p, dep in starts)]
+
+def limb_chain(branches, b):
+    """Members of the merged tube ending in terminal branch b (head first): parents that continue into it (merge)."""
+    up = {id(x.cont): x for x in branches if getattr(x, "cont", None) is not None}
+    ch = [b]
+    while id(ch[0]) in up: ch.insert(0, up[id(ch[0])])
+    return ch
+
+def low_cut(branches):
+    """low_tips cut: indices of tube heads whose whole merged chain lies below `cut` m and has no other branch rooted
+    on it (a bare ground limb is dropped, not leafed; it never carries cards, so no card moves)."""
+    LT = CFG.get("low_tips")
+    if not LT or not LT.get("cut"): return set()
+    out = set(); idx = {id(x): i for i, x in enumerate(branches)}
+    for b in terminal_ends(branches):
+        ch = limb_chain(branches, b)
+        if ch[0].depth == 0 or max(p.z for x in ch for p in x.pts) >= LT["cut"]: continue
+        ids = {id(x) for x in ch}
+        if any(id(c) not in ids and c.depth > ch[0].depth and min((c.pts[0] - p).length for x in ch for p in x.pts) < 0.2
+               for c in branches): continue
+        out.add(idx[id(ch[0])])
+    return out
 
 def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
     """keep (lod1_subset): place the LOD0 cards with the LOD0 random sequence, but build only the tip cards plus
@@ -755,6 +784,26 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             if A.z + d.z * size < c0.z - h / 2 - 0.2: continue
             n0 = len(cards); place(b, t, d, nrm=(f + rand_unit(rng) * 0.35).normalized(), exact=False)
             made += len(cards) - n0
+        size = base
+    LT = CFG.get("low_tips")
+    if LT:  # bare low limbs: chains with fewer than `min` cards get `n` cards over their outer `reach` m, one at the tip
+        rng = random.Random(7907)  # own sequence, placed last: every card above is unchanged (place() reads this rng)
+        base, size = size, LT.get("size", size); g0 = C.get("ground"); C["ground"] = LT.get("ground", 0.1)
+        cut = {id(branches[i]) for i in low_cut(branches)}
+        blen = lambda x: sum((x.pts[i + 1] - x.pts[i]).length for i in range(len(x.pts) - 1))
+        for b in terminal_ends(branches):
+            ch = limb_chain(branches, b); ids = {id(x) for x in ch}
+            if id(ch[0]) in cut or sum(id(c[3]) in ids for c in cards) >= LT.get("min", 3): continue
+            segs = [(x, blen(x)) for x in reversed(ch)]  # tip member first
+            for k in range(LT.get("n", 4)):
+                s = 0.03 * blen(b) if k == 0 else rng.uniform(0.0, LT.get("reach", 1.0))  # arc length back from the tip
+                for x, L in segs:
+                    if s <= L or x is ch[0]: break
+                    s -= L
+                t = max(0.05, min(0.97, 1.0 - s / max(L, 1e-6)))
+                _, _, d = point_at(x, t); place(x, t, d)
+        C["ground"] = g0
+        if g0 is None: del C["ground"]
         size = base
     return [c for c in cards if c[0] is not None]
 
@@ -941,8 +990,9 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
     deep = max(b.depth for b in branches)
     S0, S1 = CFG.get("sides", (7, 5, 4)), CFG.get("lod1_sides", (5, 4, 3))
     spans = []  # (skeleton index, first bark face, end) per meshed tube
+    cut = low_cut(branches)  # low_tips: bare ground limbs are not meshed
     for bi, b in enumerate(branches):
-        if getattr(b, "merged_into", None) is not None: continue  # its axis is the tail of its parent's tube
+        if getattr(b, "merged_into", None) is not None or bi in cut: continue  # merged: its axis is the tail of its parent's tube
         St = S1 if lod1 else S0
         if getattr(b, "sides", None): sides = b.sides
         elif b.depth == 0: sides = St[0]
