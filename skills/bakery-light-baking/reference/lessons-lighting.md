@@ -38,6 +38,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Before any bulk change to lighting or static flags, snapshot each renderer's `lightmapIndex` and compare the expected touch count with the actual one** — a predicate written from one diagnosis can silently revert renderers fixed in the last pass while its own metric reports success.
 - **Aim spot and wash lights with `LookRotation(target - pos)` and assert that `dot(forward, toTarget) > 0.99`** — a hand-typed Euler angle can point a light 180° away, and you only find out after a full bake.
 - **In a sealed-light audit, skip directional lights and inactive or disabled renderers, and treat a light sitting on a face as escaped (require a margin)** — a raw `bounds.Contains` check double-counts lights and the escape pass never converges.
+- **After adding or cloning Baked lights without a bake, copy a baked sibling's `bakingOutput` onto them and assert zero active lights with `!bakingOutput.isBaked`** — Unity lights meshes from `bakingOutput`, not `lightmapBakeType`, so an unbaked "Baked" spot renders realtime in the editor and in the uploaded world.
 
 ## Leaks, occluders and black shade
 

@@ -4,7 +4,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## Topics
 
-- [lighting-baking](#lighting-baking) (62)
+- [lighting-baking](#lighting-baking) (63)
 - [probes-reflection-and-light](#probes-reflection-and-light) (20)
 - [materials-textures-shaders](#materials-textures-shaders) (33)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (26)
@@ -57,6 +57,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Move small objects to light probes instead of fighting overlapping-UV warnings](notes/probe-light-small-objects-instead-of-lightmapping.md) — Unity's overlapping-UV warning on small trim cannot be fixed by pack margin; keep ContributeGI but set receiveGI to LightProbes for renderers under ~1.3 m.
 - [Near-white albedo on large interior surfaces makes sealed rooms bake hypersensitive and blown](notes/white-albedo-ceilings-make-sealed-rooms-bake-hot.md) — Multi-bounce gain is ~1/(1−albedo), so an albedo-1.0 ceiling turned an 18% light increase into a 5× brighter bake; lower the albedo of the big bright surface, not the lights or the floor.
 - [Never lightmap glass panes — set receiveGI to LightProbes](notes/glass-should-be-probe-lit-not-lightmapped.md) — Thin transparent panes are the worst lightmap clients — huge atlas demand and structural gutter bleed — so sweep them to receiveGI = LightProbes before baking.
+- [New or cloned Baked lights render as realtime until their bakingOutput says baked](notes/new-baked-lights-render-realtime-until-bakingoutput-set.md) — A Light set to Baked but created or duplicated after the last bake has bakingOutput.isBaked = false, so Unity draws it as a realtime light in the editor and in builds; copy a baked sibling's bakingOutput (or bake) before saving.
 - [One mesh with garbage UV2 breaks every renderer in its Bakery lightmap group](notes/one-bad-uv2-poisons-bakery-atlas.md) — A single mesh with out-of-range UV2 makes Bakery's xatlas packer fail for the whole lightmap group, giving infinite lightmapScaleOffset on hundreds of renderers; assert finite offsets after every bake and scan UV2 ranges for the one culprit.
 - [Outdoor shade bakes pitch black when the sun has bakeToIndirect off](notes/sun-bake-to-indirect-off-makes-outdoor-shade-black.md) — With bakeToIndirect=false the sun produces zero bounce; with black flat ambient every shaded exterior bakes to ~0 with a hard edge.
 - [Overlapping lightmap UVs' on ProBuilder meshes is usually a gutter-in-texels problem](notes/overlapping-lightmap-uv-warning-is-a-gutter-problem.md) — ProBuilder's UV2 pack margin is a UV-space constant while Unity's padding is in texels, so islands bleed and props bake black; measure the gap in texels, widen packMargin until it clears padding+1, then trim scaleInLightmap back.
