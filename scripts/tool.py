@@ -726,15 +726,21 @@ def _blender_slot(limit: int) -> Path:
 def run_blender(args, extra: list[str]) -> int:
     cfg = load_config()
     exe = blender_path(cfg)
+    bcfg = cfg.get("blender", {})
     argv = [exe, "-b", "--factory-startup"]
+    threads = int(os.environ.get("AWDK_BLENDER_THREADS") or bcfg.get("threads", 0))
+    if threads > 0:
+        argv += ["-t", str(threads)]  # render/compute threads; 0 = all cores
     if args.blend:
         argv.append(args.blend)
     argv += ["--python", args.script, "--", *extra]
-    limit = int(os.environ.get("AWDK_BLENDER_SLOTS") or cfg.get("blender", {}).get("max_parallel", 2))
+    limit = int(os.environ.get("AWDK_BLENDER_SLOTS") or bcfg.get("max_parallel", 2))
     slot = _blender_slot(max(1, limit))
     log("running: " + " ".join(argv))
+    # below-normal priority so batch runs never starve the owner's desktop and editors
+    flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) if bcfg.get("low_priority", True) else 0
     try:
-        return subprocess.run(argv, timeout=args.timeout or None).returncode
+        return subprocess.run(argv, timeout=args.timeout or None, creationflags=flags).returncode
     except subprocess.TimeoutExpired:
         log(f"Blender timed out after {args.timeout} s")
         return 1
