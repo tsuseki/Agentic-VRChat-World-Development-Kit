@@ -13,6 +13,8 @@
 #       (5 x 5 samples) is checked last and the card dropped if any of it reaches into a volume (not screen cards:
 #       a screen is placed on purpose, e.g. beside a never-walked bridge it must hide)
 #   buttress=dict(n, z=(lo,hi), reach=(lo,hi), r)   flaring roots from the lower trunk down to z=0
+#   flare=dict(r=1.3, h=0.35, skirt=0.05, steps=2)   root flare: ground-rooted stems widen to r x at z=0 over h m
+#                                    (<= 30 % of the stem; `steps` rings), plus a closed skirt ring `skirt` m below ground
 #   side=[dict(n, z=(lo,hi), len, ang, r, tip, gnarl, up)]  extra trunk limbs/stubs at given heights (no children)
 #   vines=dict(count, size, z=(lo,hi))   hanging sprig cards under depth>=1 branches (epiphytes / draped foliage)
 #   lod1_cards (0.6), lod1_size (1.35)   LOD1 card count and size factors
@@ -180,6 +182,8 @@ if "bark_tile" in CFG:  # metres per bark texture repeat (default tree_uv.TILE 0
     tree_uv.TILE = CFG["bark_tile"]
 if "bark_tile_min" in CFG:  # repeat scales with tube radius: bark_tile at bark_tile_r and above, bark_tile_min on twigs
     tree_uv.TILE_MIN = CFG["bark_tile_min"]; tree_uv.TILE_R = CFG.get("bark_tile_r", 1.0)
+if CFG.get("flare"):  # flared stem bases keep the plain stem's wraps and repeat (no texture shear over the flare)
+    tree_uv.FLARE_H = CFG["flare"].get("h", 0.35)
 BARKN = CFG.get("bark_tex", TEXN)  # bark texture set may differ from the leaf set
 TEX = TEXDIR
 
@@ -503,11 +507,38 @@ def build_skeleton(seed):
 # --------------------------------------------------------------------------- meshing
 TIP_R = 0.003  # radius of a tapered branch end (m)
 
+def flare_axis(br):
+    """CFG flare=dict(r=1.3, h=0.35, skirt=0.05, steps=2): the ground ring of a ground-rooted stem (depth 0, base at
+    z=0) widens to r x its radius, easing back (quadratic, concave) to the plain radius h m up the axis (h at most 30 %
+    of the stem's length, so short bush stems are not flared end to end), with rings added at h*j/steps
+    (j = 1..steps) unless a skeleton point sits within 2 cm; one closed skirt ring sits `skirt` m below z=0.
+    Mesh only: the skeleton (cards, attach, merges) is unchanged. Returns (pts, radii, skirt depth or None, h)."""
+    F = CFG.get("flare")
+    if not F or br.depth != 0 or br.pts[0].z > 0.05 or len(br.pts) < 2: return br.pts, br.radii, None, 0.0
+    fr, sk, n = F.get("r", 1.3), F.get("skirt", 0.05), F.get("steps", 2)
+    h = min(F.get("h", 0.35), 0.3 * sum((br.pts[i + 1] - br.pts[i]).length for i in range(len(br.pts) - 1)))
+    ease = lambda s: 1.0 + (fr - 1.0) * max(0.0, 1.0 - s / h) ** 2
+    pts, radii = [br.pts[0].copy()], [br.radii[0] * fr]; acc = 0.0
+    for i in range(1, len(br.pts)):
+        a, b = br.pts[i - 1], br.pts[i]; L = (b - a).length
+        for j in range(1, n + 1):
+            s = h * j / n
+            if acc + 0.02 < s < acc + L - 0.02:
+                t = (s - acc) / L
+                pts.append(a.lerp(b, t)); radii.append((br.radii[i - 1] + (br.radii[i] - br.radii[i - 1]) * t) * ease(s))
+        acc += L
+        pts.append(b.copy()); radii.append(br.radii[i] * ease(acc))
+    return [pts[0] - Vector((0, 0, sk))] + pts, [radii[0]] + radii, sk, h
+
 def tube(bm, br, sides, lobe_amt, cap):
     rings = []; acc = 0.0; prev_n = None
-    for i, (p, r) in enumerate(zip(br.pts, br.radii)):
-        t = (br.pts[i + 1] - p).normalized() if i < len(br.pts) - 1 else (p - br.pts[i - 1]).normalized()
-        if i > 0: acc += (p - br.pts[i - 1]).length
+    pts, radii, skirt, fh = flare_axis(br)
+    for i, (p, r) in enumerate(zip(pts, radii)):
+        t = (pts[i + 1] - p).normalized() if i < len(pts) - 1 else (p - pts[i - 1]).normalized()
+        if i > 0: acc += (p - pts[i - 1]).length
+        if skirt is not None:  # flare rings tilt from horizontal at the ground (no flattened ellipse, no squashed
+            w = min(1.0, max(0.0, (acc - skirt) / max(fh, 1e-3)))  # quads on a leaning stem) to the axis direction at h
+            t = (UP * (1.0 - w) + t * w).normalized()
         if prev_n is None:
             n = UP.cross(t)
             if n.length < 1e-4: n = Vector((1, 0, 0)).cross(t)
@@ -526,13 +557,18 @@ def tube(bm, br, sides, lobe_amt, cap):
             a = 2 * math.pi * s / sides
             lobe = 1.0 + lb * math.sin(3 * a + ph)
             q = p + (n * math.cos(a) + b * math.sin(a)) * r * lobe
-            if i == 0 and br.depth == 0: q.z = 0.0
+            if br.depth == 0 and i == (1 if skirt is not None else 0): q.z = 0.0
+            elif i == 0 and skirt is not None: q.z = -skirt
             ring.append(bm.verts.new(q))
         rings.append((ring, acc))
     for (r0, v0), (r1, v1) in zip(rings, rings[1:]):
         for s in range(sides):
             s2 = (s + 1) % sides
             f = bm.faces.new((r0[s], r0[s2], r1[s2], r1[s])); f.material_index = 0
+    if skirt is not None:  # flat disc closing the skirt ring below ground: no open bottom edge
+        ring = rings[0][0]; c = bm.verts.new(Vector((pts[0].x, pts[0].y, -skirt)))
+        for s in range(sides):
+            f = bm.faces.new((ring[(s + 1) % sides], ring[s], c)); f.material_index = 0
     if br.depth > 0 and CFG.get("taper"):  # base ring closed by a cone buried in the parent: no open fork ring
         ring = rings[0][0]
         t = (br.pts[1] - br.pts[0]).normalized()
@@ -1018,9 +1054,10 @@ def tris(o, mi=None): return sum(len(p.vertices) - 2 for p in o.data.polygons if
 def bounds(o):
     vs = [v.co for v in o.data.vertices]
     return [round(min(v[i] for v in vs), 2) for i in range(3)], [round(max(v[i] for v in vs), 2) for i in range(3)]
-def coplanar_pairs(obj, eps=1e-4):
+def coplanar_pairs(obj, eps=1e-4):  # faces not above ground (flare skirt walls and discs) are never seen: not counted
     me = obj.data; hits = 0
-    faces = [(p.normal.normalized(), p.center.copy(), [me.vertices[i].co.copy() for i in p.vertices]) for p in me.polygons if p.material_index == 0]
+    faces = [(p.normal.normalized(), p.center.copy(), [me.vertices[i].co.copy() for i in p.vertices]) for p in me.polygons
+             if p.material_index == 0 and max(me.vertices[i].co.z for i in p.vertices) > 1e-6]
     for (n1, c1, v1), (n2, c2, v2) in itertools.combinations(faces, 2):
         if abs(n1.dot(n2)) < 0.999 or abs(n1.dot(c2 - c1)) > eps: continue
         u = n1.orthogonal().normalized(); w = n1.cross(u)

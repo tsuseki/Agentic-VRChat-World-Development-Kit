@@ -21,6 +21,8 @@ INTEGER_WRAP_MIN = 0.75  # rings with circumference >= 0.75 * TILE snap to whole
 TILE_MIN = None
 TILE_R = 1.0
 OFFSET_SEED = None
+FLARE_H = None  # set by the builder when CFG flare is on: rings of a skirted stem (ring 0 below z=0) up to the flare
+                # height (FLARE_H, at most 30 % of the stem, as in the builder) take the wraps and repeat of the ring there
 FACE_TILE = {}  # (mesh name, polygon index) -> repeat used, so stretch_stats measures distortion, not the chosen scale
 
 
@@ -58,19 +60,24 @@ def cylinder_uvs(ob, layer="UVMap"):
     for rings, rows in tubes(me):
         sides = len(rings[0])
         centres = [sum((co[k] for k in r), Vector()) / sides for r in rings]
-        tile = TILE
-        if TILE_MIN is not None:
-            rad = sum((co[k] - centres[0]).length for k in rings[0]) / sides
-            tile = max(TILE_MIN, min(TILE, TILE * rad / TILE_R))
-        ou, ov = (rng.random(), rng.random()) if OFFSET_SEED is not None else (0.0, 0.0)
         acc = [0.0]
         for a, b in zip(centres, centres[1:]):
             acc.append(acc[-1] + (b - a).length)
+        k0 = 0  # reference ring for the repeat and the wraps of the flared rings below it
+        if FLARE_H is not None and len(rings) > 2 and centres[0].z < -1e-4:
+            fh = min(FLARE_H, 0.3 * (acc[-1] - acc[1]))
+            k0 = next((i for i in range(2, len(rings)) if acc[i] - acc[1] >= fh - 0.021), len(rings) - 1)
+        tile = TILE
+        if TILE_MIN is not None:
+            rad = sum((co[k] - centres[k0]).length for k in rings[k0]) / sides
+            tile = max(TILE_MIN, min(TILE, TILE * rad / TILE_R))
+        ou, ov = (rng.random(), rng.random()) if OFFSET_SEED is not None else (0.0, 0.0)
         wraps = []
         for r in rings:
             circ = sum((co[r[(s + 1) % sides]] - co[r[s]]).length for s in range(sides))
             w = circ / tile
             wraps.append(max(1, round(w)) if circ >= INTEGER_WRAP_MIN * tile else w)
+        wraps[:k0] = [wraps[k0]] * k0
         for ri, row in enumerate(rows):
             for s, p in enumerate(row):
                 FACE_TILE[(me.name, p.index)] = tile
@@ -90,6 +97,10 @@ def cylinder_uvs(ob, layer="UVMap"):
         if a in start_ring and b in start_ring and a not in end_ring:  # base cone (ring[s+1], ring[s], apex)
             s, sides, w, v, c, t, ou, ov = start_ring[b]
             la, lb, lc = p.loop_indices
+            if abs(co[apex].z - co[a].z) < 1e-6 and abs(co[apex].z - co[b].z) < 1e-6:  # flat disc (flare skirt bottom)
+                for li, k in zip((la, lb, lc), (a, b, apex)): uv[li].uv = (ou + co[k].x / t, ov + co[k].y / t)
+                FACE_TILE[(me.name, p.index)] = t
+                continue
             uv[la].uv = (ou + (s + 1) / sides * w, ov)
             uv[lb].uv = (ou + s / sides * w, ov)
             uv[lc].uv = (ou + (s + 0.5) / sides * w, ov - (co[apex] - c).length / t)
