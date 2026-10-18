@@ -61,7 +61,8 @@
 #       cards shrink/skip to stay above it); proxy="cone"
 #   bend (0.0)   upward pull per stem segment (a leaning palm trunk curving up), stem_segs (6) segments per stem
 #   crown mode "rosette" (palms, tree ferns, bananas): fronds radiating from every stem top; see rosette_crown()
-#       and SKILL.md. levels=[] allowed (no branches). crown atlas=True|[cells] (twig/ellipsoid/spindle): each card
+#       and SKILL.md. levels=[] allowed (no branches); suckers = `side` limbs at the trunk base (each its own head),
+#       rosette `head_pow` (opt-in) shrinks small heads' frond counts (x sc^head_pow) and zones. crown atlas=True|[cells] (twig/ellipsoid/spindle): each card
 #       shows one cell of <tex>_Leaves_Cards.json; tangent (0..1, ellipsoid): cards lie along the shell (topiary)
 import bpy, bmesh, math, random, itertools, sys, os
 from mathutils import Vector, Quaternion, noise
@@ -573,7 +574,8 @@ def tube(bm, br, sides, lobe_amt, cap):
         ring = rings[0][0]; c = bm.verts.new(Vector((pts[0].x, pts[0].y, -skirt)))
         for s in range(sides):
             f = bm.faces.new((ring[(s + 1) % sides], ring[s], c)); f.material_index = 0
-    if br.depth > 0 and CFG.get("taper"):  # base ring closed by a cone buried in the parent: no open fork ring
+    rosette = CFG["crown"]["mode"] == "rosette"  # palm suckers (side limbs, no taper) need the buried base cone too
+    if br.depth > 0 and (CFG.get("taper") or rosette):  # base ring closed by a cone buried in the parent: no open fork ring
         ring = rings[0][0]
         t = (br.pts[1] - br.pts[0]).normalized()
         apex = bm.verts.new(br.pts[0] - t * max(br.radii[0] * 1.5, 0.02))
@@ -582,8 +584,8 @@ def tube(bm, br, sides, lobe_amt, cap):
     if cap:  # pointed cone closes the branch end (no open ring / flat disc)
         ring = rings[-1][0]
         t = (br.pts[-1] - br.pts[-2]).normalized()
-        # forked trunk: a low crotch dome, not a spear; palm stem under a rosette: a blunt cone hidden in the frond bases
-        k = 0.35 if (br.depth == 0 and CFG.get("fork")) else 1.0 if (br.depth == 0 and CFG["crown"]["mode"] == "rosette") else 2.5
+        # forked trunk: a low crotch dome, not a spear; palm stem / sucker under a rosette: a blunt cone in the frond bases
+        k = 0.35 if (br.depth == 0 and CFG.get("fork")) else 1.0 if rosette else 2.5
         apex = bm.verts.new(br.pts[-1] + t * max(br.radii[-1] * k, 0.02))
         for s in range(sides):
             f = bm.faces.new((ring[s], ring[(s + 1) % sides], apex)); f.material_index = 0
@@ -864,10 +866,13 @@ def rosette_crown(bm, uvl, branches, rng, fold):
         Lb = blen(b); sc = (Lb / Lmax) ** C.get("stem_scale", 0.7)
         axis = point_at(b, 1.0)[2].lerp(UP, C.get("upright", 0.6)).normalized()
         e1 = axis.orthogonal().normalized(); e2 = axis.cross(e1)
-        az0 = rng.uniform(0, 2 * math.pi); n = max(3, round(C["count"] * sc))
+        hp = C.get("head_pow")  # opt-in: small heads (suckers) get count/young/dead x sc^head_pow and zone x sc
+        hs = 1.0 if hp is None else sc ** (hp - 1.0)
+        az0 = rng.uniform(0, 2 * math.pi); n = max(3, round(C["count"] * sc * hs))
         specs = [("live", i / max(1, n - 1)) for i in range(n)]
         Y, D = C.get("young"), C.get("dead")
-        specs += [("young", 0.0)] * (Y["n"] if Y else 0) + [("dead", 1.0)] * (D["n"] if D else 0)
+        hn = (lambda k: k) if hp is None else (lambda k: round(k * sc ** hp))
+        specs += [("young", 0.0)] * (hn(Y["n"]) if Y else 0) + [("dead", 1.0)] * (hn(D["n"]) if D else 0)
         for i, (kind, age) in enumerate(specs):
             if spread >= 360: az = az0 + i * math.radians(137.508)
             else: az = az0 + math.radians(((i * 0.618034) % 1.0 - 0.5) * spread)
@@ -877,7 +882,7 @@ def rosette_crown(bm, uvl, branches, rng, fold):
             dlo, dhi = S["droop"]; droop = max(0.0, dlo + (dhi - dlo) * age + rng.uniform(-jit, jit))
             L = rng.uniform(*C["length"]) * sc * (S.get("length", 1.0) if kind != "live" else 1.0)
             tw = rng.uniform(-1, 1) * C.get("twist", 0.0)
-            z = Lb - C.get("top", 0.0) - C.get("zone", 0.3) * age
+            z = Lb - C.get("top", 0.0) - C.get("zone", 0.3) * age * (1.0 if hp is None else sc)
             if kind == "dead": z -= rng.uniform(0, D.get("zone", 0.4))
             if kind == "young": tilt = rng.uniform(lo, hi)
             A = point_at(b, max(0.0, min(1.0, z / Lb)))[0]
@@ -910,22 +915,41 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
             nrm = orient_normal(rng, d, C["flat"]); s = size * rng.uniform(0.8, 1.2)
             card(bm, uvl, p, d, nrm, s, fold, pick()); made += 1
         return
+    prng = random.Random(4243)  # ellipsoid `parts`: own sequence, so the shell choice never shifts the card draws
     for _ in range(count):
+        ps = 1.0  # card size scale of the ellipsoid part (parts `size`)
         if mode == "spindle":
             h = rng.uniform(0, 1)
             z = C["z0"] + (C["z1"] - C["z0"]) * h
-            prof = math.sin(math.pi * min(1.0, h / (2 * C["peak"]))) if h < C["peak"] else math.cos(0.5 * math.pi * (h - C["peak"]) / (1 - C["peak"]))
-            rad = C["rmax"] * max(0.08, prof) ** 0.8 * rng.uniform(0.7, 1.0)
+            cone = C.get("profile") == "cone"  # clipped topiary cone: rounded base up to `peak`, straight sides to the tip
+            def prof_at(x):
+                x = max(0.0, min(1.0, x))
+                if cone: return max(0.08, math.sin(0.5 * math.pi * min(1.0, x / C["peak"])) if x < C["peak"] else (1 - x) / (1 - C["peak"]))
+                pr = math.sin(math.pi * min(1.0, x / (2 * C["peak"]))) if x < C["peak"] else math.cos(0.5 * math.pi * (x - C["peak"]) / (1 - C["peak"]))
+                return max(0.08, pr) ** 0.8
+            rad = C["rmax"] * prof_at(h) * rng.uniform(*C.get("shell", (0.7, 1.0)))
             a = rng.uniform(0, 2 * math.pi); out = Vector((math.cos(a), math.sin(a), 0))
             p = Vector((0, 0, z)) + out * rad - out * size * 0.15
             d = (UP * 0.85 + out * 0.35 + rand_unit(rng) * 0.2).normalized()
             if z + size > C["z1"] + 0.1: d = UP.copy(); p.z = C["z1"] - size * rng.uniform(0.9, 1.3)
             nrm = orient_normal(rng, d, 0.0).lerp(out, 0.6)
+            tg = C.get("tangent", 0.0)  # clipped topiary: cards lie along the profile surface (up the slope), facing out
+            if tg:
+                e = 0.01; hs = max(h, C["peak"] + e) if cone else h  # cone: the rounded base takes the side slope (no flared skirt)
+                dr = C["rmax"] * (prof_at(hs + e) - prof_at(hs - e)); dz = 2 * e * (C["z1"] - C["z0"])
+                sl = (UP * dz + out * dr).normalized(); sn = (out * dz - UP * dr).normalized()
+                d = d.lerp(sl, tg).normalized(); nrm = nrm.lerp(sn, tg)
         else:  # ellipsoid shell
             c = Vector(C["c"]); R = Vector(C["rad"])
+            if C.get("parts"):  # several overlapping shells (multi-domed crown, sucker clumps), picked by surface area
+                Pt = C["parts"]
+                e = prng.choices(Pt, [x["rad"][0] * x["rad"][1] + x["rad"][0] * x["rad"][2] + x["rad"][1] * x["rad"][2] for x in Pt])[0]
+                c = Vector(e["c"]); R = Vector(e["rad"]); ps = e.get("size", 1.0)
             v = rand_unit(rng)
             if v.z < -0.35 and C.get("under", True): v.z = -v.z * 0.5  # few cards on the underside
             v.normalize(); k = rng.uniform(0.72, 1.0)
+            LP = C.get("lumps")  # natural crown: the shell radius swells and dips with deterministic noise (bumpy outline)
+            if LP: k *= 1.0 + LP["amp"] * noise.noise(Vector((v.x * R.x, v.y * R.y, v.z * R.z)) / LP["size"] + Vector(LP.get("ofs", (3.1, 7.3, 1.7))))
             p = c + Vector((v.x * R.x, v.y * R.y, v.z * R.z)) * k
             out = Vector((v.x / R.x, v.y / R.y, v.z / R.z)).normalized()
             d = (out * 0.6 + UP * 0.45 + rand_unit(rng) * 0.35).normalized()
@@ -933,11 +957,18 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
             if tg:
                 dt = d - out * d.dot(out)
                 if dt.length > 1e-4: d = d.lerp(dt.normalized(), tg).normalized()
-            p = p - d * size * 0.45
+            p = p - d * size * ps * 0.45
             nrm = orient_normal(rng, d, C.get("flat", 0.0))
             if tg: nrm = nrm.lerp(out, tg)
-        s = size * rng.uniform(0.85, 1.15)
-        card(bm, uvl, p, d, nrm, s, fold, pick())
+        s = size * ps * rng.uniform(0.85, 1.15)
+        cl = pick()
+        if C.get("ground") is not None:  # volume crowns: a card reaching below `ground` m is lifted until it clears
+            dn = d.normalized(); nn = (nrm - dn * nrm.dot(dn)).normalized()
+            u0, v0, u1, v1 = cl["rect"] if cl else (0.0, 0.0, 1.0, 1.0)
+            w = nn.cross(dn) * s * 0.5 * (u1 - u0) / (v1 - v0); b0 = p - dn * s * 0.05; fv = nn * s * fold
+            low = min(x.z for x in (b0 - w, b0 + w, b0 + dn * s - w, b0 + dn * s + w, b0 + fv, b0 + dn * s + fv))
+            if low < C["ground"]: p = p + UP * (C["ground"] - low)
+        card(bm, uvl, p, d, nrm, s, fold, cl)
 
 def make_lod(name, seed, lod1, full_rings=frozenset()):
     """full_rings: indices (in skeleton order) of tubes meshed with every ring in the lod1_subset LOD1 (set by the
