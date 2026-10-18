@@ -7,10 +7,14 @@ Keys: magenta, green (foliage), cyan, blue, yellow (flowers whose colour is near
 edge_despill=N: despill only the opaque pixels within N px of the matte edge (default 0 = every pixel). The
 whole-image despill also strips the key's channels from plant colours that lean towards the key (pink/purple
 petals on magenta, green leaves on green); spill only sits at the edge.
+defringe=True (--defringe): fine needles/hairs blend the key into opaque texels and the despill leaves a residue of
+one key channel (magenta -> pink or purple-blue tips). Every texel whose key channel still exceeds the other
+channels by DEFRINGE_THR (while its other key channel is not below them: brown twigs stay clean), plus bright pink
+tips on magenta, takes the colour of the nearest clean opaque texel; alpha is unchanged. Off = identical output.
 Bark: make tileable (half-offset + edge-weighted blend), resize to 1024, derive a tangent-space
 OpenGL normal map from the blurred luminance.
 
-  python process_gpt_textures.py leaf <src.png> <dst_RGBA.png> <magenta|green|cyan|blue|yellow> [triple] [--edge-despill]
+  python process_gpt_textures.py leaf <src.png> <dst_RGBA.png> <magenta|green|cyan|blue|yellow> [triple] [--edge-despill] [--defringe]
   python process_gpt_textures.py bark <src.png> <dst_albedo.png> <dst_normal.png> <strength>
 """
 import sys
@@ -27,9 +31,25 @@ KEYS = {
     "yellow": (lambda r, g, b: np.minimum(r, g) - b, (0, 1)),
 }
 EDGE_DESPILL = 4  # px band for --edge-despill
+DEFRINGE_THR = 12.0  # key-channel excess (0-255) left by the despill that counts as fringe (--defringe)
 
 
-def leaf(src, dst, key, triple=False, soft=False, edge_despill=0):
+def fringe(im, chans):
+    """Texels still carrying a despill residue of the key: some key channel exceeds the max of the other channels by
+    DEFRINGE_THR while no key channel is clearly below them (magenta key: pink R>G with B~G). On magenta also any
+    purple-blue tint (B-G > DEFRINGE_THR: the despill never touches texels whose R is below G) and bright pink needle
+    tips (R-G > 50, B-G > -25, R > 170)."""
+    rest = [c for c in range(3) if c not in chans]
+    m = im[..., rest].max(-1)
+    ex = np.stack([im[..., c] - m for c in chans], -1)
+    dirty = (ex.max(-1) > DEFRINGE_THR) & (ex.min(-1) > -4)
+    if tuple(chans) == (0, 2):
+        r, g, b = im[..., 0], im[..., 1], im[..., 2]
+        dirty |= (b - g > DEFRINGE_THR) | ((r - g > 50) & (b - g > -25) & (r > 170))
+    return dirty
+
+
+def leaf(src, dst, key, triple=False, soft=False, edge_despill=0, defringe=False):
     im = np.array(Image.open(src).convert("RGB")).astype(np.float32)
     r, g, b = im[..., 0], im[..., 1], im[..., 2]
     kf, chans = KEYS[key]
@@ -53,7 +73,8 @@ def leaf(src, dst, key, triple=False, soft=False, edge_despill=0):
     for c in chans:
         im[..., c] -= ex
     im = np.clip(im, 0, 255)
-    idx = ndimage.distance_transform_edt(~alpha, return_distances=False, return_indices=True)
+    src_ok = alpha & ~fringe(im, chans) if defringe else alpha  # colour sources: opaque, and clean with --defringe
+    idx = ndimage.distance_transform_edt(~src_ok, return_distances=False, return_indices=True)
     rgb = im[idx[0], idx[1]]
     if soft:  # keep the ramp only next to solid leaf (drops stray key noise)
         near = ndimage.binary_dilation(alpha, iterations=3)
@@ -63,6 +84,7 @@ def leaf(src, dst, key, triple=False, soft=False, edge_despill=0):
         # transparent area) takes the colour of the nearest opaque interior pixel, so neither the
         # AA edge nor any mip can show key colour
         core = a8 >= 250
+        if defringe: core &= src_ok
         idx = ndimage.distance_transform_edt(~core, return_distances=False, return_indices=True)
         rgb = im[idx[0], idx[1]]
     else:
@@ -116,6 +138,6 @@ def bark(src, dst_a, dst_n, strength):
 if __name__ == "__main__":
     if sys.argv[1] == "leaf":
         leaf(sys.argv[2], sys.argv[3], sys.argv[4], "triple" in sys.argv[5:],
-             edge_despill=EDGE_DESPILL if "--edge-despill" in sys.argv else 0)
+             edge_despill=EDGE_DESPILL if "--edge-despill" in sys.argv else 0, defringe="--defringe" in sys.argv)
     else:
         bark(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]))

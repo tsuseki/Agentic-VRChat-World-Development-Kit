@@ -69,6 +69,7 @@ SRC = os.path.abspath(_opt("--blend", OUT)) + "/"
 os.makedirs(SRC, exist_ok=True); os.makedirs(OUT, exist_ok=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tree_normals import transfer_crown_normals, leaf_normal_spread
+from tree_checks import floating_bark_components, floating_islands
 from tree_uv import cylinder_uvs, stretch_stats
 import json, statistics
 UP = Vector((0, 0, 1))
@@ -265,13 +266,26 @@ def point_at(b, f):
     p = b.pts[i].lerp(b.pts[i + 1], t); r = b.radii[i] + (b.radii[i + 1] - b.radii[i]) * t
     d = (b.pts[i + 1] - b.pts[i]).normalized(); return p, r, d
 
+MERGE_ATTACH = 0.05  # m: a child base within this of its parent's tube surface (or inside it) hangs on that tube
+MERGE_SKIPPED = [0]  # merges refused because they would have dropped a stub carrying another child
+
+def axis_gap(p, pts, radii):
+    """Distance from p to the tube surface around the polyline pts (radius interpolated per segment); < 0 inside."""
+    best = 1e9
+    for i in range(len(pts) - 1):
+        a, e = pts[i], pts[i + 1] - pts[i]; ll = e.length_squared
+        t = 0.0 if ll < 1e-12 else max(0.0, min(1.0, (p - a).dot(e) / ll))
+        best = min(best, (p - (a + e * t)).length - (radii[i] + (radii[i + 1] - radii[i]) * t))
+    return best
+
 def merge_continuations(branches, M):
     """Sympodial growth: a branch whose last fork sits near its end continues into that child (the best
     aligned one) as one tube. The parent drops its stub past the fork, takes the child's axis, and blends
     its radius into the child's over `blend` points; the child keeps its Br (cards, attach checks, its own
     children) but is not meshed (merged_into). M = dict(at=0.7, ang=65, blend=2, round=0, depth=(0, 99)).
     A best child turning more than `ang` off the parent's end is first swung (with its whole subtree, rigidly,
-    about its base) to exactly `ang`, so the limb bends instead of leaving a hairpin with spikes."""
+    about its base) to exactly `ang`, so the limb bends instead of leaving a hairpin with spikes. A merge that would
+    drop a stub another child hangs on (that child's bark would float) is skipped: the limb stays as grown."""
     at, ang, nb = M.get("at", 0.7), math.radians(M.get("ang", 65)), M.get("blend", 2)
     dmin, dmax = M.get("depth", (0, 99))  # parent depths allowed to continue (each chain is meshed with its head's sides)
     kids_of = {}  # raw skeleton: child -> parent by nearest axis point (before any merge moves points)
@@ -307,20 +321,35 @@ def merge_continuations(branches, M):
         cand = [(end_d.angle((c.pts[1] - c.pts[0]).normalized()), k, c) for k, c in kids if k == klast and len(c.pts) > 1]
         if not cand: continue
         a, k, c = min(cand, key=lambda x: x[0])
+        q = None
         if a > ang:
             if not M.get("straighten", True): continue
             cd = (c.pts[1] - c.pts[0]).normalized(); axis = end_d.cross(cd)
             if axis.length < 1e-6: continue
             q = Quaternion(axis.normalized(), -(a - ang)); o = c.pts[0].copy()
+        k = max(k, 1)  # keep at least the parent's first segment
+        ratio = b.radii[k - 1] / max(c.radii[0], 1e-4)
+        new_r = b.radii[:k] + [r * (ratio + (1.0 - ratio) * min(1.0, j / max(nb, 1))) for j, r in enumerate(c.radii)]
+        cps = c.pts if q is None else [o + q @ (p - o) for p in c.pts]
+        if q is not None and c.depth > 0: cps = [Vector((p.x, p.y, max(p.z, 0.25))) for p in cps]
+        new_p = b.pts[:k] + cps
+        # the merge drops b's stub past the fork: never if another child hangs on that stub (its bark would float;
+        # the kid test above only sees children within 0.1 m of a polyline vertex). A child hangs on b when its base
+        # is inside b's tube or within MERGE_ATTACH of it; it is left hanging when its base sits farther outside the
+        # new tube than before by more than its own base radius (its tube no longer reaches the new parent tube).
+        def orphaned(x):
+            g0 = axis_gap(x.pts[0], b.pts, b.radii)
+            return g0 <= MERGE_ATTACH and axis_gap(x.pts[0], new_p, new_r) > max(g0, 0.0) + x.radii[0]
+        if any(x is not c and getattr(x, "merged_into", None) is None and orphaned(x) for x in kids_of.get(id(b), [])):
+            MERGE_SKIPPED[0] += 1; continue
+        if q is not None:
             for y in subtree(c):
                 y.pts = [o + q @ (p - o) for p in y.pts]
                 if y.depth > 0:
                     for p in y.pts: p.z = max(p.z, 0.25)
-        k = max(k, 1)  # keep at least the parent's first segment
-        ratio = b.radii[k - 1] / max(c.radii[0], 1e-4)
         b.lobe_end = cum[k - 1]
         b.pts = b.pts[:k] + [p.copy() for p in c.pts]
-        b.radii = b.radii[:k] + [r * (ratio + (1.0 - ratio) * min(1.0, j / max(nb, 1))) for j, r in enumerate(c.radii)]
+        b.radii = new_r
         rd = M.get("round", 0)  # corner-cut only the joint (window around the fork): a curve, not an elbow
         if rd:
             i0, i1 = max(0, k - 2), min(len(b.pts), k + 3)
@@ -825,7 +854,10 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
         s = size * rng.uniform(0.85, 1.15)
         card(bm, uvl, p, d, nrm, s, fold, pick())
 
-def make_lod(name, seed, lod1):
+def make_lod(name, seed, lod1, full_rings=frozenset()):
+    """full_rings: indices (in skeleton order) of tubes meshed with every ring in the lod1_subset LOD1 (set by the
+    floating-bark retry below; empty on the first pass)."""
+    MERGE_SKIPPED[0] = 0
     branches = build_skeleton(seed)
     sub = CFG.get("lod1_subset") if lod1 else None  # LOD1 = the LOD0 tree thinned in place (no pop at the switch)
     if lod1 and not sub:
@@ -872,7 +904,8 @@ def make_lod(name, seed, lod1):
     uvl = bm.loops.layers.uv.new("UVMap"); bm.loops.layers.uv.new("UV2")
     deep = max(b.depth for b in branches)
     S0, S1 = CFG.get("sides", (7, 5, 4)), CFG.get("lod1_sides", (5, 4, 3))
-    for b in branches:
+    spans = []  # (skeleton index, first bark face, end) per meshed tube
+    for bi, b in enumerate(branches):
         if getattr(b, "merged_into", None) is not None: continue  # its axis is the tail of its parent's tube
         St = S1 if lod1 else S0
         if getattr(b, "sides", None): sides = b.sides
@@ -880,11 +913,25 @@ def make_lod(name, seed, lod1):
         elif b.depth < deep or deep == 1: sides = St[1]
         else: sides = St[2]
         full = (b.pts, b.radii)
-        if sub and len(b.pts) > 2:  # every other ring on the tube only; the cards stay rooted on the full axis
+        if sub and len(b.pts) > 2 and bi not in full_rings:  # every other ring on the tube only; the cards stay rooted on the full axis
             ks = list(range(0, len(b.pts) - 1, 2)) + [len(b.pts) - 1]
             b.pts = [b.pts[k] for k in ks]; b.radii = [b.radii[k] for k in ks]
+        f0 = len(bm.faces)
         tube(bm, b, sides, CFG.get("lobe", 0.16), CFG.get("caps", False))  # lobe: trunk cross-section wobble (lumpy base)
+        spans.append((bi, f0, len(bm.faces)))
         b.pts, b.radii = full
+    if sub and len(full_rings) < len(spans):
+        # dropping every other ring cuts curved axes into chords; a child whose base sat on the curve can end up beside
+        # the thinned parent tube (floating bark). Mesh those parents with every ring and build this LOD again.
+        fl = floating_islands(bm); add = set()
+        for isl in fl:
+            bi = next(i for i, a, e in spans if a <= isl["faces"][0] < e); p0 = branches[bi].pts[0]
+            others = [(axis_gap(p0, branches[j].pts, branches[j].radii), j) for j, _, _ in spans if j != bi]
+            if others: add.add(min(others)[1])
+        if add - full_rings:
+            bm.free(); bpy.data.meshes.remove(me)
+            return make_lod(name, seed, lod1, full_rings | add)
+    FULL_RINGS[name] = len(full_rings); SKIPS[name] = MERGE_SKIPPED[0]
     C = CFG["crown"]
     if sub:  # same count, size and draws as LOD0; sprig_crown builds a subset, larger, unfolded
         cards = crown(bm, uvl, branches, random.Random(seed + 11), C["count"], C.get("size", 1.0), 0.0, False, sub)
@@ -959,6 +1006,7 @@ if CFG.get("leaf_cluster"):  # matte foliage (matches FoliageCutout _Matte): no 
     bsdf.inputs["Roughness"].default_value = 1.0; bsdf.inputs["Specular IOR Level"].default_value = 0.0
 
 SKELETONS = {}
+FULL_RINGS, SKIPS = {}, {}  # per LOD name: tubes kept at every ring (LOD1 retry), merges skipped
 SEED = CFG["seed"] or pick_seed()
 tree_uv.OFFSET_SEED = SEED if CFG.get("bark_tile_min") is not None else None
 # Default: one LOD0 mesh named <Species>_Tree. LOD1 (fewer sides, half the deepest twigs, 35 % larger
@@ -1045,6 +1093,10 @@ for o in LODS:
     before = leaf_normal_spread(o)
     dims = transfer_crown_normals(o, CFG["proxy"], cluster=CFG.get("leaf_cluster"), crown_mix=CFG.get("leaf_crown_mix", 0.35))
     print("STAT", o.name, "proxy", CFG["proxy"], dims, "leaf normal |dot| before", before, "after", leaf_normal_spread(o))
+for o in LODS:  # bark islands not connected to the ground-rooted bark (buried base cones count as connected)
+    print("STAT", o.name, "floating_bark_components", *floating_bark_components(o))
+    if SKIPS.get(o.name): print("STAT", o.name, "merges skipped (stub carries another child):", SKIPS[o.name])
+    if FULL_RINGS.get(o.name): print("STAT", o.name, "tubes kept at every ring (thinned tube left bark floating):", FULL_RINGS[o.name])
 
 bpy.ops.object.select_all(action='DESELECT')
 for o in LODS: o.select_set(True)
