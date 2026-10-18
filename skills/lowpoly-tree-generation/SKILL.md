@@ -132,6 +132,8 @@ For night worlds grade the leaf atlas once (a per-world `grade_atlas.py` next to
 7. Leaves matte (smoothness 0); per-cluster normals on giants.
 8. Obey the setting (no roots under water); compare with the user's reference photos.
 9. Twigs in the leaf sprays are the same wood as the bark texture: generated sprays often come out with red/pink twigs. Fix with `image-edit` (spray first, bark second as `--reference`; prompt: repaint only the wood to match the bark, keep everything else and the key background), then rebuild the atlas; a hex colour sampled from the bark helps when the first edit stays reddish.
+10. Leaves only: flowers, fruit, berries, cones and buds on flat alpha cards look bad (user rejected a whole flowering set), so prompts say "leaves only, NO flowers, NO fruit, NO berries, NO seeds, NO catkins, NO cones, NO buds" and every spray is inspected. Species valued for their blossom don't fit this method.
+11. Generated sprays draw leaves 2–3× too big for the card (the commonest review finding). Ask for many small leaves ("about 25–35 small leaves, each about 1/12 of the image height") and measure leaf length = leaf px / cell px × card size against the species' real range.
 
 ## Unity setup
 - FBX: Scale 1, **Normals Import**, Generate Lightmap UVs **off** (UV2 comes from Blender), Add Colliders off, Read/Write off, mesh compression off. Materials extracted/assigned manually.
