@@ -23,7 +23,7 @@ Settings that failed:
 Cost: A2C's 4-level dither raises the whole-pixel crawl (about 4 → 10–20), still under half of Silent's Crispy Foliage.
 
 **Verify:** Measure on a pure camera yaw of 0.25 px per frame, 20 frames, alpha cutout vs a 4× supersampled + MSAA 8 reference of the same view.
-- Flicker = mean |F[i+1](x) − (0.75·F[i](x) + 0.25·F[i](x−1))| over the crown mask. A whole-pixel-shift comparison is blind to cutout aliasing; use it only to see A2C dither crawl.
+- Flicker = `mean |F[i+1](x) − (0.75·F[i](x) + 0.25·F[i](x−1))|` over the crown mask. A whole-pixel-shift comparison is blind to cutout aliasing; use it only to see A2C dither crawl.
 - Coverage = the target alone over a black and a white clear, alpha = 1 − (white − black). A luminance-difference proxy disagreed with this by ~3 points.
 - Check 6, 9, 20 and 40 m, plus a 1.5 m close-up to confirm near leaves are unchanged.
 - Implementation: `ShimmerLab.cs`, kept in the tree-pack project's `_Dev/Editor`.
