@@ -1119,7 +1119,7 @@ nt = mat_leaf.node_tree; bsdf = nt.nodes["Principled BSDF"]
 t = nt.nodes.new("ShaderNodeTexImage"); t.image = img(f"{TEXN}_Leaves_RGBA.png")
 nt.links.new(t.outputs[0], bsdf.inputs["Base Color"]); nt.links.new(t.outputs[1], bsdf.inputs["Alpha"])
 bsdf.inputs["Roughness"].default_value = 0.6; mat_leaf.use_backface_culling = False
-if CFG.get("leaf_cluster"):  # matte foliage (matches FoliageCutout _Matte): no specular sheen or rim
+if CFG.get("leaf_cluster"):  # matte foliage: no specular sheen or rim
     bsdf.inputs["Roughness"].default_value = 1.0; bsdf.inputs["Specular IOR Level"].default_value = 0.0
 
 SKELETONS = {}
