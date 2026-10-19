@@ -53,6 +53,9 @@ def render():
     cd = bpy.data.cameras.new("__cf_cam"); cd.clip_start = 0.05; cd.clip_end = 500; cd.sensor_fit = 'VERTICAL'
     cam = bpy.data.objects.new("__cf_cam", cd); sc.collection.objects.link(cam); sc.camera = cam
     sc.render.engine = 'CYCLES'; sc.cycles.samples = 1; sc.cycles.use_denoising = False; sc.render.filter_size = 0.01
+    # a ray crosses many alpha-cut cards in a crown; at Cycles' default 8 transparent bounces it stops and counts as
+    # covered (open sprays read sky 0.018 instead of 0.102)
+    sc.cycles.transparent_max_bounces = 256
     sc.render.film_transparent = True; sc.render.resolution_x = sc.render.resolution_y = px; sc.render.resolution_percentage = 100
     sc.render.image_settings.file_format = 'PNG'; sc.render.image_settings.color_mode = 'RGBA'
     def slot_img(s):

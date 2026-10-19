@@ -17,3 +17,5 @@ Targets: dense species (cypress, carob, bay, holm oak, juniper, shrubs) ≤ 0.15
 - alpha cutout 0.45 on the leaves, bark opaque;
 - silhouette = covered pixels closed by 0.6 m (in world units) with holes filled, only above the lowest leaf;
 - sky = 1 − covered / silhouette. Report mean and max over the azimuths, then look at the mask PNG.
+
+**Caveat (2026-10-20):** before `crown_fullness.py` set Cycles `transparent_max_bounces` 256, rays stopped after 8 alpha-cut cards and counted as covered, so the numbers above (and any taken before that date) understate the sky fraction, by ~5x on open sprays (cypress 0.018 vs 0.102). Re-measure before comparing.
