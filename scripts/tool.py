@@ -696,13 +696,25 @@ def _pid_alive(pid: int) -> bool:
     return True
 
 
-def _blender_slot(limit: int) -> Path:
+def _blender_limit() -> int:
+    """Slot count, re-read on every wait so a changed max_parallel reaches runs already queued."""
+    env = os.environ.get("AWDK_BLENDER_SLOTS")
+    if env:
+        return max(1, int(env))
+    try:
+        return max(1, int(load_config().get("blender", {}).get("max_parallel", 2)))
+    except Exception:
+        return 1
+
+
+def _blender_slot() -> Path:
     """Machine-wide cap on concurrent headless Blender runs (many agents at once froze the owner's PC).
     A slot is a lock file holding the owning tool.py pid; files of dead pids are reclaimed."""
     d = Path(tempfile.gettempdir()) / "awdk_blender_slots"
     d.mkdir(exist_ok=True)
     waited = False
     while True:
+        limit = _blender_limit()
         for i in range(limit):
             p = d / f"slot{i}.lock"
             try:
@@ -724,7 +736,8 @@ def _blender_slot(limit: int) -> Path:
 
 
 def run_blender(args, extra: list[str]) -> int:
-    cfg = load_config()
+    slot = _blender_slot()
+    cfg = load_config()  # after the wait: thread count as configured now, not when the run was queued
     exe = blender_path(cfg)
     bcfg = cfg.get("blender", {})
     argv = [exe, "-b", "--factory-startup"]
@@ -734,8 +747,6 @@ def run_blender(args, extra: list[str]) -> int:
     if args.blend:
         argv.append(args.blend)
     argv += ["--python", args.script, "--", *extra]
-    limit = int(os.environ.get("AWDK_BLENDER_SLOTS") or bcfg.get("max_parallel", 2))
-    slot = _blender_slot(max(1, limit))
     log("running: " + " ".join(argv))
     # below-normal priority so batch runs never starve the owner's desktop and editors
     flags = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0) if bcfg.get("low_priority", True) else 0
