@@ -8,6 +8,8 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Fill a crown with bigger cards and smaller-leaved open branch sprays (leaves ~1/16 of the image height, cards ×1.6), never with dense clump sprays or extra overlapping cards** — dense clumps plus cards read as stacked textures and were rejected; the bigger-card olives went from 0.30–0.41 to 0.20–0.28 sky at real leaf size and were approved.
 - **Pin every visible spray's painted stem on a modelled twig (`sprig` mode); volume crowns (`spindle`/`ellipsoid`, no limbs inside) only where the crown is thick enough to hide all wood from every angle (cypress, clipped topiary)** — carob, cork oak, bay, myrtle and juniper built as volume crowns showed floating PNG branches and bare limb spikes once their sprays were opened up; the oaks built in `sprig` mode were the user's reference for correct.
 - **On dense volume crowns, plan an unculled card count inside the budget** — removing even 5 % of cards moved the silhouette 2–22 cm against a 0.3 cm allowance; branch-structured crowns still pass at 0.10–0.20.
+- **Volume crown → branches: shorten limbs, not cards** — first skeletons came out 1.2–1.7× too wide; fringe sky +0.01–0.04 is expected.
+- **Cypress: height:width 6–8.5, soft foliage point, nothing above it** — thin columns with a leader read as sticks and candles.
 
 ## Leaves and limbs
 - **Measure leaf size by hand too: leaf px on a grid in 2 atlas cells × card length / cell px** — segmentation reads overlapping leaves as a few big ones (2.97× reported on leaves hand-measured at ~1.1×), read small-leaf sprays ~15 % low, and skips volume-crown trees.
@@ -15,9 +17,15 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Run `scripts/bare_limbs.py` on the packed mesh before shipping: it fails limb/stem ends that taper to a bare point outside the leaf mass, bare limb runs > 1 m outside it, and cards whose painted twig base sits off the bark** — `tips_uncovered` passed BayLaurelAncient (4 bare stem spikes 1.4–2.7 m long under a volume crown) and CorkOakAncient (three 5 m limbs bare to their points, every spray hanging in the air); the 100-tree audit (2026-10-20) also caught cull-bared interior ends (HolmOak, StonePine) and LOD1 bark simplification pulling twigs 5–40 cm off their cards (cedar, stone pine, willow).
 - **Check card attachment and limb-tip cover on the mesh that ships, after every simplification step (LOD thinning, card cull)** — cards pinned on the LOD0 axis hung 5–46 cm off the every-other-ring LOD1 bark (WeepingWillow 10 % floating) and the hidden-card cull deleted the only leaves on 5 HolmOak limb ends; snapping cards onto the meshed axis and a tip guard in the cull took both to 0 at +0–42 tris.
 - **On big lobed trunks use a one-step root flare (about 1.25× over 0.8 m) with flare height scaled to the trunk radius; the ground ring must be the widest** — a multi-ring flare picked up the cross-section wobble and bulged wider 0.3 m up than at the ground, reading as a stone plinth.
+- **Keep a cull fraction only if `bare_limbs.py` still passes** — 0.1 bared limb tips on two trees that passed the silhouette rule.
+- **`minz` below the lowest leafy limb; children not at limb ends** — a cedar limb stayed bare for four sweeps.
+- **Fill trunk slots with inner, back-angled cards (`crown.fill`)** — edge-on cards left the cedar trunk visible.
+- **Leaf cards ≥ 0.07 m above ground** — the bark snap moved one under the ground.
+- **Mat shrubs: stems on a small ring, not one point** — one point reads as a starburst.
 
 ## Atlas and shading
 - **For one-material trees use a square 2048² atlas with four 3:4 portrait spray cells and a vertical bark strip, imported wrap U Clamp / V Repeat; skip normal maps** — the bark tiles up the trunk with plain UVs in any shader and cards keep the cell aspect, while a square bark tile cost +47–92 % tris (cut UVs) or 4× blurrier bark; stereo VR exposes painted relief on low-poly trees.
+- **Repeat bark mirrored around thick trunks** — one texture width smeared ~5× around a cedar trunk.
 - **Fade leaf cards at glancing angles (Crispy Foliage `_EdgeFade` 1, or 0.5 if edge-on cards turn into dots within ~3 m)** — edge-on cards smear into streaks within ~1 m, and the fade changed only 1–2 % of pixels at distance.
 - **Fight VR leaf shimmer with alpha to coverage plus a far-only (+0.35 mip bias, −0.05 A2C cutoff) ramp past mip 1, Trilinear atlas; judge it in the Game view, not the 1-sample Scene view** — MSAA alone did nothing for cutouts and A2C alone ~8 %; the far-only ramp cut flicker ~45–70 % at 6–40 m with near leaves and coverage unchanged, while larger values lumped or overfilled the sprays.
 - **Set Cycles `transparent_max_bounces` high (256) for any alpha-card render or coverage measure** — at the default 8 a ray stops inside a crown and counts as covered: open sprays read sky 0.018 instead of 0.102.

@@ -36,6 +36,9 @@ spatial-design only.
 below the Min column). Quote the section and the scaled value in each finding; don't carry numbers
 from memory.
 
+**Trees:** when the target includes trees or shrubs, also go through every line of
+`.omp/skills/lowpoly-tree-generation/references/tree-review.md` for every variant and report it per tree.
+
 ## Scope
 
 You run on a scene whose lighting is **unbaked, draft-baked or cleared**. Lighting is out of scope.
