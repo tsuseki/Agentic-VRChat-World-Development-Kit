@@ -6,7 +6,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 - [lighting-baking](#lighting-baking) (66)
 - [probes-reflection-and-light](#probes-reflection-and-light) (21)
-- [materials-textures-shaders](#materials-textures-shaders) (37)
+- [materials-textures-shaders](#materials-textures-shaders) (38)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (27)
 - [import-fbx-prefabs](#import-fbx-prefabs) (15)
 - [placement-layout-design](#placement-layout-design) (45)
@@ -121,6 +121,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [A photoscan mesh wearing another scan's texture passes every texture metric](notes/check-photoscan-mesh-texture-pairing-first.md) — A scan's albedo is only meaningful under its own mesh's UVs; a mismatched pairing reads as a corrupted smear while every texture-quality metric is normal.
 - [A plant that looks dead under every light has a red-dominant albedo — replace the asset](notes/reject-red-dominant-foliage-textures.md) — Measure each foliage texture's alpha-weighted mean RGB; healthy plants are G > R, and any R > G asset reads as dried/dead at every light level.
 - [A very dark _Color tint erases the albedo's own detail](notes/dark-material-tint-erases-texture-detail.md) — Pushing _Color low to get a dark tone multiplies away the texture's contrast; keep the dominant channel at or above about 0.25 and put real darkness in the albedo.
+- [A view-dependent leaf edge fade must also clip the camera-depth pass, or faded cards leave white ghost slivers over shadowed ground](notes/edge-fade-must-match-camera-depth-pass.md) — In the Built-in RP the directional light's screen-space shadow collector reads the camera depth texture, which Unity draws with the ShadowCaster pass. If the leaf card's edge fade runs only in the colour pass, a faded edge-on card is gone from colour but still in depth, so the ground behind it samples the card's unshadowed depth and shows a bright leaf-shaped ghost. Apply the fade in the ShadowCaster pass only when unity_LightShadowBias is zero (camera depth); light shadow maps keep the full silhouette.
 - [Audit asset-pack prop appearance by rendering, not by querying materials](notes/audit-pack-prop-appearance-by-render.md) — Pack materials are often white-tinted over a shared atlas, so colour/metallic/name sweeps find nothing; sweep a class of props by rendering it.
 - [Author metals low-metallic until the bake exists, and judge them by render](notes/metallic-materials-cannot-be-judged-before-a-bake.md) — In an unbaked scene a high-metallic material has nothing to reflect and renders as one flat slab, so inspector values predict nothing about how a metal reads.
 - [Authored textures import at aniso 1 / Bilinear and look smeared at grazing angles](notes/authored-textures-need-aniso-8-and-trilinear.md) — Textures written by scripts or dropped in by hand import at anisoLevel 1 and Bilinear, which smears directional grain on floors and walls and is routinely misdiagnosed as a UV problem.

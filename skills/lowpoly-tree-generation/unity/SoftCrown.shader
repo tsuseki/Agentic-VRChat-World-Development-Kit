@@ -155,16 +155,23 @@ Shader "SoftCrown"
             float far = saturate(lod - 1);
             float g = exp2(_LeafMipBias * far);
             fixed4 c = tex2Dgrad(_MainTex, uv, dx * g, dy * g) * _Color;
-        #if defined(UNITY_PASS_SHADOWCASTER) || defined(UNITY_PASS_META)
-            clip(c.a - _Cutoff);
-        #else
             // edge fade: a card seen edge-on shows as a dotted streak past the crown (worse with big cards). Its true
             // face normal comes from the screen derivatives (the mesh normals are the crown proxy's, not the card's);
-            // alpha ramps to 0 as |cos| between view and card drops from 2.5x to 1x _EdgeFadeAngle. Not in the shadow
-            // and meta passes: shadows and bakes keep the whole leaf silhouette.
+            // alpha ramps to 0 as |cos| between view and card drops from 2.5x to 1x _EdgeFadeAngle.
             float3 faceN = normalize(cross(ddy(IN.worldPos), ddx(IN.worldPos)));
             float cosv = abs(dot(faceN, normalize(_WorldSpaceCameraPos - IN.worldPos)));
-            c.a *= lerp(1, saturate((cosv - _EdgeFadeAngle) / (1.5 * _EdgeFadeAngle)), _EdgeFade);
+            half fade = lerp(1, saturate((cosv - _EdgeFadeAngle) / (1.5 * _EdgeFadeAngle)), _EdgeFade);
+        #if defined(UNITY_PASS_META)
+            clip(c.a - _Cutoff); // bakes keep the whole leaf silhouette
+        #elif defined(UNITY_PASS_SHADOWCASTER)
+            // light shadow maps keep the whole silhouette. The camera depth texture (drawn with this pass; the
+            // screen-space shadows read it) must match the faded colour, or a faded card still occludes the ground
+            // behind it in the shadow collector and shows as a bright ghost sliver over shadowed ground.
+            // Unity zeroes unity_LightShadowBias for the camera depth pass.
+            if (unity_LightShadowBias.z == 0 && unity_LightShadowBias.x == 0) c.a *= fade;
+            clip(c.a - _Cutoff);
+        #else
+            c.a *= fade;
             if (_AlphaToCoverage > 0.5)
             {
                 half a = (c.a - (_Cutoff - _A2CFarCutoffDrop * far)) / max(fwidth(c.a), 1e-4) + 0.5;

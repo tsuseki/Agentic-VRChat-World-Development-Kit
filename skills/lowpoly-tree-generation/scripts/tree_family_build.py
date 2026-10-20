@@ -25,6 +25,10 @@
 #   lod1_subset=dict(keep=1.0, grow=1.0)   LOD1 = LOD0 thinned in place instead of rebuilt: same skeleton and card
 #       draws, every other tube ring, lod1_sides, all tip cards plus a `keep` share of the rest, `grow` x larger and
 #       unfolded. keep=1, grow=1 (bark-only LOD1) keeps the silhouette within a few cm; thinning cards opens holes.
+#       Every LOD (always on): a card whose attach point lies farther than the tube radius from the axis of the tube
+#       actually meshed is moved rigidly onto that axis, so its painted twig still leaves the 3D bark (snap_cards_to_bark;
+#       0 tris). LOD1 every-other-ring chords hang off the full axis by up to ~45 cm on long curved limbs; on LOD0 only
+#       cards of merged children whose head axis was smoothed move (a few cm).
 #   bark_tile (0.6)   metres per bark texture repeat (use the scan's real width, e.g. 1.8 for Poly Haven barks)
 #   bark_tile_min, bark_tile_r   repeat scaled by tube radius (bark_tile at >= bark_tile_r, down to bark_tile_min);
 #       every tube also gets a random UV offset (seeded) so neighbouring limbs never repeat the same features
@@ -578,7 +582,9 @@ def tube(bm, br, sides, lobe_amt, cap):
     if br.depth > 0 and (CFG.get("taper") or rosette):  # base ring closed by a cone buried in the parent: no open fork ring
         ring = rings[0][0]
         t = (br.pts[1] - br.pts[0]).normalized()
-        apex = bm.verts.new(br.pts[0] - t * max(br.radii[0] * 1.5, 0.02))
+        q = br.pts[0] - t * max(br.radii[0] * 1.5, 0.02)
+        if q.z < 0.0: q.z = 0.0  # a low sucker's buried cone stays above ground (it sits in the flared trunk base)
+        apex = bm.verts.new(q)
         for s in range(sides):
             f = bm.faces.new((ring[(s + 1) % sides], ring[s], apex)); f.material_index = 0
     if cap:  # pointed cone closes the branch end (no open ring / flat disc)
@@ -626,6 +632,47 @@ def sprig_card(bm, uvl, A, d, roll, s, fold, cell, dry=False):
         for loop, k in zip(f.loops, q):
             lu, lv = grid[k]; loop[uvl].uv = (u0 + lu * (u1 - u0), v0 + lv * (v1 - v0))
     return first, grid, (au, av)
+
+def card_attach_point(P, grid, au, av):
+    """Atlas attach point of a built card: P maps its grid (lu, lv) keys to vertex positions."""
+    bot = P[(0, 0)].lerp(P[(1, 0)], au); top = P[(0, 1)].lerp(P[(1, 1)], au)
+    if (.5, 0) in P:  # folded card: piecewise through the mid column
+        bot = P[(0, 0)].lerp(P[(.5, 0)], au * 2) if au < .5 else P[(.5, 0)].lerp(P[(1, 0)], au * 2 - 1)
+        top = P[(0, 1)].lerp(P[(.5, 1)], au * 2) if au < .5 else P[(.5, 1)].lerp(P[(1, 1)], au * 2 - 1)
+    return bot.lerp(top, av)
+
+def nearest_on_axis(A, pts, radii):
+    """(distance, point, radius) of the nearest point to A on the polyline pts (radius interpolated per segment)."""
+    best = (1e9, pts[0], radii[0])
+    for i in range(len(pts) - 1):
+        p0, seg = pts[i], pts[i + 1] - pts[i]
+        t = max(0.0, min(1.0, (A - p0).dot(seg) / max(seg.length_squared, 1e-12)))
+        q = p0 + seg * t; dd = (A - q).length
+        if dd < best[0]: best = (dd, q, radii[i] + (radii[i + 1] - radii[i]) * t)
+    return best
+
+def snap_cards_to_bark(bm, branches, cards, meshed):
+    """The bark is meshed on other axes than the ones the cards were rooted on: LOD1 (lod1_subset) keeps every other
+    ring, so a card rooted between kept rings hangs off the chord (WeepingWillow 10 % of cards, cedars 3.5 %, 5-46 cm);
+    a merged child's cards sit on the child's axis, not on the smoothed head tube that meshes it (a few cm). Each card
+    whose attach point lies farther than the tube radius from the meshed axis of the tube carrying its branch (the head
+    of its merge chain) is moved rigidly so the point sits on that axis; cards within the radius never move. meshed:
+    skeleton index -> (pts, radii) actually meshed. Returns the shifts (m) of the moved cards."""
+    idx = {id(b): i for i, b in enumerate(branches)}
+    bm.verts.ensure_lookup_table()
+    order = sorted(cards, key=lambda c: c[0]); ends = [c[0] for c in order[1:]] + [len(bm.verts)]
+    moved = []
+    for (first, grid, (au, av), b, _), end in zip(order, ends):
+        h = b
+        while getattr(h, "merged_into", None) is not None: h = h.merged_into
+        if idx[id(h)] not in meshed: continue
+        A = card_attach_point({g: bm.verts[first + k].co for k, g in enumerate(grid)}, grid, au, av)
+        dd, Q, r = nearest_on_axis(A, *meshed[idx[id(h)]])
+        if dd <= max(r, 1e-4): continue
+        sh = Q - A
+        for k in range(first, end): bm.verts[k].co += sh
+        moved.append(dd)
+    return moved
 
 def rand_unit(rng):
     v = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1))); return v.normalized()
@@ -821,21 +868,24 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C):
     crop = min(C.get("crop", 1.0), 2 * min(au, 1 - au))
     W = L / max(1.0 - av, 1e-3) * (u1 - u0) / (v1 - v0) * crop * C.get("aspect", 1.0)
     side0 = axis.cross(rad).normalized(); dp = C.get("droop_pow", 1.5)
-    for _ in range(12):  # a frond may not reach the ground: relax its droop until it clears
+    def strip(droop):
         pts, dirs = [A.copy()], []
         for i in range(segs):
             e = math.radians(tilt - droop * ((i + 0.5) / segs) ** dp)
             dirs.append(rad * math.cos(e) + axis * math.sin(e)); pts.append(pts[-1] + dirs[-1] * (L / segs))
-        if min(p.z for p in pts) >= 0.1: break
+        rows = []
+        for k, p in enumerate(pts):
+            t = (dirs[max(0, k - 1)] + dirs[min(segs - 1, k)]).normalized()
+            sd = (side0 - t * side0.dot(t)).normalized(); sd.rotate(Quaternion(t, math.radians(twist) * k / segs))
+            nv = t.cross(sd); hang = nv * fold * W
+            rows.append((p - sd * W / 2 - hang, p, p + sd * W / 2 - hang))
+        return pts, rows
+    for _ in range(12):  # a frond may not reach the ground: relax its droop until the midrib clears 0.1 m and the
+        pts, rows = strip(droop)  # frond edges (width, fold hang, twist) clear z = 0
+        if min(p.z for p in pts) >= 0.1 and min(q.z for r in rows for q in r) >= 0.0: break
         droop *= 0.8
     else:
         return None
-    rows = []
-    for k, p in enumerate(pts):
-        t = (dirs[max(0, k - 1)] + dirs[min(segs - 1, k)]).normalized()
-        sd = (side0 - t * side0.dot(t)).normalized(); sd.rotate(Quaternion(t, math.radians(twist) * k / segs))
-        nv = t.cross(sd); hang = nv * fold * W
-        rows.append((p - sd * W / 2 - hang, p, p + sd * W / 2 - hang))
     lus = (0.0, 0.5, 1.0) if fold > 0 else (0.0, 1.0)
     grid = ((0, 0), (.5, 0), (1, 0), (1, 1), (.5, 1), (0, 1)) if fold > 0 else ((0, 0), (1, 0), (1, 1), (0, 1))
     first = len(bm.verts); vv = []
@@ -1021,6 +1071,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
     deep = max(b.depth for b in branches)
     S0, S1 = CFG.get("sides", (7, 5, 4)), CFG.get("lod1_sides", (5, 4, 3))
     spans = []  # (skeleton index, first bark face, end) per meshed tube
+    meshed = {}  # skeleton index -> (pts, radii) of the axis actually meshed (LOD1: thinned)
     cut = low_cut(branches)  # low_tips: bare ground limbs are not meshed
     for bi, b in enumerate(branches):
         if getattr(b, "merged_into", None) is not None or bi in cut: continue  # merged: its axis is the tail of its parent's tube
@@ -1035,7 +1086,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
             b.pts = [b.pts[k] for k in ks]; b.radii = [b.radii[k] for k in ks]
         f0 = len(bm.faces)
         tube(bm, b, sides, CFG.get("lobe", 0.16), CFG.get("caps", False))  # lobe: trunk cross-section wobble (lumpy base)
-        spans.append((bi, f0, len(bm.faces)))
+        spans.append((bi, f0, len(bm.faces))); meshed[bi] = (list(b.pts), list(b.radii))
         b.pts, b.radii = full
     if sub and len(full_rings) < len(spans):
         # dropping every other ring cuts curved axes into chords; a child whose base sat on the curve can end up beside
@@ -1048,7 +1099,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
         if add - full_rings:
             bm.free(); bpy.data.meshes.remove(me)
             return make_lod(name, seed, lod1, full_rings | add)
-    FULL_RINGS[name] = len(full_rings); SKIPS[name] = MERGE_SKIPPED[0]
+    FULL_RINGS[name] = len(full_rings); SKIPS[name] = MERGE_SKIPPED[0]; MESHED[name] = meshed
     C = CFG["crown"]
     if sub:  # same count, size and draws as LOD0; sprig_crown builds a subset, larger, unfolded
         cards = crown(bm, uvl, branches, random.Random(seed + 11), C["count"], C.get("size", 1.0), 0.0, False, sub)
@@ -1056,6 +1107,8 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
         cards = crown(bm, uvl, branches, random.Random(seed + 11),
               int(C["count"] * (CFG.get("lod1_cards", 0.6) if lod1 else 1.0)),
               C.get("size", 1.0) * (CFG.get("lod1_size", 1.35) if lod1 else 1.0), 0.0 if lod1 else C.get("fold", 0.0), lod1)
+    if cards:  # every painted twig base on the bark that is actually meshed (LOD1: the thinned tubes that ship)
+        SNAPPED[name] = snap_cards_to_bark(bm, branches, cards, meshed)
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(ob)
     cylinder_uvs(ob)
@@ -1124,6 +1177,7 @@ if CFG.get("leaf_cluster"):  # matte foliage: no specular sheen or rim
 
 SKELETONS = {}
 FULL_RINGS, SKIPS = {}, {}  # per LOD name: tubes kept at every ring (LOD1 retry), merges skipped
+MESHED, SNAPPED = {}, {}  # per LOD name: meshed axis per tube; shifts of the cards moved onto the meshed bark
 SEED = CFG["seed"] or pick_seed()
 tree_uv.OFFSET_SEED = SEED if CFG.get("bark_tile_min") is not None else None
 # Default: one LOD0 mesh named <Species>_Tree. LOD1 (fewer sides, half the deepest twigs, 35 % larger
@@ -1153,26 +1207,16 @@ for o in LODS:
     print("STAT", o.name, "tris", tris(o), "bark", tris(o, 0), "leaf", tris(o, 1), "bounds", bounds(o))
 print("STAT coplanar-overlapping bark pairs LOD0:", coplanar_pairs(lod0))
 def attach_report(o):
-    """Measured on the final mesh: each card's attach point (its atlas stem base mapped through the
-    card's own vertices) against the nearest branch-axis segment and that segment's radius."""
+    """Measured on the final mesh: each card's attach point (its atlas stem base mapped through the card's own
+    vertices) against the nearest axis of the bark actually meshed in this LOD (LOD1: the thinned tubes that ship) and
+    that tube's radius there; out_of_tolerance = farther than the radius (bare_limbs.py would see a floating spray)."""
     branches, cards = SKELETONS[o.name]
     if not cards: return None
-    vs = o.data.vertices; dist, bad = [], 0
+    vs = o.data.vertices; axes = list(MESHED[o.name].values()); dist, bad = [], 0
     for first, grid, (au, av), _, _ in cards:
-        P = {g: vs[first + k].co for k, g in enumerate(grid)}
-        bot = P[(0, 0)].lerp(P[(1, 0)], au); top = P[(0, 1)].lerp(P[(1, 1)], au)
-        if (.5, 0) in P:  # folded card: piecewise through the mid column
-            bot = P[(0, 0)].lerp(P[(.5, 0)], au * 2) if au < .5 else P[(.5, 0)].lerp(P[(1, 0)], au * 2 - 1)
-            top = P[(0, 1)].lerp(P[(.5, 1)], au * 2) if au < .5 else P[(.5, 1)].lerp(P[(1, 1)], au * 2 - 1)
-        A = bot.lerp(top, av)
-        best = (1e9, 0.0)
-        for b in branches:
-            for i in range(len(b.pts) - 1):
-                p0, p1 = b.pts[i], b.pts[i + 1]; seg = p1 - p0
-                t = max(0.0, min(1.0, (A - p0).dot(seg) / max(seg.length_squared, 1e-12)))
-                dd = (A - (p0 + seg * t)).length
-                if dd < best[0]: best = (dd, b.radii[i] + (b.radii[i + 1] - b.radii[i]) * t)
-        dist.append(best[0]); bad += best[0] > max(best[1], 1e-4)
+        A = card_attach_point({g: vs[first + k].co for k, g in enumerate(grid)}, grid, au, av)
+        dd, _, r = min((nearest_on_axis(A, *ax) for ax in axes), key=lambda x: x[0])
+        dist.append(dd); bad += dd > max(r, 1e-4)
     tips = [b for b in terminal_ends(branches) if b.pts[-1].z >= CFG["crown"].get("minz", 0.0) * 0.8]
     rooted = {id(c[3]) for c in cards if c[4] >= 0.95}
     return dict(cards=len(cards), attach_max_mm=round(max(dist) * 1000, 3),
@@ -1206,7 +1250,12 @@ for o in LODS:
     print("STAT", o.name, "tips/faces", tip_face_report(o))
 print("STAT", lod0.name, "limbs", limb_report(lod0))
 for o in LODS:
-    print("STAT", o.name, "bark stretch (min, median, max, max/min)", stretch_stats(o), "attach", attach_report(o))
+    print("STAT", o.name, "bark stretch (min, median, max, max/min)", stretch_stats(o),
+          "attach", "LOD1" if o.name.endswith("_LOD1") else "LOD0", attach_report(o))
+    if SNAPPED.get(o.name):
+        sh = sorted(SNAPPED[o.name])
+        print("STAT", o.name, "cards moved onto the meshed bark:", len(sh), "median cm", round(100 * sh[len(sh) // 2], 1),
+              "max cm", round(100 * sh[-1], 1))
 for o in LODS:
     before = leaf_normal_spread(o)
     dims = transfer_crown_normals(o, CFG["proxy"], cluster=CFG.get("leaf_cluster"), crown_mix=CFG.get("leaf_crown_mix", 0.35))

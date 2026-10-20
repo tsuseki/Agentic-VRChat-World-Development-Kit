@@ -5,7 +5,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 
 ## Blender bridge and headless runs
 - **Work headless only (`blender -b --factory-startup` or `execute_blender_code_for_cli`) and kill any stray background `blender.exe` after a batch run** — an orphaned headless Blender squats the MCP bridge port, so a later bridge session edits a scene nobody sees.
-- **Run one headless Blender machine-wide with `-t 6` threads at below-normal priority (`tool.py` `blender.max_parallel` / `blender.threads` / `low_priority`) and keep about 4 builder agents active** — every Blender takes all cores by default; two at once plus ~16 agent sessions froze a 16-thread workstation.
+- **Cap headless Blender runs machine-wide at a few threads each, below-normal priority (`tool.py` `blender.max_parallel` / `blender.threads` / `low_priority`), and run only as many Blender-using agents as there are slots, one job each, pausing the rest** — every Blender takes all cores by default; two at once plus ~16 agent sessions froze a 16-thread workstation, and 15 jobs queued behind one slot looked stuck for hours.
 
 ## Blender export
 - **Copy the proven FBX export call verbatim, convert curves/text to mesh, and `sort_elements(type='MATERIAL')` before export** — `FBX_SCALE_NONE` imports at 1/100, curves are skipped silently, and Unity orders submeshes by first reference so slots arrive permuted; `bake_space_transform` can mirror extruded text (export it without that flag and stand it up in Unity); open two-sided sheets break under `normals_make_consistent`, so build them as closed prisms; set rough/metal/alpha 8-bit maps to Non-Color and never hand-encode sRGB into `img.pixels` (see SKILL.md §1 "Blender export").
