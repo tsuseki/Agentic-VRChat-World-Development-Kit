@@ -12,7 +12,8 @@ Views: full tree at eye height from 2 sides; 1.6 m standing under the crown look
 6. **Ground:** sits on the ground; nothing but the root flare goes below it; no floating base.
 7. **Silhouette:** matches the species and the user's reference photos (e.g. cypress tall and narrow with a soft pointed top).
 8. **Joints:** no spikes, elbows or loose cones at forks.
-9. **Cards:** no edge-on streaks, white slivers or key-colour fringe.
-10. **Colour:** leaves one natural green that matches the species; twigs match the bark.
-11. **Budget:** tris in budget, one mesh, one material, no colliders, no stations.
-12. **Variants:** clearly different shapes within the family.
+9. **No crossing branches:** limbs don't pass through each other or the trunk (the Penthouse olives have this).
+10. **Cards:** no edge-on streaks, white slivers or key-colour fringe.
+11. **Colour:** leaves one natural green that matches the species; twigs match the bark.
+12. **Budget:** tris in budget, one mesh, one material, no colliders, no stations.
+13. **Variants:** clearly different shapes within the family.
