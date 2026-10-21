@@ -5,7 +5,8 @@
 #      (bisection, 0.75-5 m) so the leaves' area-weighted mean G matches the old per-card weight's ((stem-to-tip
 #      fraction)^1.5 x card length / 1.5 m) where it can: palm fronds get L ~4 m and keep their tremble, dense crowns
 #      stop at the 0.75 m floor (reason at the bisection below)
-#   B  tremble phase: smooth 3-D value noise of the position (3 m cells; 0 on bark)
+#   B  tremble phase: smooth 3-D value noise of the position (3 m cells; 0 on bark); SoftCrown also turns the
+#      horizontal tremble of plants up to 3 m tall by it (wind +-90 degrees)
 #   A  bend weight: (height above the trunk base / tree height)^2 on bark; on leaves raised toward the local mean of
 #      the stem heights of the cards around (Gaussian, sigma 0.75 m), blended in by min(1, d / 0.75 m), so hanging
 #      strands swing from above and every stem edge keeps the bark's value

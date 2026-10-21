@@ -18,13 +18,13 @@
 // Wind: a port of the wind in Silent's Crispy Foliage (MIT, gitlab.com/s-ilent/crispy-foliage): Unity's terrain
 // grass wave (four sines over world XZ, each raised to the 4th power, so the crown swings in uneven, gusty pushes,
 // mostly downwind with short swings back, whose crests roll across the world) plus the Horizon Zero Dawn leaf
-// tremble along the normal; the normals bend with
+// tremble (along the normal on trees; horizontal on plants up to 3 m, see below); the normals bend with
 // the offset, so the leaves shimmer in the light as they move. Adapted: the gust frame follows _WindDirection, the
 // push is scaled by tree height, and the weights come from the vertex colour (tree_wind_data.py). Displacement is
 // in world space, so it also works on static-batched trees, where the object transform is gone.
 //   R  tree height / 32 m (one value per tree): gust push scales with the tree's size
 //   G  tremble weight: 0 on bark and on every card's stem edge, rising with the distance from them
-//   B  tremble phase: a smooth noise of the position (0 on bark)
+//   B  tremble phase: a smooth noise of the position (0 on bark); on plants up to 3 m also the tremble direction
 //   A  gust weight ("wind pinning"): 0 at the trunk base, (height / tree height)^2 to 1 at the top; a smooth field
 //      over the bark; on leaves raised toward the stem heights of the cards around (hanging strands swing from
 //      above). Also the single sway mask for other foliage shaders (Crispy Foliage: Wind Pinning Source = Vertex
@@ -34,6 +34,10 @@
 // interpolates between their corners): the tremble phase drifts 0.5 rad/m in world space (Crispy: 2.65, a 1.4 m wave
 // across one card) and Wave Size defaults to 0.5. The gust field is smooth in position and the tremble is 0 where
 // cards attach: bark and leaves stay joined.
+// No breathing: with the phase shared across a small crown, a tremble along crown-gradient normals moves every leaf
+// outward at once and a bush grows and shrinks. Plants up to 3 m tall (vertex R) tremble horizontally (wind turned by
+// +-90 degrees with B), blending to the normal by 6 m; tall trees keep the normal (sideways tremble lets their big
+// vertical cards cross more).
 // The meta pass skips the wind, so lightmaps are baked at the rest pose; the shadow caster sways with the tree.
 Shader "SoftCrown"
 {
@@ -113,11 +117,14 @@ Shader "SoftCrown"
             float across = dot(s, float4(0.006, 0.02, -0.02, 0.1)) / 0.16;
             float amount = v.color.a * v.color.r * 32 * _WindStrength * 0.01;   // metres at push 1
             float3 waveOff = (dir * push - side * across) * amount; // Silent pushes toward -z, where its crests travel
-            // leaf tremble (Horizon Zero Dawn, as in Crispy Foliage TrembleGrass), along the leaf normal; the phase drifts
-            // slowly in world space (0.5 rad/m) plus the smooth noise phase in B
+            // leaf tremble (Horizon Zero Dawn, as in Crispy Foliage TrembleGrass); the phase drifts slowly in world
+            // space (0.5 rad/m) plus the smooth noise phase in B. Direction: normal on trees, horizontal up to 3 m tall
             float3 nw = UnityObjectToWorldNormal(v.normal);
+            float ta = (v.color.b - 0.5) * 3.1415927;
+            float3 hd = dir * cos(ta) + side * sin(ta);
+            float3 tdir = lerp(nw, hd, saturate((6 - v.color.r * 32) / 3));
             float tr = sin(0.5 * (wp.x + wp.y + wp.z) + 2.65 * _Time.y * _FlutterSpeed + v.color.b * 6.2831853);
-            float3 trembleOff = nw * tr * v.color.g * _FlutterStrength;
+            float3 trembleOff = tdir * tr * v.color.g * _FlutterStrength;
             float3 off = waveOff + trembleOff;
             v.vertex.xyz = mul(unity_WorldToObject, float4(wp + off, 1)).xyz;
             // bend the normals and tangents with the offset (the light shimmer on moving leaves); capped at 0.3 so
