@@ -21,7 +21,7 @@ so no stops or corrections are needed.
   fixed interview**: the model asks follow-up questions only for what's missing or ambiguous. It
   needs:
   - world kind (living space / event world) and the event function;
-  - purpose; capacity; reference eye height (default 1.2 m); cuddling → near clip;
+  - purpose; capacity; reference eye height (default 1.3 m); cuddling → near clip;
   - space archetypes; mood;
   - style: palette, materials, lighting and time of day, era/place, exterior, furnishing feel;
   - reference images, saved and tagged.

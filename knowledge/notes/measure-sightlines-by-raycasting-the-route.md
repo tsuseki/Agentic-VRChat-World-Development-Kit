@@ -7,7 +7,7 @@ summary: Turn "you should see part of the track from spawn" into a number by ray
 **When:** placing occluders, spawn points or spectator areas along a route (racetrack, river, parade path).
 
 **How:**
-- Sample the route centreline densely; from the viewer's eye point (+ the reference eye height, default 1.2 m) raycast to each sample and report the **visible fraction** (one layout tuned to 17 %). Occluder placement becomes a number to tune, not an eyeball judgement.
+- Sample the route centreline densely; from the viewer's eye point (+ the reference eye height, default 1.3 m) raycast to each sample and report the **visible fraction** (one layout tuned to 17 %). Occluder placement becomes a number to tune, not an eyeball judgement.
 - At ground level a long straight is seen edge-on and nothing can be watched. Raising the hub/paddock on a shelf (6 m worked) turns it into a grandstand.
 - Put interactive panels where they don't block the spawn's only view of the action (e.g. on an end wall, not mid-apron).
 - Hide the map edge with an outer belt of rocks/terrain; use a few large infield masses as occluders.

@@ -38,7 +38,7 @@ Extracted from what the user supplied; gaps asked. Source: user / doc / referenc
 | Space archetypes (A1–A5) and people each | A1 bedroom ×2 (2–4), A2 lounge (8) | user |
 | Cuddling / lying close | yes | user |
 | Capacity typical / peak | 8 / 16 | user |
-| Reference eye height / avatar height | 1.2 m / about 1.3 m (full-size groups: 1.6 m / 1.75 m) | default |
+| Reference eye height / avatar height | 1.3 m / about 1.4 m (full-size groups: 1.6 m / 1.75 m) | default |
 | Platform | PC; Android: later \| yes \| no; iOS: Android fallback \| own build \| no | user |
 | Setting / theme | ... | user |
 | Mood, time of day, weather | ... | user |

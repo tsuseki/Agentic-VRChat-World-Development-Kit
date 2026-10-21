@@ -23,6 +23,17 @@ Everything is headless Blender **5.1** (run through the kit's `blender` tool, `p
 | `bare_limbs.py` | Blender (+ numpy/scipy stage) | bare limb ends/runs outside the leaf mass and floating sprays (painted twig base off the bark) on the packed mesh (`BARELIMBS <Sp> PASS/WARN/FAIL`, renders of each spot) |
 | `prompts/*.txt` | — | the exact image-gen prompts used |
 
+## Scale: build for the world's reference avatar
+`CFG` `height`/`width`, limb lengths and the Variants are full-size real-world species values. Worlds are
+built for people about **1.4 m tall** (WORLD.md reference eye height, default 1.3 m; spatial-design §5.9),
+so trees and shrubs are scaled by **k = eye_ref ÷ 1.6** (≈0.81 at the default) before they are placed:
+a tree at species height next to the reference avatar reads as oversized. Scale the placed instance
+uniformly by k (leaves and bark tile shrink with it, which is intended), or build a world-specific
+config with `height`/`width` ×k. Check every tree once beside the reference capsule at the reference
+eye height before placing the rest. Paths, decks and walkways under or through a crown still keep the
+collision minimums (≥2.3 m clear over walked floors). `crown_fullness.py` keeps its fixed 1.6 m
+camera: it is a comparison metric, not a scale.
+
 ## Pipeline
 
 ```

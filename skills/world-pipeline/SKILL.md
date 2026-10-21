@@ -345,9 +345,9 @@ must report 1 pair; offset one by 5 mm, so it must report 0.
 ## Measured reference person
 
 Gather the capacity *and the typical avatar eye height* of the group (A.2). The default reference
-is a **1.2 m eye** (avatar about 1.3 m); full-size groups use 1.6 m. A world sized for a 1.75 m
+is a **1.3 m eye** (avatar about 1.4 m); full-size groups use 1.6 m. A world sized for a 1.75 m
 person (1.6 m eye) felt empty to a group whose avatars averaged 1.2 m, and the shell had to be
-rebuilt at ×0.625 while loose furniture kept real size. The shell scales by eye ÷ 1.6, built-ins
+rebuilt at ×0.625 while loose furniture kept real size. The shell and outdoor features (trees, shrubs, rocks, landmarks) scale by eye ÷ 1.6, built-ins
 about ×0.9, props keep their real-world size, and nothing goes below the fixed player-collision
 minimums (≥2.3 m clear over paths, door and path widths; spatial-design §5.9). Record the
 reference eye height in WORLD.md; every reviewer uses it.

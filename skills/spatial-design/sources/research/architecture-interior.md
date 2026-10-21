@@ -545,8 +545,8 @@ The thresholds below are `[INFERENCE]` unless keyed in the sections they referen
    - Test paths against seating bounds [APL 185].
    - Name the organization type [Ching 2015].
 3. **Section:** 2 sections through the primary space. Count ceiling heights [APL 190] and level changes [Ching 2015]. Check compression before release [AD-FLW] and slab thickness [AISC 2023].
-4. **Arrival:** eye-level shot at the entrance (the WORLD.md reference eye height, default 1.2 m; also 1.6 m for full-size) plus 3 steps forward. The main view is partly hidden [Terrapin 2014], there is a visible goal, and the transition changes are observable [APL 112].
-5. **Seated:** first-person shot from each main seat (~1.2 m eye height for a full-size avatar, ~0.9 m at the 1.2 m default). Back covered, ≥6 m view [Terrapin 2014], focal point in view.
+4. **Arrival:** eye-level shot at the entrance (the WORLD.md reference eye height, default 1.3 m; also 1.6 m for full-size) plus 3 steps forward. The main view is partly hidden [Terrapin 2014], there is a visible goal, and the transition changes are observable [APL 112].
+5. **Seated:** first-person shot from each main seat (~1.2 m eye height for a full-size avatar, ~1.0 m at the 1.3 m default). Back covered, ≥6 m view [Terrapin 2014], focal point in view.
 6. **Plausibility:** for each overhang, compare length to backspan [AISC 2023]. Raycast down from each volume's bounds for floating gaps.
 7. **Dimensions:** sample 10 dimensions against §5. More than 2 out of range = NEEDS WORK.
 8. **Divergence (shotgun stage):** concepts must differ in organization, approach, primary shape and section idea.

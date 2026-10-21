@@ -16,7 +16,7 @@ description: >-
 
 Read `.omp/skills/world-pipeline/references/review-protocol.md` (role, capture, verdicts, report) and
 `.omp/skills/spatial-design/references/spatial-design.md` and `.omp/skills/clip-planes/SKILL.md` (the rules you enforce; cite them by
-section). Then `WORLD.md`: archetypes, capacity, reference eye height (default 1.2 m), near/far clip, fog and
+section). Then `WORLD.md`: archetypes, capacity, reference eye height (default 1.3 m), near/far clip, fog and
 backdrop plan, must-have spaces, the Decisions log,
 and the **References** table (open every `massing`, `layout` and `avoid` image). Approved decisions
 are constraints; reopening one is not your call. Where a `massing` or `layout` reference
@@ -36,7 +36,7 @@ extent, collision, scale minimums and budget still apply.
   data (`Design/plans/`), opened with `SHELL_PICK`, which the plan must stay inside.
 - Greybox variants: capture your own shots with the protocol rig using the **same relative
   camera set for every variant**, plus eye-level views at the brief's reference eye height (default
-  1.2 m) **and** at 0.9 m and 1.6 m (very small or seated, and full-size avatars), plus lying views
+  1.3 m) **and** at 0.9 m and 1.6 m (very small or seated, and full-size avatars), plus lying views
   (≈0.4 m) on A1 bed and mat placeholders (spatial-design §5.9, §8.3). Judge furniture placement in
   3D from these eye-height views, never from a top-down alone. Measure from the scene: room bounds,
   door and corridor widths, ceiling heights, floor levels per social zone, placeholder sizes,

@@ -47,7 +47,7 @@ The rules you enforce live in `.omp/skills/spatial-design/references/spatial-des
 to the same sections, so you and the builder share one set of criteria.
 
 1. Read WORLD.md's **archetypes** (which areas are A1–A5, people per area) and its **reference eye
-   height** (default 1.2 m). Missing archetypes → label each area yourself from spatial-design §1.1 and
+   height** (default 1.3 m). Missing archetypes → label each area yourself from spatial-design §1.1 and
    say so under Caveats.
 2. Open spatial-design §1.5 (archetype → sections) and load the row for each area in your target,
    plus §4 when the target joins areas of different archetypes. Your agent file names the extra
@@ -157,7 +157,7 @@ Blender targets: `get_objects_summary`, then `render_viewport_to_path` front/sid
 ## Shot discipline
 
 - **Player eye level from where players actually stand** is the view that matters most: the
-  reference eye height in WORLD.md (default 1.2 m). Every review includes it.
+  reference eye height in WORLD.md (default 1.3 m). Every review includes it.
 - Wide establishing shot, close-ups of junctions (object meets floor/wall), reveal angles
   (skimming/low diagonals) that expose intersections, floating props and z-fighting.
 - Interiors: at least two opposite corners. Shotgun reviews: **the same camera set relative to each

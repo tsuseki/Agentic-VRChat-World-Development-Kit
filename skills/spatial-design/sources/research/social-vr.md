@@ -85,7 +85,7 @@ Each item gives the rule, then numbers, then **Verify:** — how a reviewer chec
 - Rec Room recommends letting players "get a sneak peek" before they join [Rec Room 2024 Layout].
 - [INFERENCE] Put the spawn pad 5–10 m walk from the nearest conversation cluster and ≤ 25 m from the main gathering point, with that point visible from the pad.
 
-**Verify:** line of sight from spawn at the reference eye height (WORLD.md, default 1.2 m) to the hub centre; path length from spawn to the nearest cluster in 5–25 m.
+**Verify:** line of sight from spawn at the reference eye height (WORLD.md, default 1.3 m) to the hub centre; path length from spawn to the nearest cluster in 5–25 m.
 
 **S2. Face arrivals toward the room.**
 - The default spawn orientation aligns the player with the spawn transform [VRChat Scene Descriptor].
@@ -423,7 +423,7 @@ Per-hangout minimum [INFERENCE]: ≥ 3 activity resources of different intensity
 - [ ] ≥ 4 m clear height above every spawn [INFERENCE from VRChat Avatar Scaling].
 - [ ] A static, flat (≤ 5°) collider directly under each spawn [INFERENCE].
 - [ ] `RespawnHeightY` ≥ 5 m below the lowest floor [INFERENCE; drop-out warning in VRChat Labs Tips].
-- [ ] The hub is visible from spawn at the reference eye height (default 1.2 m) and is 5–25 m away [INFERENCE].
+- [ ] The hub is visible from spawn at the reference eye height (default 1.3 m) and is 5–25 m away [INFERENCE].
 - [ ] The spawn lies outside every cluster ring, stage and mirror zone [INFERENCE].
 - [ ] Exits are ≥ 2 m wide, lit, and inside the central 60° of the spawn view [INFERENCE; Meta Horizon Onboarding].
 - [ ] At spawn: mirrors and video off; no loud AudioSource range reaching it [VRChat Labs Tips], [VRChat Spatial Audio Source].
@@ -458,7 +458,7 @@ Run these via the Unity MCP `execute_code` tool.
 2. **Spawn checks:** for each `VRC_SceneDescriptor.spawns[i]`:
    - `OverlapSphere(pos + up*1, 3)` for the clear disc;
    - an upward ray of 4 m for clear height;
-   - a forward ray from the reference eye height (default 1.2 m), 3 m long;
+   - a forward ray from the reference eye height (default 1.3 m), 3 m long;
    - line of sight to the hub;
    - a downward ray ≤ 0.3 m to the floor.
 3. **Clusters:** group seats (by parent, or by a 3 m proximity threshold). For each cluster, record its centre, radius, seat-yaw error, pairwise distances and nearest-neighbour cluster distance.
@@ -466,9 +466,9 @@ Run these via the Unity MCP `execute_code` tool.
 5. **Audio:** list `AudioSource` and `VRC_SpatialAudioSource` ranges and positions; intersect them with quiet-zone bounds.
 6. **Mirrors:** list each mirror's active state, facing relative to the world centre, and the count per room.
 7. **Screenshots:**
-   - from each spawn at the reference eye height (default 1.2 m), facing forward;
+   - from each spawn at the reference eye height (default 1.3 m), facing forward;
    - a top-down orthographic view of each floor;
-   - one shot per cluster from a seat at seated eye height (≈1.1 m full-size, ≈0.9 m at the 1.2 m default).
+   - one shot per cluster from a seat at seated eye height (≈1.1 m full-size, ≈1.0 m at the 1.3 m default).
 
 ---
 

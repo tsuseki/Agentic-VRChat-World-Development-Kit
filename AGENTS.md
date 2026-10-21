@@ -101,6 +101,16 @@ geometry) live in the homes above. Unlike the hard rules (`.omp/RULES.md`), the 
 of them for a specific world; record the change and the user's words in that world's `WORLD.md`
 Decisions log, and every agent then follows `WORLD.md`.
 
+**Scale: we build for people about 1.4 m tall** (reference eye height 1.3 m), never for normal-size
+adults (1.75 m). Every agent sizes everything for that person: rooms, ceilings, doors, corridors,
+built-ins, stair widths, and outdoor features (trees, shrubs, rocks, landmarks, terrain features,
+outbuildings), scaled by eye ÷ 1.6 (≈0.81) from real-world values. A full-size tree or building next
+to a 1.4 m person reads as oversized and the world feels empty. Two exceptions: VRChat's player
+collision does not shrink with the avatar, so clear heights, door and stair sizes and path widths
+never go below the collision minimums; and loose furniture, handheld props and stair risers stay
+real size. Rules and minimums: spatial-design §5.9 and §5.11. A world's `WORLD.md` may set a
+different reference height for a group that plays full-size avatars.
+
 ## Collision, seats and pickups
 
 ### Movement collision

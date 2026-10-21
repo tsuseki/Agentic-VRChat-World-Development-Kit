@@ -147,7 +147,8 @@ criteria:
   standing and walking space, no clutter; no slatted cage screens; ≥3 depth planes in key views.
 - Mark each threshold between archetypes per §4 (ceiling, floor material, light, sound, enclosure).
 - Sizes and clearances from the §5.11 table scaled per §5.9: loose furniture real size, built-ins
-  about ×0.9, shell items ×eye ÷ 1.6, never below the Min column. Furniture clear of door jambs (§5.6).
+  about ×0.9, shell items and outdoor features (trees, shrubs, rocks, landmarks, outbuildings)
+  ×eye ÷ 1.6, never below the Min column. Furniture clear of door jambs (§5.6).
 
 ## Interactions & playability (C.2)
 

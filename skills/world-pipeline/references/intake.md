@@ -47,8 +47,8 @@ and approves, and end in the **Design Lock** (pipeline skill "Design Lock").
   256 m of the origin, and adds a near/far Udon script (`.omp/skills/clip-planes/SKILL.md`). It also means the
   lie-on furniture gets lie-down colliders behind the world toggle (pipeline skill "Lie-down
   colliders").
-- **Reference eye height** (always confirm): the group's typical avatar eye height. Offer **1.2 m**
-  (avatar about 1.3 m) as the default; full-size groups use 1.6 m. It sets the shell scale (eye ÷ 1.6,
+- **Reference eye height** (always confirm): the group's typical avatar eye height. Offer **1.3 m**
+  (avatar about 1.4 m) as the default; full-size groups use 1.6 m. It sets the shell scale (eye ÷ 1.6,
   clamped at the collision minimums; spatial-design §5.9); size the world for the wrong height and it
   feels empty or cramped.
 - **Platform** (always confirm unless the material says): **PC is the primary target**; every stage
@@ -213,7 +213,7 @@ agents build to the end; a lock item changes only when the user reopens it.
 | Archetypes | A1 intimate retreat (with A2 home if several rooms are asked for) |
 | Cuddling / lying close | yes: runtime near 0.001–0.003 m; lie-down colliders on lie-on furniture |
 | Capacity | 2–8 for A1; 8–16 for A2 |
-| Reference avatar | eye 1.2 m (avatar about 1.3 m); full-size groups 1.6 m |
+| Reference avatar | eye 1.3 m (avatar about 1.4 m); full-size groups 1.6 m |
 | Platform | PC; Android: later (offered as a port after D.3) |
 | Realism | stylised-realistic |
 | Interior darkness | balanced; cozy/night themes → dim |

@@ -83,8 +83,8 @@ The main area and spawn sit at the origin.
   L/wings, central hall, gallery/enfilade, open loft, pavilions), section, relation to outside and
   view, archetype mix and signature space (spatial-design §1.3 axes and tests). Include one safe
   concept and one contrarian concept. Same full program in each.
-- **Scale from the brief's reference eye height** (default 1.2 m, avatar about 1.3 m; full-size
-  1.6 m). The shell scales by eye ÷ 1.6 from the spatial-design §5.11 values, built-ins about ×0.9,
+- **Scale from the brief's reference eye height** (default 1.3 m, avatar about 1.4 m; full-size
+  1.6 m). The shell and outdoor features (trees, shrubs, rocks, landmarks) scale by eye ÷ 1.6 from the spatial-design §5.11 values, built-ins about ×0.9,
   furniture keeps real-world size, and no ceiling, door, stair or path drops below its collision
   minimum (collision does not scale with the avatar; spatial-design §5.9). A shell sized for
   full-size avatars feels empty to a small-avatar group.
@@ -122,7 +122,7 @@ are B.1/B.2 work.
 
 ```json
 {
-  "version": 1, "referenceEyeHeight": 1.2, "origin": [0, 0, 0],
+  "version": 1, "referenceEyeHeight": 1.3, "origin": [0, 0, 0],
   "volumes": [{"id": "hub", "kind": "building", "use": "hub", "footprint": [[0, 0], [12, 0], [12, 9], [0, 9]],
                "baseY": 0.0, "storeys": 2, "height": 7.0, "roof": "pitched", "vip": false},
               {"id": "oak1", "kind": "tree", "pos": [20, 0, 4], "radius": 3, "height": 14}],
@@ -174,7 +174,7 @@ coordinates relative to the building origin):
 
 ```json
 {
-  "version": 3, "referenceEyeHeight": 1.2, "origin": [0, 0, 0],
+  "version": 3, "referenceEyeHeight": 1.3, "origin": [0, 0, 0],
   "storeys": [{"id": "G", "floorY": 0.0, "height": 3.2}, {"id": "1", "floorY": 3.4, "height": 2.8}],
   "rooms": [{"id": "lounge", "storey": "G", "zone": "public", "archetype": "A2", "ceiling": 2.8,
              "polygon": [[0, 0], [9, 0], [9, 7], [0, 7]]}],
