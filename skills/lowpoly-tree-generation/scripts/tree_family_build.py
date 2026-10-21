@@ -21,6 +21,9 @@
 #       chain carrying fewer than `min` cards gets `n` more over its outer `reach` m (one at the tip), card length
 #       `size`, kept above `ground`; chains lying entirely below `cut` m (ground limbs, never leafy) are not meshed.
 #       Added after every other card with its own random sequence: no other card moves. Off = identical builds.
+#   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
+#       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
+#       ground-stem root crown below `fuse` m are allowed overlap); see BoothAssets/Tools/trees/declip.py. Off = identical builds.
 #   lod1_cards (0.6), lod1_size (1.35)   LOD1 card count and size factors
 #   lod1_subset=dict(keep=1.0, grow=1.0)   LOD1 = LOD0 thinned in place instead of rebuilt: same skeleton and card
 #       draws, every other tube ring, lod1_sides, all tip cards plus a `keep` share of the rest, `grow` x larger and
@@ -1066,6 +1069,12 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
             for i in range(len(b.pts)):
                 f = max(0.0, (cum[i] / L - f0) / (1 - f0)) ** 1.5
                 b.radii[i] = b.radii[i] * (1 - f) + TIP_R * f
+    if CFG.get("declip"):  # opt-in: limbs that clash (bark through bark) are tilted apart about their bases, see CFG["declip"]["script"]
+        if "mod" not in DECLIP_STATS:  # loaded once: its cache replays the same moves for every LOD
+            import importlib.util as _ilu
+            _sp = _ilu.spec_from_file_location("declip_mod", CFG["declip"]["script"]); _dmod = _ilu.module_from_spec(_sp); _sp.loader.exec_module(_dmod)
+            DECLIP_STATS["mod"] = _dmod
+        DECLIP_STATS[name] = DECLIP_STATS["mod"].declip(branches, low_cut(branches), CFG, ("declip", NAME, seed), NAME)
     me = bpy.data.meshes.new(name); bm = bmesh.new()
     uvl = bm.loops.layers.uv.new("UVMap"); bm.loops.layers.uv.new("UV2")
     deep = max(b.depth for b in branches)
@@ -1176,6 +1185,7 @@ if CFG.get("leaf_cluster"):  # matte foliage: no specular sheen or rim
     bsdf.inputs["Roughness"].default_value = 1.0; bsdf.inputs["Specular IOR Level"].default_value = 0.0
 
 SKELETONS = {}
+DECLIP_STATS = {}  # per LOD name: declip result (CFG declip)
 FULL_RINGS, SKIPS = {}, {}  # per LOD name: tubes kept at every ring (LOD1 retry), merges skipped
 MESHED, SNAPPED = {}, {}  # per LOD name: meshed axis per tube; shifts of the cards moved onto the meshed bark
 SEED = CFG["seed"] or pick_seed()
@@ -1203,6 +1213,8 @@ def coplanar_pairs(obj, eps=1e-4):  # faces not above ground (flare skirt walls 
         hits += 1
     return hits
 print("STAT", NAME, "seed", SEED)
+for _n, _d in DECLIP_STATS.items():
+    if _n != "mod": print("STAT", _n, "declip", _d)
 for o in LODS:
     print("STAT", o.name, "tris", tris(o), "bark", tris(o, 0), "leaf", tris(o, 1), "bounds", bounds(o))
 print("STAT coplanar-overlapping bark pairs LOD0:", coplanar_pairs(lod0))
