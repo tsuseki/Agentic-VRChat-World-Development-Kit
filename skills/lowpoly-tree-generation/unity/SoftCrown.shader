@@ -23,13 +23,17 @@
 // push is scaled by tree height, and the weights come from the vertex colour (tree_wind_data.py). Displacement is
 // in world space, so it also works on static-batched trees, where the object transform is gone.
 //   R  tree height / 32 m (one value per tree): gust push scales with the tree's size
-//   G  tremble weight: 0 on bark and along a card's stem edge (the card hinges there), rising to the tip,
-//      scaled by card length
-//   B  per-card random phase (leaves; 0 on bark)
+//   G  tremble weight: 0 on bark and on every card's stem edge, rising with the distance from them
+//   B  tremble phase: a smooth noise of the position (0 on bark)
 //   A  gust weight ("wind pinning"): 0 at the trunk base, (height / tree height)^2 to 1 at the top; a smooth field
-//      over the bark; a leaf card never gets less than its stem's value. Also the single sway mask for other
-//      foliage shaders (Crispy Foliage: Wind Pinning Source = Vertex Colour (A)).
-// The gust field is smooth in position and the tremble is 0 where cards attach: bark and leaves stay joined.
+//      over the bark; on leaves raised toward the stem heights of the cards around (hanging strands swing from
+//      above). Also the single sway mask for other foliage shaders (Crispy Foliage: Wind Pinning Source = Vertex
+//      Colour (A)).
+// Neighbouring cards move together: every weight is a function of position, not of the card, so crossing cards share
+// them where they cross; and the displacement field is smooth over a card's size (cards are 1-2 big triangles, the GPU
+// interpolates between their corners): the tremble phase drifts 0.5 rad/m in world space (Crispy: 2.65, a 1.4 m wave
+// across one card) and Wave Size defaults to 0.5. The gust field is smooth in position and the tremble is 0 where
+// cards attach: bark and leaves stay joined.
 // The meta pass skips the wind, so lightmaps are baked at the rest pose; the shadow caster sways with the tree.
 Shader "SoftCrown"
 {
@@ -58,8 +62,8 @@ Shader "SoftCrown"
         _WindDirection("Wind direction (world XZ)", Vector) = (1, 0, 0.3, 0)
         _WindStrength("Gust push (% of tree height at the top)", Range(0, 10)) = 3
         _WindSpeed("Wind speed", Range(0, 4)) = 1
-        _WindWaveSize("Wave size (higher = shorter gust waves)", Range(0.1, 4)) = 1
-        _FlutterStrength("Leaf tremble (m at the tip of a 1.5 m card)", Range(0, 0.3)) = 0.06
+        _WindWaveSize("Wave size (higher = shorter gust waves)", Range(0.1, 4)) = 0.5
+        _FlutterStrength("Leaf tremble (m at full tremble weight)", Range(0, 0.3)) = 0.06
         _FlutterSpeed("Leaf tremble speed", Range(0, 4)) = 1
     }
     SubShader
@@ -109,9 +113,10 @@ Shader "SoftCrown"
             float across = dot(s, float4(0.006, 0.02, -0.02, 0.1)) / 0.16;
             float amount = v.color.a * v.color.r * 32 * _WindStrength * 0.01;   // metres at push 1
             float3 waveOff = (dir * push - side * across) * amount; // Silent pushes toward -z, where its crests travel
-            // leaf tremble (Horizon Zero Dawn, as in Crispy Foliage TrembleGrass), along the leaf normal
+            // leaf tremble (Horizon Zero Dawn, as in Crispy Foliage TrembleGrass), along the leaf normal; the phase drifts
+            // slowly in world space (0.5 rad/m) plus the smooth noise phase in B
             float3 nw = UnityObjectToWorldNormal(v.normal);
-            float tr = sin(2.65 * (wp.x + wp.y + wp.z + _Time.y * _FlutterSpeed) + v.color.b * 6.2831853);
+            float tr = sin(0.5 * (wp.x + wp.y + wp.z) + 2.65 * _Time.y * _FlutterSpeed + v.color.b * 6.2831853);
             float3 trembleOff = nw * tr * v.color.g * _FlutterStrength;
             float3 off = waveOff + trembleOff;
             v.vertex.xyz = mul(unity_WorldToObject, float4(wp + off, 1)).xyz;
