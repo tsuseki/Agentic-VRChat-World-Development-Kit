@@ -61,9 +61,9 @@ full-size 1.6 m, lying ≈0.4 m. Dimension tables give real-world values for a 1
 10. **Level changes sparingly:** at most one deliberate floor-level change per social zone, ≥3 risers or a
     ramp, never on the entrance → main-area path. No decorative half-steps. [user rule]
 11. **Voice carries 25 m through walls.** Separate retreats from loud rooms by distance or an audio zone.
-12. **Size for the measured reference eye height** of the group (default 1.3 m, avatar about 1.4 m): the
-    shell and outdoor features (trees, shrubs, rocks, landmarks) scale by eye ÷ 1.6, loose props stay real
-    size, and nothing drops below the fixed collision minimums (§5.9). [user rule] [in-house]
+12. **Size for the measured reference eye height** of the group (default 1.3 m, avatar about 1.4 m):
+    everything (shell, built-ins, furniture, props, outdoor features) scales by eye ÷ 1.6 from real-world
+    sizes, and nothing drops below the fixed collision minimums (§5.9). [user rule] [in-house]
 13. **Stay near the origin.** Cuddle zones < 256 m and any occupied space < 512 m from (0,0,0) on every
     axis, teleport islands included. Pick near and far clip and fog per clip-planes §2. [INFERENCE]
     [in-house, measured]
@@ -236,9 +236,9 @@ eye; scale them per §5.9.
 
 ## 3. Per-archetype rules
 
-Areas, room sizes, ceilings and path widths in these tables are real-world values for a 1.6 m eye. Scale
-them per §5.9 (lengths ×k, areas ×k², k = eye ÷ 1.6) and clamp at the collision minimums; seat, table, bed
-and sightline numbers stay real size.
+Areas, room sizes, ceilings, path widths, seat, table and bed sizes in these tables are real-world values for
+a 1.6 m eye. Scale them per §5.9 (lengths ×k, areas ×k², k = eye ÷ 1.6) and clamp at the collision minimums.
+Sightline angles and VRChat engine values (voice range, clip planes) don't scale.
 
 ### 3.1 A1 Intimate retreat (2–8 people)
 | Aspect | Rule | Tag |
@@ -438,22 +438,28 @@ public ones.
 - **Reference eye height** (`eye_ref`, in WORLD.md): default **1.3 m** (avatar about 1.4 m), because the groups
   this kit builds for play small avatars: build for them, never for a full-size adult. Full-size groups use
   1.6 m. Always confirm at A.2 (intake.md checklist). [user rule]
-- **Scaling rule.** §5.11 and the archetype tables hold real-world values for a **1.6 m eye**. With
-  **k = eye_ref ÷ 1.6** (≈0.81 at the default):
-  - **Shell ×k:** room plan dimensions (areas ×k²), ceilings, storey heights, corridor widths, door widths
-    and heights, stair widths, outdoor path widths.
-  - **Outdoor features ×k:** trees, shrubs, hedges, rocks, landmarks, terrain features (hills, cliffs,
-    banks), bridges and outbuildings. Species and catalogue sizes are full-size real-world values; a
-    real-height tree or building next to a 1.4 m person reads as oversized. [user rule]
-  - **Built-ins about ×0.9** at the default (counters, millwork, built-in benches, window seats; ×1.0 at 1.6 m).
-  - **Loose furniture and props real size** (×1.0), and so are stair risers and goings.
+- **Scaling rule: everything ×k.** We build for adults who play small avatars, as if people were about
+  1.4 m tall. §5.11, the archetype tables, catalogue and vendor dimensions and real objects are full-size
+  values for a **1.6 m eye**. With **k = eye_ref ÷ 1.6** (≈0.81 at the default) every built thing is ×k:
+  - **Shell:** room plan dimensions (areas ×k²), ceilings, storey heights, corridor widths, door widths
+    and heights, stair widths, risers and goings, outdoor path widths.
+  - **Built-ins:** counters, millwork, built-in benches, window seats.
+  - **Loose furniture:** seats ≈0.36 m (0.42–0.46 real), tables ≈0.60 m (0.72–0.76 real), beds, sofas,
+    wardrobes, appliances.
+  - **Props, decor, pickups and handheld items.** Imported packs are usually modelled at adult (or
+    larger) size: an imported ASMR prop pack came in "super huge" in one room and had to be scaled down.
+    Fix the import scale to real size first (asset-import), then place ×k.
+  - **Outdoor features:** trees, shrubs, hedges, rocks, landmarks, terrain features (hills, cliffs,
+    banks), bridges and outbuildings. A real-height tree or building next to a 1.4 m person reads as
+    oversized. [user rule]
   - Rows marked ‡ in §5.11 were approved in the penthouse after its shrink (1.2 m eye), so they are already
     small-avatar values: scale them by eye_ref ÷ 1.2 instead (≈×1.08 at the default). [in-house]
 - **Clamp: never go below VRChat's fixed player collision.** Avatar scaling "does not affect its collision
   with the environment": a 1.4 m avatar collides like a full-size one. Each scaled value is
   **max(scaled value, collision minimum)**, the minimum being the §5.11 Min: clear height over any walked
   floor 2.3 m, door height 2.1 m, stair headroom 2.0 m, nook or over-bed ceiling 1.8 m, door clear 0.81 m,
-  primary path 2.0 m, stair width 0.91 m. At the default: small-room ceiling 2.4 × 0.81 = 1.95 → **2.3**;
+  primary path 2.0 m, stair width 0.91 m, walkway between furniture 0.76 m, secondary walkway 0.9 m.
+  At the default: small-room ceiling 2.4 × 0.81 = 1.95 → **2.3**;
   door height 2.4 × 0.81 = 1.95 → **2.1**; primary path 2.4–3.0 → **2.0**–2.45; storey 5 → 4.05 m.
   [INFERENCE]
 - **Conflict:** the small-avatar shell wants low, narrow spaces; the fixed collision capsule needs
@@ -462,7 +468,8 @@ public ones.
   avatar, because perceived emptiness is the failure users report. Evidence: the penthouse was designed for
   a 1.75 m person (1.6 m eye) and "felt empty" to a group whose avatars were about 1.2 m; the shell was
   rebuilt ×0.625 (storeys 5 → 3.8 m), built-ins ×0.9, loose props real size, and after the shrink the doors
-  still had to narrow. [in-house]
+  still had to narrow. [in-house] Keeping furniture and props at real size is **superseded** (user,
+  2026-10-21): everything scales ×k, including furniture and props. [user rule]
 - Test eye-level views at eye_ref (default 1.3 m), at 0.9 m (very small or seated avatars) and at 1.6 m
   (full-size), plus the lying views (≈0.4 m) in A1 beds and mats. [in-house] [INFERENCE]
 
@@ -477,10 +484,10 @@ public ones.
 
 ### 5.11 Dimension table (metres)
 
-Values are real-world sizes for a **1.6 m eye**. Apply §5.9: shell items and outdoor features ×k (k = eye_ref ÷ 1.6,
-≈0.81 at the default 1.3 m eye), built-ins about ×0.9, loose furniture real size, and **never below the Min column** for
-ceilings, clear height, door height and width, stair headroom and width, and primary path: collision does
-not scale with the avatar. ‡ = approved at small-avatar scale; scale by eye_ref ÷ 1.2. [in-house] [user rule]
+Values are real-world sizes for a **1.6 m eye**. Apply §5.9: **everything ×k** (k = eye_ref ÷ 1.6, ≈0.81 at the
+default 1.3 m eye): shell, built-ins, loose furniture, props and outdoor features, but **never below the Min
+column** for ceilings, clear height, door height and width, stair headroom and width, primary path and
+walkways: collision does not scale with the avatar. ‡ = approved at small-avatar scale; scale by eye_ref ÷ 1.2. [in-house] [user rule]
 
 | Item | Min | Typical | Generous | Tag |
 |---|---|---|---|---|
@@ -497,9 +504,9 @@ not scale with the avatar. ‡ = approved at small-avatar scale; scale by eye_re
 | Primary path | 2.0 | 2.4–3.0 | — | [INFERENCE] |
 | Walkway between furniture | 0.76 | 0.91 | 1.2 | |
 | Secondary walkway | 0.9 | — | — | [WORKSPACE RULE] |
-| Table height (loose furniture, real size) | 0.72 | 0.72–0.76 | — | [WORKSPACE RULE] |
-| Seat height (loose furniture, real size) | 0.42 | 0.42–0.46 | — | [WORKSPACE RULE] |
-| Counter height (built-in: ≈0.82 at the default eye) | — | 0.90 | — | [WORKSPACE RULE] |
+| Table height (loose furniture; real 0.72–0.76) | — | ≈0.60 at the default eye | — | [user rule] |
+| Seat height (loose furniture; real 0.42–0.46) | — | ≈0.36 at the default eye | — | [user rule] |
+| Counter height (built-in; real 0.90) | — | ≈0.73 at the default eye | — | [user rule] |
 | Behind a seated diner | 0.81 | 0.91 | 1.12 (walk past) | |
 | Bed clearance (open sides) | 0.76 | 0.91 | — | |
 | Cuddle platform, 3–4 people | — | 2.4 × 2.4 | — | [INFERENCE] |
@@ -573,7 +580,7 @@ below and A1 suites as teleport islands). All [in-house].
 - [ ] Archetype of every space named (A1–A5) with people per space; areas from §1.1 bands.
 - [ ] Header line with all §1.3 axes; organizing idea named; signature space named.
 - [ ] Intimacy gradient: entrance → public → semi-private → private; A1 rooms at the end, behind a turn or vestibule, or on islands.
-- [ ] Reference eye height stated (default 1.3 m); shell and outdoor features ×eye ÷ 1.6, clamped at the collision minimums; props real size (§5.9). [in-house]
+- [ ] Reference eye height stated (default 1.3 m); everything (shell, built-ins, furniture, props, outdoor features) ×eye ÷ 1.6, clamped at the collision minimums (§5.9). [user rule]
 - [ ] Massing: 1 primary + 2–4 secondary + tertiary; primary ≥30% larger; each volume maps to program; ≥3 top heights; finished roof edges. [INFERENCE]
 - [ ] Every cut ends on a corner; no dents or pockets; overhangs ≤1/3 backspan or visibly supported; nothing floats. [in-house]
 - [ ] Section drawn: ceiling heights per archetype; ≤1 deliberate level change per social zone, ≥3 risers or ramp, none on the entrance → main-area path. [user rule]

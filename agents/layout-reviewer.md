@@ -92,7 +92,7 @@ extent, collision, scale minimums and budget still apply.
    flagged now, with the seal or occlusion fix; stairs planned as one ramp per flight; teleport
    landings planned clear.
 10. **Furniture placement** (B.2): every big piece the program needs has a placeholder, labelled,
-   true to real-world size; seat groups, beds and focal points follow the room's archetype
+   true to size at the reference scale (real size ×k); seat groups, beds and focal points follow the room's archetype
    (spatial-design §5.1–§5.3, §3); paths pass the groups and clear every door swing at their scaled
    §5.11 widths (§5.6, §5.9); nothing blocks a window place or a view end; no small props or wall
    decoration in the greybox. B.1 floor plans carry **no furniture**; furniture drawn on one is a

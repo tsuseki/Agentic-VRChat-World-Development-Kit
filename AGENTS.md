@@ -101,15 +101,18 @@ geometry) live in the homes above. Unlike the hard rules (`.omp/RULES.md`), the 
 of them for a specific world; record the change and the user's words in that world's `WORLD.md`
 Decisions log, and every agent then follows `WORLD.md`.
 
-**Scale: we build for people about 1.4 m tall** (reference eye height 1.3 m), never for normal-size
-adults (1.75 m). Every agent sizes everything for that person: rooms, ceilings, doors, corridors,
-built-ins, stair widths, and outdoor features (trees, shrubs, rocks, landmarks, terrain features,
-outbuildings), scaled by eye ÷ 1.6 (≈0.81) from real-world values. A full-size tree or building next
-to a 1.4 m person reads as oversized and the world feels empty. Two exceptions: VRChat's player
-collision does not shrink with the avatar, so clear heights, door and stair sizes and path widths
-never go below the collision minimums; and loose furniture, handheld props and stair risers stay
-real size. Rules and minimums: spatial-design §5.9 and §5.11. A world's `WORLD.md` may set a
-different reference height for a group that plays full-size avatars.
+**Scale: build as if people were 1.4 m tall.** The kit builds for adults who play small avatars
+(reference eye height 1.3 m), never for normal-size 1.75 m humans. Everything built, sourced, generated
+or placed is ×k = eye ÷ 1.6 (≈0.81) of its real-world size: rooms, ceilings, doors, corridors, stairs,
+built-ins, **loose furniture** (seats ≈0.36 m, tables ≈0.60 m), **props, decor and pickups**, and outdoor
+features (trees, shrubs, rocks, landmarks, terrain, outbuildings). Real-world specs, vendor sizes and
+asset packs are adult-sized or larger: an imported ASMR prop pack came in "super huge" in a room and had
+to be scaled down. Fix import scale to real size first (asset-import skill), then apply ×k. The one
+exception is VRChat's player collision, which does not shrink with the avatar: clear heights, doors,
+stair widths and headroom, paths and walkways never go below the collision minimums. Rules, numbers and
+minimums: spatial-design §5.9 and §5.11. A world's `WORLD.md` may set a different reference height for
+a group that plays full-size avatars. This is a rule for new work; existing worlds are not rescaled
+unless the user asks.
 
 ## Collision, seats and pickups
 

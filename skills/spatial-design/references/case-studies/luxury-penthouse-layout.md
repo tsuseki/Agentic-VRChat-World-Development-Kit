@@ -151,8 +151,9 @@ Shape and massing
 Scale
 5. **Anchor everything to a measured reference person.** The whole remake was triggered by a scale
    mismatch (1.75 m assumption vs 1.2 m real avatars). Non-uniform shrink: shell ×0.625, built-in
-   millwork ×0.9, loose props ×1.0; storeys 5 m → 3.8 m. [INFERENCE: room volume scales with the
-   avatar; props scale with their real-world identity.]
+   millwork ×0.9, loose props ×1.0; storeys 5 m → 3.8 m. Superseded (user rule 2026-10-21):
+   everything visible, props included, now scales ×k (k = eye ÷ 1.6) and only the collision
+   minimums stay fixed (spatial-design §5.9).
 6. **Doorways:** after the shrink the owner still wanted them narrower; approved widths landed at
    **1.0–2.4 m** (private rooms 1.0–1.2 m, main portals 2.2–2.4 m) vs rejected 3.1–4.6 m openings.
    A 4 m opening read as a hole and collected furniture in its throat.

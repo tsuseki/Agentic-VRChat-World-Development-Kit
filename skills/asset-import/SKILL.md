@@ -34,7 +34,11 @@ to disk may need `AssetDatabase.ImportAsset(path, ForceUpdate | ForceSynchronous
 Set on the `ModelImporter`, `SaveAndReimport()`, read back in the next call.
 
 - **Scale:** fix units in the importer (`globalScale`, or `useFileScale = false, globalScale = 1` for a
-  metre FBX that a Blender round-trip declared in cm), not by scaling each instance.
+  metre FBX that a Blender round-trip declared in cm), not by scaling each instance. The importer
+  fix brings the model to real-world size; the placed instance then goes ×k (k = eye ÷ 1.6, ≈0.81
+  at the default 1.3 m eye; spatial-design §5.9), furniture and props included. Real size is the
+  full-size adult value: an imported prop pack placed at real size came in "super huge" in a room
+  and had to be scaled down.
 - **Rig and animation off:** `animationType = None`, `importAnimation = false`, so instances get no
   `Animator` that costs CPU every frame with nothing playing. Remove controller-less Animators and
   unused armatures from instances already placed.
@@ -161,7 +165,7 @@ new export doesn't need.
 ## 9. Verification (builder runs, reviewer judges)
 | # | Check | Pass |
 |---|---|---|
-| 1 | Units | one sample's `Renderer.bounds.size` matches the real object in metres (measured in a later call than the import) |
+| 1 | Units | one sample's `Renderer.bounds.size` matches the real object in metres after the import fix, and the placed instance is real × k (measured in a later call than the import) |
 | 2 | Upright | `bounds.min.y ≥ floor − 0.05` after every rotate/scale pass; upright props `size.y > 0.55 × max(size.x, size.z)`, rosettes excepted |
 | 3 | Front | a contact-sheet or 3/4 render shows the detailed face toward the room |
 | 4 | LODs | `LODGroup.size ÷ bounds max dimension` = 1.0000 on every prefab; screenshots taken inside the LOD0 distance |

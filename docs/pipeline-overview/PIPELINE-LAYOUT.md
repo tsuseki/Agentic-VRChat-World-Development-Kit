@@ -47,7 +47,7 @@ so no stops or corrections are needed.
   - 3–4 variant blockouts in 3D: building volumes, walls, heights, roof forms and level
     changes, **plus low-poly placeholder boxes for the big furniture only** (couches, beds and
     cuddle platforms, tables, wardrobes and storage, bar, screen or stage, big rugs as slabs),
-    labelled and true to size. No small props or wall decoration.
+    labelled and true to size at the reference scale (real size ×k). No small props or wall decoration.
   - layout-reviewer ranks and scores them in 3D from eye height. **One variant is picked** and
     refined; it is the blueprint for C.
   - **Not playable**: no colliders, spawn, stair ramps, teleport doors or clip planes yet. Those

@@ -6,7 +6,7 @@ description: >-
   interiors) in a scratch area of the open Unity scene shown as plain captures (layout track,
   no paint-overs), each pitched with its strengths and tradeoffs, then text → image style
   rounds; B.1 the 2D floor plan inside the locked shells (room purposes,
-  no furniture); B.2 greybox variants (massing plus labelled, true-to-size placeholders for big
+  no furniture); B.2 greybox variants (massing plus labelled, true-to-size (×k) placeholders for big
   furniture only) built
   side by side in a scratch area of the open Unity scene, then refinement of the pick and export of
   the placeholder transforms to the plan JSON and the prop schedule. Never dresses, lights, bakes or
@@ -84,8 +84,8 @@ The main area and spawn sit at the origin.
   view, archetype mix and signature space (spatial-design §1.3 axes and tests). Include one safe
   concept and one contrarian concept. Same full program in each.
 - **Scale from the brief's reference eye height** (default 1.3 m, avatar about 1.4 m; full-size
-  1.6 m). The shell and outdoor features (trees, shrubs, rocks, landmarks) scale by eye ÷ 1.6 from the spatial-design §5.11 values, built-ins about ×0.9,
-  furniture keeps real-world size, and no ceiling, door, stair or path drops below its collision
+  1.6 m). Everything visible scales by k = eye ÷ 1.6 from real-world sizes: the shell, outdoor features (trees, shrubs, rocks, landmarks), built-ins,
+  loose furniture and props (seat ≈0.36 m, table ≈0.60 m at the default), and no ceiling, door, stair or path drops below its collision
   minimum (collision does not scale with the avatar; spatial-design §5.9). A shell sized for
   full-size avatars feels empty to a small-avatar group.
 - **Level changes sparingly.** At most one deliberate floor-level change per social zone, ≥3 risers
@@ -201,7 +201,7 @@ places the real spawn in C.2.
   fixed offsets far enough apart not to overlap in shots (≥ 2× the footprint). Greybox colours:
   floors, interior walls and exterior walls in three different neutral tones.
 - **Big-furniture placeholders only**: couches, beds and cuddle platforms, tables, wardrobes and
-  storage, bar, screen or stage, big rugs as slabs. Low-poly boxes **true to real-world size**,
+  storage, bar, screen or stage, big rugs as slabs. Low-poly boxes **true to size at the reference scale** (real ×k),
   each a child of its room under `GREY_<X>/Furniture/<room>/`, named by its plan id
   (`lounge-sofa`), with a world-space text label of its type. No small props, no wall decoration.
   Positions follow each room's archetype rules: conversation geometry (spatial-design §5.1),

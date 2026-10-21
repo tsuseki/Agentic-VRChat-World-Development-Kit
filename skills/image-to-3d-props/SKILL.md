@@ -22,10 +22,10 @@ image or a text prompt — the full pipeline is for pieces where proportions and
 Before generating anything, check whether a suitable asset already exists — see
 [worldbuilding-assets](../worldbuilding-assets/SKILL.md).
 
-## 1. Blockout in Unity at real dimensions
+## 1. Blockout in Unity at reference-scale dimensions
 
-Grey-box the prop at its **exact real-world dimensions** (props stay real size whatever the
-reference avatar; check it beside a capsule at the WORLD.md reference, default 1.3 m eye) in a
+Grey-box the prop at its **reference-scale dimensions**: real-world size ×k (k = eye_ref ÷ 1.6,
+≈0.81 at the default; props scale like everything else; check it beside a capsule at the WORLD.md reference, default 1.3 m eye) in a
 scratch scene. Simple cubes/cylinders are enough — it only needs silhouette and
 proportions. Remove primitive auto-colliders.
 

@@ -48,9 +48,9 @@ and approves, and end in the **Design Lock** (pipeline skill "Design Lock").
   lie-on furniture gets lie-down colliders behind the world toggle (pipeline skill "Lie-down
   colliders").
 - **Reference eye height** (always confirm): the group's typical avatar eye height. Offer **1.3 m**
-  (avatar about 1.4 m) as the default; full-size groups use 1.6 m. It sets the shell scale (eye ÷ 1.6,
-  clamped at the collision minimums; spatial-design §5.9); size the world for the wrong height and it
-  feels empty or cramped.
+  (avatar about 1.4 m) as the default; full-size groups use 1.6 m. It sets the world scale: everything
+  visible, furniture and props included, ×eye ÷ 1.6, with only the collision minimums fixed
+  (spatial-design §5.9); size the world for the wrong height and it feels empty or cramped.
 - **Platform** (always confirm unless the material says): **PC is the primary target**; every stage
   builds, reviews and ships the PC world first. An **Android version** (Meta Quest, Android phones
   and tablets) is an optional secondary target, ported from the same scene after D.3; iOS gets its

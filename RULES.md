@@ -42,3 +42,10 @@ These stay in force for the whole session. Background and rationale live in `.om
 
 7. **These git repos are local-only backups. Never push.** Commit a checkpoint after a
    significant chunk of work; `git add` can take minutes, so run it backgrounded.
+
+8. **Build as if people were 1.4 m tall.** Worlds are for adults playing small avatars (eye
+   1.3 m), never normal-size humans. Everything new — rooms, doors, built-ins, furniture, props,
+   pickups, trees and outdoor features — is ×0.81 (eye ÷ 1.6) of real-world size; imported packs
+   get their import scale fixed, then ×0.81. Only VRChat collision minimums (2.3 m clear height,
+   2.1 m doors, 2.0 m paths, 0.91 m stairs) never shrink. `WORLD.md` may override per world.
+   Details: spatial-design §5.9.

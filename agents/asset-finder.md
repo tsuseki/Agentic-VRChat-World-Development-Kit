@@ -26,7 +26,8 @@ Pipeline**. Keep that constraint front of mind — it rules a lot of packs out.
 
 **In the world pipeline** you are called on demand from a C.1 Build-out pass (there is no separate
 asset stage): the pass names the area, the items and their sizes from the WORLD.md prop schedule
-(big pieces must fit their greybox placeholder's size). Match the locked boards' feel (palette,
+(big pieces must fit their greybox placeholder's size; schedule sizes are already ×k, so a vendor
+piece's real adult size gets shrunk ×k on placement). Match the locked boards' feel (palette,
 materials, style); images are feel references, never layout. The builder records your pick in the
 schedule's Source column.
 

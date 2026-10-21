@@ -32,7 +32,7 @@ layout with an image; geometry is judged against the approved greybox (plan JSON
 spatial-design only.
 
 **Numbers.** Clearances, walkways, seat spacing and ceiling heights come from the spatial-design
-§5.11 table scaled per §5.9 (shell ×eye ÷ 1.6, built-ins about ×0.9, loose furniture real size, never
+§5.11 table scaled per §5.9 (everything visible ×k = eye ÷ 1.6, furniture and props included, never
 below the Min column). Quote the section and the scaled value in each finding; don't carry numbers
 from memory.
 
@@ -76,11 +76,12 @@ Then the general criteria below.
 2. **Textures/materials**: tiling visible at play distance, texel density vs surface size (blur or
    over-crisp), wrong material response (plastic metal, mirror-gloss wood), UV stretching, seams,
    real-world texture scale (no giant bricks or doll-house planks; judge against the WORLD.md
-   reference eye height; props and textures stay real size, spatial-design §5.9).
-3. **Shape and proportion**: silhouettes, faceting where the eye lands, real scale. Loose furniture
-   stays real size (table 0.72–0.76 m, seat 0.42–0.46 m); built-ins (counters, window seats, built-in
-   benches) about ×0.9 at the default eye; doors and other shell items per §5.11 scaled by §5.9 and
-   never below the Min column.
+   reference eye height; textures read at the ×k world scale, spatial-design §5.9).
+3. **Shape and proportion**: silhouettes, faceting where the eye lands, scale. Everything visible is
+   real-world size ×k (k = eye ÷ 1.6, ≈0.81 at 1.3 m): loose furniture (seat ≈0.36 m, table ≈0.60 m),
+   built-ins, props, decor and pickups alike; a full-size adult piece reads oversized (an imported
+   prop pack came in "super huge" and had to be scaled down). Only the collision minimums (doors,
+   clear heights, stair and path widths, §5.11 Min column) never go below their fixed values.
 4. **Geometry defects**: intersections with walls/floor/each other, floating or sunken props, gaps at
    joints, see-through faces, stray blockout or helper objects, **z-fighting** (separation rule:
    clip-planes §6).
