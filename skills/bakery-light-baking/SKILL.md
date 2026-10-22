@@ -38,6 +38,12 @@ change and the user's words go in that world's `WORLD.md` Decisions log, and the
   Mixed lights at all). The sun stays in the scene as **Baked** so Bakery can cast from it; aim for
   large-scale shadows only. Bakery if licensed, else GLIM (free), else Unity Progressive GPU. Anything that moves needs
   `LightProbeGroup` coverage.
+- **Nothing that doesn't move is lit by light probes** (user, 2026-10-22: "no lighting by probes on
+  objects that don't move"). Every static opaque renderer is ContributeGI + Receive GI Lightmaps with
+  UV2, however small; give small pieces a higher Scale In Lightmap (≥ ~8 texels across the short side
+  of their main face) instead of making them probe-lit. Light probes are only for moving things
+  (pickups, players, animated or Udon-moved objects). Exceptions: transparent surfaces, runtime
+  screens and objects carrying a `BakeryLightMesh` (which Bakery can't lightmap).
 - **Cozy/night interiors go darker than instinct.** Deep shadow with small warm pools; when it seems
   done, cut another ~15% before asking, and never raise a level the user approved. "Lamp too bright"
   usually means the spill (emitter intensity), not the shade's own emission; they are separate knobs.
