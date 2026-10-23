@@ -85,13 +85,6 @@ Details: agent `asset-finder` §2.
 9. **TheBaseMesh** — https://www.thebasemesh.com/model-library — publisher-declared CC0,
    basic UVs and real-world scale; sampled items list FBX/OBJ/GLB. Useful editable generic
    geometry, not guaranteed finished materials or lightmap UV2. See the dated review above.
-10. **Scenario 3D Collection** — https://huggingface.co/datasets/scenario-labs/3d-collection —
-    1,342 AI-generated 3D examples (~39 GB), **CC BY 4.0, credit "Scenario"**. Mostly GLB, plus
-    some Blender/FBX/PLY/SPZ/VOX. Browse `data/train-00000-of-00001.parquet` (prompt, preview,
-    per-file paths) and fetch single files rather than the whole repo
-    (`huggingface_hub.hf_hub_download(..., repo_type="dataset")`). AI-generated meshes: expect
-    dense triangulated geometry, no UV2 and arbitrary scale — decimate, unwrap and rescale per
-    image-to-3d-props and asset-import. The Hunyuan companion set is gated and under separate licenses.
 
 Aggregators for discovery: **pandagraph's free-asset guide** (note.com), **boothplorer.com/world-assets**,
 **vr-items.me**. Functional Udon assets (video players, mirrors, teleporters, chairs, clocks) and
