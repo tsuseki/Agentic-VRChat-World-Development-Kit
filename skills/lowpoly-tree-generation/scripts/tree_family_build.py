@@ -32,6 +32,11 @@
 #   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
 #       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
 #       ground-stem root crown below `fuse` m are allowed overlap); see BoothAssets/Tools/trees/declip.py. Off = identical builds.
+#   base_clamp=True (default; False = the old builds): after the tubes are meshed, `base_cones.clamp` pulls every child's
+#       base cone (apex depth) and any ring corner that leaves the other tubes by > 2 mm back inside the parent tube,
+#       using the parent's actual meshed ring (lobe, 4/3 sides, taper, merge, declip): no light wedge of cone faces on the
+#       trunk's far side (BoothAssets olives 2026-10-23). Prints `STAT <name> base cones clamped N` only when it moves
+#       something, so trees that never poked stay geometry-identical (UV2 is smart-projected from the geometry).
 #   lod1_cards (0.6), lod1_size (1.35)   LOD1 card count and size factors
 #   lod1_subset=dict(keep=1.0, grow=1.0)   LOD1 = LOD0 thinned in place instead of rebuilt: same skeleton and card
 #       draws, every other tube ring, lod1_sides, all tip cards plus a `keep` share of the rest, `grow` x larger and
@@ -92,6 +97,7 @@ os.makedirs(SRC, exist_ok=True); os.makedirs(OUT, exist_ok=True)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tree_normals import transfer_crown_normals, leaf_normal_spread
 from tree_checks import floating_bark_components, floating_islands
+import base_cones
 from tree_uv import cylinder_uvs, stretch_stats
 import json, statistics
 UP = Vector((0, 0, 1))
@@ -1155,6 +1161,9 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
         if add - full_rings:
             bm.free(); bpy.data.meshes.remove(me)
             return make_lod(name, seed, lod1, full_rings | add)
+    if CFG.get("base_clamp", True):
+        nclamp = base_cones.clamp(bm)
+        if nclamp: print("STAT", name, "base cones clamped", nclamp)
     FULL_RINGS[name] = len(full_rings); SKIPS[name] = MERGE_SKIPPED[0]; MESHED[name] = meshed
     C = CFG["crown"]
     if sub:  # same count, size and draws as LOD0; sprig_crown builds a subset, larger, unfolded

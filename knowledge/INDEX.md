@@ -7,7 +7,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [lighting-baking](#lighting-baking) (66)
 - [probes-reflection-and-light](#probes-reflection-and-light) (21)
 - [materials-textures-shaders](#materials-textures-shaders) (38)
-- [geometry-meshes-uvs](#geometry-meshes-uvs) (27)
+- [geometry-meshes-uvs](#geometry-meshes-uvs) (28)
 - [import-fbx-prefabs](#import-fbx-prefabs) (15)
 - [placement-layout-design](#placement-layout-design) (45)
 - [colliders-physics](#colliders-physics) (13)
@@ -157,6 +157,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 ## geometry-meshes-uvs
 
 - [A black featureless door or picture is often hidden inside its own frame](notes/door-leaf-or-canvas-hidden-inside-its-frame.md) — When a door, lift, panel or picture renders as one black slab, check whether the leaf/canvas sits inside or behind its frame before touching lighting.
+- [A limb's buried base cone can poke out of a thin parent tube as a light triangular wedge on the far side](notes/buried-base-cones-poke-out-of-thin-parent-tubes-as-light-wedges.md) — Closing each child tube with a cone buried 1.5 radii back leaves the parent's far side on thin lobed or 4/3-sided parents; the exposed cone faces read as light bark wedges, so test the cone and ring against the union of the other tubes and clamp the apex depth.
 - [A per-prop triangle floor must clamp every LOD, and check which LOD is on screen](notes/lod-tri-floor-must-clamp-every-lod.md) — LOD ratios multiply straight through a floor applied only to LOD0, and LOD0 on small props stops rendering a few metres out — so the broken LOD is what every screenshot shows.
 - [A prop that renders as a blank slab is facing away — measure the submesh normal](notes/featureless-prop-check-facing-before-material.md) — When a prop renders featureless but materials, textures and bounds all check out, measure the content submesh's mean local normal; it is probably presenting its back.
 - [A prop with a wide flat foot cannot be tilted as a whole object](notes/tilt-base-plate-props-by-hinging-the-mesh.md) — Rotating a prop that has a wide base plate always drives a plate corner underground; hinge the mesh above a joint instead.
