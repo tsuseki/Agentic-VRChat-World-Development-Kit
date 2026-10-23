@@ -100,9 +100,19 @@ class _Tubes:
         t["bvh"] = None
 
     def bvh(self, t):
+        """Two surfaces per tube: every quad split along corner diagonal 0-2 (what Blender and Unity draw from the FBX
+        corner order) and along 1-3 (the other split, in case an importer flips it). Built from explicit triangles in the
+        mesh's own corner order, never `FromPolygons` (it splits quads the other way and the 0-2 wedge was missed)."""
         if t["bvh"] is None:
-            vs = t["comp"]; idx = {v.index: j for j, v in enumerate(vs)}
-            t["bvh"] = BVHTree.FromPolygons([v.co.copy() for v in vs], [[idx[v.index] for v in f.verts] for f in t["faces"]], all_triangles=False)
+            vs = t["comp"]; idx = {v.index: j for j, v in enumerate(vs)}; co = [v.co.copy() for v in vs]; out = []
+            for split in (0, 1):
+                tris = []
+                for f in t["faces"]:
+                    v = [idx[x.index] for x in f.verts]
+                    if len(v) == 4 and split == 1: tris += [[v[1], v[2], v[3]], [v[1], v[3], v[0]]]
+                    else: tris += [[v[0], v[i], v[i + 1]] for i in range(1, len(v) - 1)]
+                out.append(BVHTree.FromPolygons(co, tris, all_triangles=True))
+            t["bvh"] = out
         return t["bvh"]
 
     @staticmethod
@@ -110,17 +120,21 @@ class _Tubes:
         return Vector((max(t["lo"].x - q.x, 0, q.x - t["hi"].x), max(t["lo"].y - q.y, 0, q.y - t["hi"].y), max(t["lo"].z - q.z, 0, q.z - t["hi"].z))).length
 
     def sd(self, t, q):
-        b = self.bvh(t); r = b.find_nearest(q)
-        if r[0] is None: return 1e9
-        d = (q - r[0]).length; ins = 0
-        for rv in _RAYS:
-            n = 0; o = q + rv * 1e-5
-            for _ in range(60):
-                h = b.ray_cast(o, rv)
-                if h[0] is None: break
-                n += 1; o = h[0] + rv * 1e-5
-            ins += n & 1
-        return -d if ins >= 2 else d
+        """signed distance to tube t: the worse (larger) of the two quad splits; negative = inside"""
+        best = -1e9
+        for b in self.bvh(t):
+            r = b.find_nearest(q)
+            if r[0] is None: return 1e9
+            d = (q - r[0]).length; ins = 0
+            for rv in _RAYS:
+                n = 0; o = q + rv * 1e-5
+                for _ in range(60):
+                    h = b.ray_cast(o, rv)
+                    if h[0] is None: break
+                    n += 1; o = h[0] + rv * 1e-5
+                ins += n & 1
+            best = max(best, -d if ins >= 2 else d)
+        return best
 
     def usd(self, excl, q):
         """signed distance to the union of every tube but `excl` (negative = hidden inside another tube)"""
@@ -146,83 +160,114 @@ def _samples(t):
     return [("apex", ap.copy())] + [("ring", v.co.copy()) for v in ring0] + [("edge", v.co.lerp(ap, f)) for v in ring0 for f in (0.5, 0.8)]
 
 
+def _pick_parent(T, t, c, r0):
+    """The wider tube nearest (in its local radii, up to 4) to the child's base ring centre, or None: a child on a tube
+    that is not wider than itself (bamboo nodes, a limb on a thin twig) has no parent to hide its cone in."""
+    best = None
+    for p in T.tubes:
+        if p is t: continue
+        nd, pr, P = T.axis_dist(p, c)
+        if nd < 4.0 and pr > r0 * 1.01 and (best is None or nd < best[0]): best = (nd, p, P, pr)
+    return best
+
+
 def scan(bm, fix=False, k=1.0):
     """Report on every child tube's base cone; fix=True also moves the offending vertices (bm in place).
-    Returns dict(tubes, roots, children, orphans, bad, flagged=[...], clamped=n, unfixed=n)."""
+    A child with a wider parent tube nearby: the cone must lie inside the other tubes (ring corners pulled toward the
+    parent axis by at most 1.5 x the child radius, then the apex slid toward the ring centre). A child with no wider tube
+    around it ("flush"): nothing can hide the cone, so it is closed flat on its own tube (apex moved onto the ring
+    plane). Any child whose cone cannot be hidden in the parent after the pull and slide is closed flush the same way
+    (counted in `unfixed`). A child is flagged only while a cone sample is > TOL outside the other tubes AND its apex stands
+    more than TOL off the ring plane.
+    Returns dict(tubes, roots, children, flush, bad, flagged=[...], clamped=n, unfixed=n)."""
     T = _Tubes(bm); tol, trig, tgt, eok = TOL * k, TRIGGER * k, TARGET * k, EDGE_OK * k
-    flagged = []; roots = orphans = children = clamped = unfixed = 0
+    flagged = []; roots = flush = children = clamped = unfixed = 0
     for t in T.tubes:
         ap = t["apex"].co
         if ap.z < -0.01: roots += 1; continue
-        c = _centroid(t["rings"][0]); r0 = t["axis"][0][1]
-        cands = []
-        for p in T.tubes:
-            if p is t: continue
-            nd, pr, P = T.axis_dist(p, c)
-            if nd < 1.0 and pr > r0 * 1.01: cands.append((nd, p["id"], p, P))
-        if not cands: orphans += 1; continue
-        cands.sort(key=lambda x: x[0]); nd, _, p, Q = cands[0]; children += 1
+        ring0 = t["rings"][0]; c = _centroid(ring0); r0 = t["axis"][0][1]
+        par = _pick_parent(T, t, c, r0); children += 1
+        if par is None: flush += 1
+        p, Q = (par[1], par[2]) if par else (None, c)
         res = [(kind, T.usd(t, q)) for kind, q in _samples(t)]
-        worst = max(d for _, d in res)
+        depth = (ap - c).length; worst = max(d for _, d in res)
         moved = False
-        if fix and worst > trig:
-            ring0 = t["rings"][0]
-            for v in ring0:                      # 1. ring corners that leave the other tubes: pulled toward the parent axis
-                d = T.usd(t, v.co)
-                if d <= trig: continue
-                v0 = v.co.copy(); lo, hi = 0.0, None; best = (d, 0.0)
-                for i in range(1, 21):
-                    s = i / 20
-                    v.co = v0.lerp(Q, s); dd = T.usd(t, v.co)
-                    if dd < best[0]: best = (dd, s)
-                    if dd <= -tgt: hi = s; break
-                    lo = s
-                if hi is None:   # a thin twig on a thinner parent: the best reachable point, never worse than where it was
-                    v.co = v0.lerp(Q, best[1])
-                    if best[1] > 0: moved = True
-                    continue
-                for _ in range(8):
-                    mid = (lo + hi) / 2; v.co = v0.lerp(Q, mid)
-                    if T.usd(t, v.co) <= -tgt: hi = mid
-                    else: lo = mid
-                v.co = v0.lerp(Q, hi); moved = True
-            c2 = _centroid(ring0); a0 = t["apex"].co.copy()   # 2. apex depth clamped: slide toward the (new) ring centre
-            def ok(s):
-                a = a0.lerp(c2, s)
-                if T.usd(t, a) > -tgt: return False
-                return all(T.usd(t, v.co.lerp(a, f)) <= eok for v in ring0 for f in (0.5, 0.8))
-            if not ok(0.0):
-                hi = None
-                for i in range(1, 21):
-                    if ok(i / 20): hi = i / 20; break
-                if hi is None: unfixed += 1; t["apex"].co = a0.lerp(c2, 1.0); moved = True
-                else:
-                    lo = max(0.0, hi - 0.05)
-                    for _ in range(6):
-                        mid = (lo + hi) / 2
-                        if ok(mid): hi = mid
+        if fix and worst > trig and depth > tol:
+            if par is None:
+                t["apex"].co = c.copy(); moved = True
+            else:
+                reach = (1.5 if par[3] >= 1.5 * r0 else 0.5) * r0   # a parent barely wider than the child (equal forks): the ring moves little, the cone closes flush
+                for v in ring0:                  # 1. ring corners that leave the other tubes: pulled toward the parent axis
+                    d = T.usd(t, v.co)
+                    if d <= trig: continue
+                    v0 = v.co.copy(); lo, hi = 0.0, None; best = (d, 0.0)
+                    smax = min(1.0, reach / max((Q - v0).length, 1e-9))
+                    for i in range(1, 21):
+                        s_ = smax * i / 20
+                        v.co = v0.lerp(Q, s_); dd = T.usd(t, v.co)
+                        if dd < best[0]: best = (dd, s_)
+                        if dd <= -tgt: hi = s_; break
+                        lo = s_
+                    if hi is None:   # a thin twig on a thinner parent: the best reachable point, never worse than where it was
+                        v.co = v0.lerp(Q, best[1])
+                        if best[1] > 0: moved = True
+                        continue
+                    for _ in range(8):
+                        mid = (lo + hi) / 2; v.co = v0.lerp(Q, mid)
+                        if T.usd(t, v.co) <= -tgt: hi = mid
                         else: lo = mid
-                    t["apex"].co = a0.lerp(c2, hi); moved = True
+                    v.co = v0.lerp(Q, hi); moved = True
+                c2 = _centroid(ring0); a0 = t["apex"].co.copy()   # 2. apex depth clamped: slide toward the (new) ring centre
+                def ok(s_):
+                    a = a0.lerp(c2, s_)
+                    if T.usd(t, a) > -tgt: return False
+                    return all(T.usd(t, v.co.lerp(a, f)) <= eok for v in ring0 for f in (0.5, 0.8))
+                if not ok(0.0):
+                    hi = None
+                    for i in range(1, 21):
+                        if ok(i / 20): hi = i / 20; break
+                    if hi is None: t["apex"].co = a0.lerp(c2, 1.0); moved = True
+                    else:
+                        lo = max(0.0, hi - 0.05)
+                        for _ in range(6):
+                            mid = (lo + hi) / 2
+                            if ok(mid): hi = mid
+                            else: lo = mid
+                        t["apex"].co = a0.lerp(c2, hi); moved = True
+            if par is not None and max(d for _, d in [(kk, T.usd(t, q)) for kk, q in _samples(t)]) > tol and (t["apex"].co - _centroid(ring0)).length > tol:
+                t["apex"].co = _centroid(ring0); unfixed += 1; moved = True   # cannot hide in the parent: closed flush instead
             if moved: clamped += 1; T.refresh_box(t)
+            ap = t["apex"].co; c = _centroid(ring0); depth = (ap - c).length
             res = [(kind, T.usd(t, q)) for kind, q in _samples(t)]; worst = max(d for _, d in res)
-        if worst > tol:
+        if worst > tol and depth > tol:
             exp = 0.0
             for f in t["tri"]:
                 a, b, cc = [v.co for v in f.verts]
                 sm = [a + (b - a) * (i + 0.33) / 4 + (cc - a) * (j + 0.33) / 4 for i in range(4) for j in range(4 - i)]
                 exp += f.calc_area() * sum(1 for q in sm if T.usd(t, q) > 0.001 * k) / len(sm)
-            flagged.append(dict(child=t["id"], parent=p["id"], parent_axis_pt=[round(x, 4) for x in Q], base=[round(x, 4) for x in c], apex=[round(x, 4) for x in t["apex"].co],
-                                r0=round(r0, 4), parent_local_r=round(T.axis_dist(p, c)[1], 4),
+            flagged.append(dict(child=t["id"], parent=p["id"] if p else None, flush=par is None,
+                                parent_axis_pt=[round(x, 4) for x in Q], base=[round(x, 4) for x in c], apex=[round(x, 4) for x in t["apex"].co],
+                                r0=round(r0, 4), parent_local_r=round(par[3], 4) if par else 0.0,
                                 apex_out_mm=round(res[0][1] * 1000 / k, 1),
                                 ring_out_mm=round(max(d for kk, d in res if kk == "ring") * 1000 / k, 1),
                                 edge_out_mm=round(max(d for kk, d in res if kk == "edge") * 1000 / k, 1),
                                 worst_mm=round(worst * 1000 / k, 1), exposed_cm2=round(exp * 1e4 / (k * k), 1),
                                 cone_faces=sorted(f.index for f in t["tri"])))
-    return dict(tubes=len(T.tubes), roots=roots, children=children, orphans=orphans, bad=T.bad,
+    return dict(tubes=len(T.tubes), roots=roots, children=children, orphans=flush, flush=flush, bad=T.bad,
                 flagged=flagged, clamped=clamped, unfixed=unfixed)
 
 
+def settle(bm, k=1.0 / SHIP_SCALE, passes=6):
+    """scan(fix=True) until a pass moves nothing (a later child's move can uncover an earlier one); returns
+    (cones moved in total, last report)."""
+    total = 0
+    for _ in range(passes):
+        r = scan(bm, fix=True, k=k); total += r["clamped"]
+        if not r["clamped"]: break
+    return total, r
+
+
 def clamp(bm, k=1.0 / SHIP_SCALE):
-    """Builder hook: pull every offending base cone inside its parent tube; returns the number of cones moved
-    (0 = mesh untouched). k converts the shipped-scale tolerances to the builder's mesh units."""
-    return scan(bm, fix=True, k=k)["clamped"]
+    """Builder hook: pull every offending base cone inside its parent tube (or close it flush); returns the number of
+    cone moves (0 = mesh untouched). k converts the shipped-scale tolerances to the builder's mesh units."""
+    return settle(bm, k)[0]
