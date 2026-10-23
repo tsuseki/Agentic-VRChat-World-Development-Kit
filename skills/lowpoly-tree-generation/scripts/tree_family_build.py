@@ -26,6 +26,9 @@
 #       levels the direction). For low mats whose face-up cards read as flat rosettes. Own random sequence: card
 #       positions and directions are those of the plain build until the ground keep-out shrinks or skips a rolled
 #       card differently. Off = identical builds.
+#   crown tip_upbias=<float> (sprig, opt-in; bamboo): the card on every ground-stem tip uses this upbias instead of
+#       `upbias` (e.g. +0.4 under a hanging -1.8 crown), so the culm tip carries its own rising spray instead of a bare
+#       whip above the crown. No extra random draws. Off = identical builds.
 #   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
 #       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
 #       ground-stem root crown below `fuse` m are allowed overlap); see BoothAssets/Tools/trees/declip.py. Off = identical builds.
@@ -757,7 +760,8 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     cards = []  # every placed card (counts drive the loops below); dropped subset cards have first = None
     krng = random.Random(7919)  # own sequence: the subset choice never shifts the placement draws
     trng = random.Random(6007)  # own sequence for roll_tilt: card positions/directions stay those of the plain build
-    def place(b, t, d0, hang=False, nrm=None, exact=True):
+    def place(b, t, d0, hang=False, nrm=None, exact=True, ub=None):
+        UB = C["upbias"] if ub is None else ub  # ub: per-card upbias (tip_upbias on ground-stem tips)
         A, r, d = point_at(b, t)
         sz = size * rng.uniform(0.85, 1.15)
         if C.get("size_top") is not None:  # cards shrink toward the top (conifer spire): size x size_top at `height`
@@ -768,14 +772,14 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             for k in range(12):  # reroute (then shrink): a card may not reach into a keep-out volume
                 if k == 8: sz *= 0.6
                 if k == 10: sz *= 0.6
-                d = ((-UP * 1.0 + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * C["upbias"])).normalized()
+                d = ((-UP * 1.0 + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * UB)).normalized()
                 e1 = d.orthogonal().normalized(); e2 = d.cross(e1)  # the card is sz wide in an unknown roll
                 if not any(in_clear(A + d * sz * f + e * sz * 0.5) for f in (0.0, 0.35, 0.7, 1.0)
                            for e in (Vector(), e1, -e1, e2, -e2, (e1 + e2) * 0.7072, (e1 - e2) * 0.7072,
                                      (e2 - e1) * 0.7072, -(e1 + e2) * 0.7072)): ok = True; break
             if not ok: return False
         else:
-            d = ((-UP + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * C["upbias"])).normalized()
+            d = ((-UP + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * UB)).normalized()
         roll, cell = nrm if nrm is not None else rand_unit(rng), rng.choice(cards_cells)
         fl = C.get("flat", 0.0) if C["mode"] == "sprig" and not hang else 0.0
         if fl:  # flat (sprig): cards lie toward horizontal with their face toward the sky (layered flat crowns)
@@ -803,10 +807,12 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         cards.append((first, grid, att, b, t)); return True
     cards_cells = cells
     bm.verts.ensure_lookup_table()
-    # every terminal end above the leaf zone gets a card rooted just inside its cone cap
+    # every terminal end above the leaf zone gets a card rooted just inside its cone cap; opt-in crown tip_upbias
+    # (sprig, bamboo): the cards on ground-stem (culm) tips use this upbias instead of `upbias`, so a hanging-card
+    # crown still dresses the nodding culm tip (no bare whip above the crown). No extra random draws: off = identical.
     for b in terminal_ends(branches):
         if b.pts[-1].z >= C["minz"] * 0.8:
-            _, _, d = point_at(b, 0.97); place(b, 0.97, d)
+            _, _, d = point_at(b, 0.97); place(b, 0.97, d, ub=C.get("tip_upbias") if b.depth == 0 else None)
     fill = C.get("fill")  # share of the cards spread over the inner limbs to close the gaps between clumps
     if fill:
         inner = [b for b in branches if b.depth >= fill["mindepth"]]
