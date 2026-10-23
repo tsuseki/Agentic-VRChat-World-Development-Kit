@@ -114,6 +114,9 @@ source of truth. The quick reference below is for fast triage.
 - **Poly Pizza** (poly.pizza) — low-poly models, Google Poly successor.
 - **Sketchfab** (sketchfab.com) — huge, mixed; filter **Downloadable**.
 - **OpenGameArt** (opengameart.org) — mixed game assets.
+- **Scenario 3D Collection** (huggingface.co/datasets/scenario-labs/3d-collection) —
+  1,342 AI-generated models, mostly GLB, CC BY 4.0 (credit "Scenario"); browse the parquet
+  metadata, download single files. Expect dense meshes, no UV2, arbitrary scale.
 - **Blendkit** — see §2; search it with the script, not here.
 - **itch.io** (itch.io) — many free 3D/2D asset packs; free-tier packs download
   from the page's download button without an account.
