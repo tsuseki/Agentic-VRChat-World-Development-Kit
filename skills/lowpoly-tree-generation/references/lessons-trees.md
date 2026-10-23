@@ -22,6 +22,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Fill trunk slots with inner, back-angled cards (`crown.fill`)** — edge-on cards left the cedar trunk visible.
 - **Leaf cards ≥ 0.07 m above ground** — the bark snap moved one under the ground.
 - **Mat shrubs: stems on a small ring, not one point** — one point reads as a starburst.
+- **Shoot needle-clothed sprays (rosemary, heath, conifer twigs) as a side-view photo of round 3-D shoots, needles whorled all around and across the stem, never a flat-lay specimen** — flat-lay rosemary showed needles only left/right of a pale stem, so every card read as a fern frond and the bush as fans of stems ("looks like the branches are cut with only cross section displayed"); the side-view prompt (`BoothAssets/Source/Rosemary/gpt_sources/sweep5.txt`) hid the stems (wood share 0.26-0.37 → 0.06-0.13) and cut crown sky 0.025-0.03 at the same card sizes; tell the bark-match edit to repaint only the bare wood at the base.
 
 ## Atlas and shading
 - **For one-material trees use a square 2048² atlas with four 3:4 portrait spray cells and a vertical bark strip, imported wrap U Clamp / V Repeat; skip normal maps** — the bark tiles up the trunk with plain UVs in any shader and cards keep the cell aspect, while a square bark tile cost +47–92 % tris (cut UVs) or 4× blurrier bark; stereo VR exposes painted relief on low-poly trees.

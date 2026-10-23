@@ -21,6 +21,11 @@
 #       chain carrying fewer than `min` cards gets `n` more over its outer `reach` m (one at the tip), card length
 #       `size`, kept above `ground`; chains lying entirely below `cut` m (ground limbs, never leafy) are not meshed.
 #       Added after every other card with its own random sequence: no other card moves. Off = identical builds.
+#   crown roll_tilt=(lo, hi) (sprig, opt-in): each card is rolled about its own axis so its plane stands lo..hi deg
+#       (random sign) off the plane through the axis and the horizontal; replaces `flat`'s face-to-sky roll (flat still
+#       levels the direction). For low mats whose face-up cards read as flat rosettes. Own random sequence: card
+#       positions and directions are those of the plain build until the ground keep-out shrinks or skips a rolled
+#       card differently. Off = identical builds.
 #   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
 #       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
 #       ground-stem root crown below `fuse` m are allowed overlap); see BoothAssets/Tools/trees/declip.py. Off = identical builds.
@@ -374,10 +379,30 @@ def merge_continuations(branches, M):
             b.lobe_end += 0.0
         b.cont = c; c.merged_into = b
 
+def stem_layout_points(SL, cnt, seed):
+    """CFG stem_layout (opt-in): cnt stem bases scattered over an area with its own random sequence, at least `gap` m
+    apart. kind "disc" (r), "ellipse" (rx, ry) or "strip" (w along x, d along y; a hedge/screen row). Sorted by
+    distance from the origin, so stem 0 (the full-size one) stands in the middle. Also read by build_skeleton: `rim`
+    (m, default 1) = distance at which a stem reaches its full lean, `lean_min` (0.3) = lean share at the centre."""
+    rng = random.Random(seed * 101 + 7); pts = []; gap = SL.get("gap", 0.12); kind = SL.get("kind", "disc")
+    for _ in range(cnt * 400):
+        if len(pts) == cnt: break
+        if kind == "strip":
+            p = Vector((rng.uniform(-0.5, 0.5) * SL["w"], rng.uniform(-0.5, 0.5) * SL["d"], 0.0))
+        else:
+            a = rng.uniform(0, 2 * math.pi); s = math.sqrt(rng.random())
+            rx, ry = (SL["r"], SL["r"]) if kind == "disc" else (SL["rx"], SL["ry"])
+            p = Vector((math.cos(a) * s * rx, math.sin(a) * s * ry, 0.0))
+        if all((p - q).length >= gap for q in pts): pts.append(p)
+    assert len(pts) == cnt, f"stem_layout: only {len(pts)} of {cnt} bases fit at gap {gap}"
+    return sorted(pts, key=lambda p: p.length)
+
 def build_skeleton(seed):
     rng = random.Random(seed); out = []
     cnt, lean, L, r0, r1, gn, spread = CFG["stems"]
     parents = []
+    SL = CFG.get("stem_layout")  # opt-in (bamboo groves, screens): stem bases scattered over an area, not on a ring
+    if SL: SLP = stem_layout_points(SL, cnt, seed)
     for k in range(cnt):
         if "lean_dir" in CFG:  # all stems lean one way, fanned around that azimuth
             az = CFG["lean_dir"] + (k - (cnt - 1) / 2) * CFG.get("lean_fan", 0.5) + rng.uniform(-0.15, 0.15)
@@ -386,9 +411,14 @@ def build_skeleton(seed):
         le = rng.uniform(*lean) if cnt > 1 else rng.uniform(*lean)
         d = Vector((math.cos(az) * le, math.sin(az) * le, 1.0))
         base = Vector((math.cos(az) * spread, math.sin(az) * spread, 0.0))
+        if SL:  # base from the layout; lean outward from the centre (or lean_dir), scaled up toward the rim
+            base = SLP[k]; rad = Vector((base.x, base.y, 0.0)); rim = SL.get("rim", 1.0)
+            if "lean_dir" not in CFG and rad.length > 1e-3: az = math.atan2(base.y, base.x) + (az - 2 * math.pi * k / cnt)
+            le *= SL.get("lean_min", 0.3) + (1.0 - SL.get("lean_min", 0.3)) * min(1.0, rad.length / rim)
+            d = Vector((math.cos(az) * le, math.sin(az) * le, 1.0))
         sc = 1.0 if k == 0 or cnt < 4 else rng.uniform(0.7, 1.0)
         parents.append(grow(base, d, rng.uniform(*L) * sc, r0 * sc, r1 * sc, CFG.get("stem_segs", 6), 0, out, gn,
-                            CFG.get("bend", 0.0), seed + k))
+                            CFG.get("bend", 0.0), seed + k, up_end=CFG.get("bend_end")))  # bend_end: stem bend ramps to it (nodding tips)
     trunk = out[0]; TL = sum((trunk.pts[i + 1] - trunk.pts[i]).length for i in range(len(trunk.pts) - 1))
     def side_limbs(grown):  # extra trunk limbs at absolute heights; grown=True ones get the upper levels' children
         made = []
@@ -726,6 +756,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     lens = [sum((b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)) for b in twigs]
     cards = []  # every placed card (counts drive the loops below); dropped subset cards have first = None
     krng = random.Random(7919)  # own sequence: the subset choice never shifts the placement draws
+    trng = random.Random(6007)  # own sequence for roll_tilt: card positions/directions stay those of the plain build
     def place(b, t, d0, hang=False, nrm=None, exact=True):
         A, r, d = point_at(b, t)
         sz = size * rng.uniform(0.85, 1.15)
@@ -750,6 +781,12 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         if fl:  # flat (sprig): cards lie toward horizontal with their face toward the sky (layered flat crowns)
             if Vector((d.x, d.y, 0.0)).length > 1e-6: d = Vector((d.x, d.y, d.z * (1.0 - fl))).normalized()
             roll = roll.lerp(UP, fl).normalized()
+        RT = C.get("roll_tilt") if C["mode"] == "sprig" and not hang else None
+        if RT:  # opt-in (sprig): roll each card about its own axis d so its plane stands RT deg (lo, hi) off the plane
+            u = UP - d * UP.dot(d)  # through d and the horizontal: no card faces the sky flat (mat shrubs read as rosettes)
+            if u.length > 1e-3:
+                u.normalize(); a = math.radians(trng.uniform(*RT)) * (1.0 if trng.random() < 0.5 else -1.0)
+                roll = (u * math.cos(a) + d.cross(u) * math.sin(a)).normalized()
         if exact and CFG.get("clear"):  # the real card surface (its back overhang and corners too) must stay out of the volumes
             q = sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True)
             if any(in_clear(q[0].lerp(q[1], i / 4).lerp(q[3].lerp(q[2], i / 4), j / 4)) for i in range(5) for j in range(5)):
@@ -797,10 +834,14 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
                 t = rng.uniform(C.get("tip_from", 0.55), 0.98); _, _, d = point_at(b, t); place(b, t, d)
         count = len(cards)
     tries = 0
+    NS = C.get("node_step")  # opt-in (bamboo): cards on ground stems cluster at node heights every NS m (leaf tiers)
     while len(cards) < count and tries < count * 20:
         tries += 1
         b = rng.choices(twigs, lens)[0]
         t = rng.uniform(0.2, 0.97)
+        if NS and b.depth == 0:  # snap to the stem's tier heights; each stem's tiers shifted by its own golden-ratio phase
+            k = twigs.index(b); Lb = lens[k]; ph = (k * 0.618034 % 1.0) * NS
+            t = max(0.2, min(0.97, (round((t * Lb - ph) / NS) * NS + ph) / Lb))
         if point_at(b, t)[0].z < C["minz"]: continue
         _, _, d = point_at(b, t); place(b, t, d)
     V = CFG.get("vines")
