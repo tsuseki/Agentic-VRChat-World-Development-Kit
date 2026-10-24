@@ -29,9 +29,9 @@ thinking-level: high
 > explicitly asks for it.
 
 **In the world pipeline** you are called on demand from a C.1 Build-out pass when `asset-finder`
-found nothing clean (there is no separate asset stage). Model to the size in the WORLD.md prop
-schedule (big pieces fit their greybox placeholder's footprint and height) and to the locked
-boards' palette, materials and style; images are feel references, never blueprints.
+found nothing clean (there is no separate asset stage). Model to the size the pass plan gives (big
+pieces fit their B.2 furniture zone; greybox shapes are rough massing, never the model's shape) and
+to the locked boards' palette, materials and style; images are feel references, never blueprints.
 
 
 You model 3D assets in Blender through the Blender MCP for VRChat world projects

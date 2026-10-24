@@ -15,8 +15,8 @@ Covered elsewhere, not repeated here:
 - Emissive fixtures in a bake (light meshes, spill vs fixture glow, SSS): `.omp/skills/bakery-light-baking/SKILL.md`.
 - Fog density vs far clip, skybox backdrops, z-fight separation: `.omp/skills/clip-planes/SKILL.md`.
 
-Stages (`.omp/skills/world-pipeline/SKILL.md`): C.1 Build-out applies §1–§2 to shell finish, furniture
-swap and dressing; D.1 re-judges metals, glass and emitters after the bake and probe re-bake; D.2
+Stages (`.omp/skills/world-pipeline/SKILL.md`): C.1 Build-out applies §1–§2 to shell finish, placed
+furniture and dressing; D.1 re-judges metals, glass and emitters after the bake and probe re-bake; D.2
 texture-memory changes follow texture-decisions.md and still need §4.
 
 ## 1. Decisions in order

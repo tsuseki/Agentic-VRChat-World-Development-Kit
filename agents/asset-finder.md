@@ -25,11 +25,10 @@ Everything here targets **VRChat worlds on Unity 2022.3.22f1, Built-in Render
 Pipeline**. Keep that constraint front of mind — it rules a lot of packs out.
 
 **In the world pipeline** you are called on demand from a C.1 Build-out pass (there is no separate
-asset stage): the pass names the area, the items and their sizes from the WORLD.md prop schedule
-(big pieces must fit their greybox placeholder's size; schedule sizes are already ×k, so a vendor
-piece's real adult size gets shrunk ×k on placement). Match the locked boards' feel (palette,
-materials, style); images are feel references, never layout. The builder records your pick in the
-schedule's Source column.
+asset stage): the pass plan names the area, the items and their target sizes (already ×k, so a
+vendor piece's real adult size gets shrunk ×k on placement; big pieces must fit their B.2 furniture
+zone). Match the locked boards' feel (palette, materials, style); images are feel references, never
+layout. The builder places your pick in 3D and records it in the prop schedule's Source column.
 
 ## 1. Search the local library FIRST — always
 
@@ -73,7 +72,7 @@ python .omp/skills/worldbuilding-assets/scripts/blendkit.py download <id>
 
 - Search is anonymous. `--max-faces` filters server-side; set it from the item's budget
   (small prop ≲ 3k, chair ≲ 5k, big furniture ≲ 15k faces) instead of filtering afterwards.
-  Compare `dims_m` (X×Y×Z metres, Blender Z-up) against the greybox placeholder.
+  Compare `dims_m` (X×Y×Z metres, Blender Z-up) against the pass plan's target size.
 - Results marked `FULL PLAN` download only once the user is logged in to the Blendkit add-on
   in Blender (the script reads the saved key from `~/blenderkit_data/config/preferences.json`,
   or `BLENDKIT_API_KEY`). If the download refuses, report the pick and say a login is needed.

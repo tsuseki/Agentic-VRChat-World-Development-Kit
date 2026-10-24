@@ -40,27 +40,29 @@ so no stops or corrections are needed.
   (layout track), approved once. This is the user's last decision before final sign-off.
 
 ### B · Blueprint: agents decide (one optional user review, on in trials)
-- **B.1 Floor plan (2D)**: interior detail inside the locked shells (`SHELL_PICK`): which room is which. Room
-  purposes, archetypes, rough sizes, intimacy gradient, adjacency, public → private zoning, doors,
-  circulation; variants on different plan organisations. **No furniture in the 2D plan.**
-- **B.2 Greybox (= massing, with furniture)**:
+- **B.1 Floor plan (2D, zoning only)**: inside the locked shells (`SHELL_PICK`): which room is which.
+  Room purposes, archetypes, rough sizes, intimacy gradient, adjacencies, public → private zones,
+  door positions, circulation, rough furniture zones; variants on different plan organisations.
+  **No furniture in the 2D plan.**
+- **B.2 Greybox (= massing, with rough furniture zones)**:
   - 3–4 variant blockouts in 3D: building volumes, walls, heights, roof forms and level
-    changes, **plus low-poly placeholder boxes for the big furniture only** (couches, beds and
-    cuddle platforms, tables, wardrobes and storage, bar, screen or stage, big rugs as slabs),
-    labelled and true to size at the reference scale (real size ×k). No small props or wall decoration.
+    changes, **plus at most rough furniture zones**: flat labelled floor patches ("seating for
+    5", "bed"), never true-to-size furniture placeholders. No small props or wall decoration.
   - layout-reviewer ranks and scores them in 3D from eye height. **One variant is picked** and
-    refined; it is the blueprint for C.
+    refined in 3D; it is the blueprint for C.
   - **Not playable**: no colliders, spawn, stair ramps, teleport doors or clip planes yet. Those
     need the real objects and are built in C.2.
-  - Placeholder transforms (id, room, type, size, position, rotation) are exported to the
-    plan JSON and the prop schedule. Furniture positions come **from the 3D scene**, not a
-    drawing.
+  - No furniture transforms are exported. Once the user confirms a 3D blockout, changes happen
+    in 3D, never in new 2D plan rounds.
 - Optional user review of the plan and greybox: off by default, on in trials.
 
 ### C · Build: the main build loop
 - **C.1 Build-out**, the main loop, runs area by area. Each pass does what the area needs:
   - **shell finish**: real walls, floors, roofs, windows, doors, trims and materials replacing the greybox geometry;
-  - **furniture swap**: placeholders → real assets at the same transform, moved only for collisions or a better fit, and reported;
+  - **furniture, placed in 3D**: real models sourced and placed directly in the room, composed
+    by the seating and layout rules (replace whole groups, nothing alone in open floor, door
+    zones clear, group spacing), judged in 3D by dressing-reviewer; the plan JSON furniture list
+    and the prop schedule are written afterwards from what was placed;
   - **dressing**: secondary pieces and decor, added by rule.
   - Assets are sourced as each pass needs them; there is no separate asset stage.
 - **C.2 Interactions and playability**, once the real objects exist:

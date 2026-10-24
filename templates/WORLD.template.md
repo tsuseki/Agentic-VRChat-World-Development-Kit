@@ -103,38 +103,41 @@ positions, proportions or layout. Changes only when the user reopens an item.
 
 <!-- ===================== B · Blueprint ===================== -->
 
-## Floor plan (B.1)
-Picked `Design/plans/vN.png` + `vN.json` (layout-reviewer N/10), inside the locked shells. Room purposes only, no furniture.
-| Room | Archetype | People | Area m² | Zone (public→private) | Floor | Adjacent to | Notes |
-|---|---|---|---|---|---|---|---|
+## Floor plan (B.1, zoning)
+Picked `Design/plans/vN.png` + `vN.json` (layout-reviewer N/10), inside the locked shells. Zoning only: room
+purposes, adjacencies, circulation, door positions, zones and rough furniture zones; no furniture.
+| Room | Archetype | People | Area m² | Zone (public→private) | Floor | Adjacent to | Furniture zones | Notes |
+|---|---|---|---|---|---|---|---|---|
 
 ## Greybox pick (B.2)
-Variants `GREY_A..D` (layout-reviewer scores: A 7, B 8, C 6). Picked B YYYY-MM-DD, refined → `GREY_PICK`
-(layout-reviewer SHIP IT, N/10). Refinements written back to `Design/plans/vN.json`. Not playable.
+Variants `GREY_A..D` (layout-reviewer scores: A 7, B 8, C 6). Picked B YYYY-MM-DD, refined in 3D → `GREY_PICK`
+(layout-reviewer SHIP IT, N/10). Massing plus rough furniture-zone floor patches only; refinements written back
+to `Design/plans/vN.json` from the scene. Not playable. User-confirmed YYYY-MM-DD: from here changes happen in 3D only.
 
-## Prop schedule (from the B.2 placeholders)
-Exported from the greybox scene: one row per placeholder, id = the plan JSON `furniture` id (`pos`, `rotY`
-there). Sizes are W×D×H in metres at the reference scale: real-world size ×0.8 (fixed). `Lie-down` = gets a `LieDownCollider` in C.2; `Solid` = big
-furniture that gets an always-on `SolidCollider` in C.2. Source is filled in C.1 as assets are found.
+## Prop schedule (C.1 record of what was placed)
+Written by world-builder at the end of each C.1 pass **from the scene**: one row per placed big piece, id = the
+plan JSON `furniture` id (`pos`, `rotY` there). Never filled ahead of placement. Sizes are W×D×H in metres as
+placed (real-world size ×0.8, fixed). `Lie-down` = gets a `LieDownCollider` in C.2; `Solid` = big furniture that
+gets an always-on `SolidCollider` in C.2.
 
 ### <Room id> (<archetype>)
+Furniture program (from the first pass plan): "L-sofa group for 5 facing the fire, on a rug; dining for 4".
+Dressing rule: density "2–4 small items per surface, none on the floor mid-room"; style "ceramics, books, brass,
+dried flowers" (from the boards' feel); examples: vase, stacked books, candle tray, framed print.
 | Item id | Type | W×D×H m | Qty | Role | Lie-down | Solid | Source |
 |---|---|---|---|---|---|---|---|
-| lounge-sofa | L-sofa | 2.3×1.6×0.65 | 1 | anchor | yes | no | to find / asset-finder: <path> / owned pack / to model |
-| lounge-table | coffee table | 1.0×0.5×0.33 | 1 | anchor | no | no | to find |
-| dining-table | dining table | 1.45×0.75×0.6 | 1 | anchor | no | yes | to find |
-Secondary pieces and decor (by rule, not placeholders): density "2–4 small items per surface, none on the
-floor mid-room"; style "ceramics, books, brass, dried flowers" (from the boards' feel); examples: vase,
-stacked books, candle tray, framed print.
+| lounge-sofa | L-sofa | 2.3×1.6×0.65 | 1 | anchor | yes | no | asset-finder: <path> / owned pack / modelled |
+| lounge-table | coffee table | 1.0×0.5×0.33 | 1 | anchor | no | no | asset-finder: <path> |
+| dining-table | dining table | 1.45×0.75×0.6 | 1 | anchor | no | yes | asset-finder: <path> |
 
 <!-- ===================== C · Build ===================== -->
 
 ## Build-out area tracker (C.1)
 One row per pass. The pass plan is logged before building; the review's findings plus unfinished work
 become the next plan. An area is done on SHIP IT with nothing left on its plan.
-| Area | Pass | Plan (shell finish / furniture swap / dressing; assets) | Verdict | Style | Build | Moves from placeholders | Next |
+| Area | Pass | Plan (shell finish / furniture placed in 3D / dressing; assets) | Verdict | Style | Build | Layout checks (door zones, spacing, LOD ghosts) | Next |
 |---|---|---|---|---|---|---|---|
-| Lounge | 1 | shell finish + swap sofa, table | NEEDS WORK | 7 | 4 | sofa 0.3 m west (door swing) | fix junctions, dress shelves |
+| Lounge | 1 | shell finish + sofa group, dining set | NEEDS WORK | 7 | 4 | d1 zone: daybed 0.4 m in; sofa ends 0.1 m | replace sofa group as one, dress shelves |
 
 ## Interactions & playability (C.2)
 | Item | Where | Status | Notes |

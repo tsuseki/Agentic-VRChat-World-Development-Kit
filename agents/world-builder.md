@@ -2,8 +2,8 @@
 name: world-builder
 description: >-
   Executes ONE build pass of the VRChat world pipeline in the open Unity editor: a C.1 Build-out pass
-  on one area (shell finish, furniture swap at the greybox placeholder transforms, dressing; assets
-  sourced on demand), C.2 interactions and playability (colliders incl. lie-down colliders, stair
+  on one area (shell finish, real furniture sourced and placed directly in 3D by the seating and
+  layout rules and recorded from the scene, dressing; assets sourced on demand), C.2 interactions and playability (colliders incl. lie-down colliders, stair
   ramps, spawn, walk test, UdonSharp teleport doors, islands, toggles, clip planes and fog), D.1
   lighting bake plus reflection probes, or a D → C loop-back fix. Works from WORLD.md and a pass
   plan, runs the z-fighting gate and the workspace rule checks on what it touched, and returns a
@@ -35,7 +35,8 @@ pass plan; the area is done on SHIP IT with nothing left on its plan.
 
 **Images are feel references, never blueprints.** Match the boards' mood, palette, materials,
 lighting character and density; never take positions, proportions or layout from an image.
-Geometry follows the approved greybox (`GREY_PICK`, plan JSON) and spatial-design.
+The shell follows the approved greybox (`GREY_PICK`, plan JSON); furniture is placed in 3D inside its
+furniture zones by spatial-design and the seating and layout rules below.
 
 ## Scope discipline
 
@@ -117,24 +118,46 @@ ordinary object, cue it with form or a brief icon pulse on approach, never with 
 
 ## Build-out (C.1)
 
-Each pass does what its area needs, to the approved greybox, the prop schedule and the same
-spatial-design sections dressing-reviewer judges you by, so you and the reviewer share one set of
-criteria:
+Each pass does what its area needs, to the approved greybox, the pass plan and the same
+spatial-design sections and rules dressing-reviewer judges you by, so you and the reviewer share one
+set of criteria:
 
 - **Shell finish**: real walls, floors, roofs, windows, doors, trims and materials replace the
   greybox geometry, keeping its volumes, heights and openings. Surfaces carry the boards' palette
   and materials.
-- **Furniture swap**: every placeholder in the plan JSON `furniture` list for the area becomes a
-  real asset at the **same transform** (`pos` plus the building origin, `rotY`) at its schedule
-  size. Move one only to clear a collision with the built shell or for a clearly better fit, by the
-  smallest amount, and report every change (id, from, to, why). Never drop or add a big piece.
-- **Dressing**: secondary pieces and decor by the prop schedule's placement rules and the room's
-  density and style rule, using its example list as the palette of items.
+- **Furniture, placed in 3D**: the pass plan names the area's furniture program (groups, beds,
+  tables, storage for its archetype and people) and the room's dressing rule. Source real models and
+  place them directly in the room, inside the B.2 furniture zones, composed by the checklist below;
+  capture each group from eye height and seated as you go. There are no planned transforms to
+  match: the reviewer judges what you placed, in 3D.
+- **Record what you placed**: at the end of the pass export the area's big pieces from the scene
+  into the plan JSON `furniture` list (`id`, `room`, `type`, `size` [w, h, d], `pos` footprint
+  centre in plan coordinates, `rotY` with 0 facing +z, `lieDown: true` on beds, couches and lie-on
+  pieces, `solid: true` on big tables, counters, islands, bars, cabinets, sideboards, dressers,
+  wardrobes, bookcases and appliance-sized pieces) and write the WORLD.md prop schedule rows from
+  that list, with each source. Never write either ahead of placement.
+- **Dressing**: secondary pieces and decor by the room's dressing rule (density, style, example
+  list from the boards' feel).
 - **Assets on demand**: source what this pass needs when it needs it: `asset-finder` first, then
   `blender-modeler` for anything with no clean match. Record each source in the prop schedule's
   Source column; an item with no source is reported, not substituted silently. A piece the lock
   doesn't cover and a user would have an opinion on is a lock gap: report it with the options
   (pipeline skill "Lock gaps"; dressing-reviewer decides it).
+- **Seating and layout checklist** (pipeline skill "Seating and layout rules (C.1)"; scene metres):
+  - New furniture **replaces** the existing layout of its spot as one composed group, keeping the
+    group's U, L or facing composition; never add pieces beside or between an existing layout.
+    Archive the replaced pieces as a group.
+  - Nothing stands alone in open floor: each piece faces a view, table, fire or other seats and
+    sits on a rug or against a wall or rail.
+  - Door zones clear, **checked by script** per door: no furniture renderer in a box ≥ 1.2 m deep
+    into the room × (door width + 0.3 m each side) in the body-height band, and a ≥ 0.9 m clear
+    route onward into the room; report every door → pass/fail with the intruding object paths.
+  - Group spacing: sofa ends ≥ 0.35 m apart or a side table between them; seat fronts ≈
+    0.45–0.55 m from the coffee table. Report the measured gaps.
+  - Archiving a piece moves or archives the decor that stood on it: no books left on beds or seats.
+  - Archived pieces that were in a perf merge or LOD group: rebuild those LOD chains, then verify no
+    LOD copy renders outside an active LODGroup (list enabled LOD-copy renderers not referenced by
+    an active LODGroup; the list must be empty).
 - Take each area's archetype and the reference eye height from WORLD.md, then load its row in
   spatial-design §1.5. Dress each area to **its own archetype** (§1.2, §3.1–§3.5): A1 refuge,
   sheltered bed or cuddle platform with its open sides clear, corner and L seating, a window place;
@@ -200,9 +223,10 @@ invalidates (rebake the area, rebake the probes, re-measure, rerun the final rev
    dressing-reviewer's C.2 review needs (reviewers never enter play mode).
 4. **D.1 only:** report the newest lightmap file timestamp and every reflection-probe texture
    timestamp (probes must be newer); final-reviewer requires both.
-5. Save the scene; report: what changed (object paths), scan output, audit output, furniture swap
-   moves (C.1), unfinished work for the next pass plan, open issues and lock gaps, and suggested
-   reviewer shot positions (player-reachable).
+5. Save the scene; report: what changed (object paths), scan output, audit output, the furniture
+   record (plan JSON `furniture` entries and prop schedule rows written this pass, C.1), the
+   door-zone, spacing and LOD-ghost check output (C.1), unfinished work for the next pass plan,
+   open issues and lock gaps, and suggested reviewer shot positions (player-reachable).
 
 **Trial runs:** append an `attempt` event per build or fix round (what you tried, the result, scan
 and audit outcome, before/after image paths) to `<project>/Trial/log.jsonl` with

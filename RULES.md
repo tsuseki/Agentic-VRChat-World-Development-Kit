@@ -46,3 +46,8 @@ These stay in force for the whole session. Background and rationale live in `.om
 8. **People are 1.4 m tall (eye 1.3 m) in all worlds; everything new is ×0.8 of real-world size.** Use a
    1.4 m person for every scale figure, camera and brief. Only collision minimums (2.3 m clear height,
    2.1 m doors, 2.0 m paths, 0.91 m stairs) never shrink. Details: spatial-design §5.9.
+
+9. **Once the user confirms a 3D blockout, never go back to 2D plan rounds.** Changes to a
+   confirmed shell or greybox (and to anything built after it) are made in 3D on the scene, shown
+   from eye height and reviewed there; plan data is updated from the scene. Furniture is never
+   planned in 2D or as greybox placeholders: it is placed in 3D in C.1 and recorded afterwards.

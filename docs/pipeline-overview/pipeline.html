@@ -130,9 +130,9 @@ footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 1
   <rect x="266" y="60" width="220" height="170" rx="16" fill="#e8f5ef" stroke="#2f8a6a" stroke-width="2"/>
   <text x="286" y="95" font-size="22" font-weight="800" fill="#2f8a6a">B · Blueprint</text>
   <text x="286" y="120" font-size="13" fill="#2f8a6a" font-weight="600">agents decide</text>
-  <text x="286" y="148" font-size="13" fill="#1f2430">Floor plan (rooms in shells)</text>
+  <text x="286" y="148" font-size="13" fill="#1f2430">Zoning plan (rooms in shells)</text>
   <text x="286" y="168" font-size="13" fill="#1f2430">Greybox variants (3D +</text>
-  <text x="286" y="186" font-size="13" fill="#1f2430">  furniture placeholders)</text>
+  <text x="286" y="186" font-size="13" fill="#1f2430">  rough furniture zones)</text>
   <text x="286" y="208" font-size="13" fill="#1f2430">→ one variant picked</text>
   <line x1="488" y1="145" x2="518" y2="145" stroke="#8a93a5" stroke-width="2.5" marker-end="url(#ar)"/>
   <!-- C -->
@@ -178,10 +178,10 @@ footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 1
   <div class="phase pB"><h3><span class="tag">B</span>Blueprint</h3>
     <div class="who">Agents decide · optional review by you (on in trials)</div>
     <ol>
-      <li><b>B.1 Floor plan (2D)</b> — inside the locked shells: which room is which, purposes, space types, rough sizes, what connects to what, public → private, doors, circulation; variants on different plan organisations, ranked by layout-reviewer. No furniture.</li>
-      <li><b>B.2 Greybox (3D)</b> — 3–4 variant blockouts: building volumes, walls, heights, roofs, level changes <b>plus low-poly boxes for the big furniture</b> (couches, beds, tables, wardrobes, bar, screen, big rugs), true to size at the reference scale (real size ×k, like everything visible). No small props or wall decor. Reviewed and scored in 3D from eye height; <b>one variant is picked</b> and refined.</li>
+      <li><b>B.1 Floor plan (2D, zoning only)</b> — inside the locked shells: which room is which, purposes, space types, rough sizes, what connects to what, public → private, door positions, circulation, rough furniture zones; variants on different plan organisations, ranked by layout-reviewer. No furniture.</li>
+      <li><b>B.2 Greybox (3D)</b> — 3–4 variant blockouts: building volumes, walls, heights, roofs, level changes <b>plus at most rough furniture zones</b> (labelled floor patches such as "seating for 5" or "bed"), never furniture placeholders. No small props or wall decor. Reviewed and scored in 3D from eye height; <b>one variant is picked</b> and refined in 3D.</li>
       <li><b>Not playable yet</b> — no colliders, spawn, stair ramps, teleport doors or clip planes: those need the real objects and are built in C.2.</li>
-      <li>Furniture positions are exported <b>from the 3D scene</b> into the plan file and prop list.</li>
+      <li>Once you confirm a 3D blockout, changes happen <b>in 3D</b>, never in new 2D plan rounds.</li>
     </ol></div>
   <div class="phase pC"><h3><span class="tag">C</span>Build</h3>
     <div class="who">Agents · the main build loop</div>
@@ -189,7 +189,7 @@ footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 1
       <li><b>C.1 Build-out</b>, area by area, each pass doing what the area still needs:
         <ul>
           <li><b>shell finish</b> — real walls, floors, roofs, windows, doors, trims, materials replace the greybox</li>
-          <li><b>furniture swap</b> — each placeholder → the real asset at the same spot (moved only for collisions / better fit, reported)</li>
+          <li><b>furniture, placed in 3D</b> — real models placed directly in the room as composed groups (replace whole groups, nothing alone in open floor, doorways clear, groups spaced), judged in 3D; the furniture list is written afterwards from what was placed</li>
           <li><b>dressing</b> — secondary pieces and decor, by rule</li>
         </ul>
         Assets are found or modelled as each pass needs them.</li>
@@ -246,7 +246,7 @@ footer { color: var(--muted); font-size: 13px; text-align: center; margin-top: 1
   <div class="rule"><h4>Scores out of 10</h4>
     Every review and every ranking of variants gives a score out of 10 per item, with the verdict and reasons; the dressing reviewer scores style and build quality separately. Scores make rankings comparable, show progress across passes, and in trials are compared with your own score.</div>
   <div class="rule"><h4>Furniture lives in 3D</h4>
-    Big furniture is placed as placeholder boxes in the greybox and judged from eye height; its positions are exported from the scene. Small props and decor come later, in Build-out.</div>
+    The plan and greybox carry only rough furniture zones. Real furniture is placed directly in the rooms during Build-out and judged from eye height; the furniture list is a record of what was placed, never a plan made beforehand.</div>
   <div class="rule"><h4>Lock gaps</h4>
     A style question during B–D that the lock didn't answer: the dressing reviewer decides provisionally against the boards, it's logged and listed in the upload report, and it becomes a new information-gathering question at the retro.</div>
   <div class="rule"><h4>World kinds</h4>

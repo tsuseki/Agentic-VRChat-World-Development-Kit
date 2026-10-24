@@ -23,6 +23,14 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Cutting a door into a dressed wall: inventory everything on the wall plane, shift whole runs with their sibling props, retire what cannot move, rebuild the head as its own piece, and split the wall collider into segments** — the opening lands on dressing, and the old full-length collider becomes an invisible wall in the doorway.
 - **Before choosing where to cut an opening, raycast for floor on both sides of the wall in 0.5 m steps** — a bay that looks symmetric on the elevation can open onto a double-height void, and a thin void-guard collider looks like any mullion.
 
+## Replacing and composing furniture groups
+
+- **Lie-on or new seating replaces the spot's existing group as one composition (same U or L, rug, table and view), never added beside it** — daybeds dropped beside composed sofa groups and into open floor read as random clutter; replacing whole groups fixed it.
+- **Nothing stands alone in open floor: each piece faces a view, table, fire or other seats and sits on a rug or against a wall or rail** — a daybed alone mid-deck, facing nothing, was the worst-received piece.
+- **Check door zones by script for every door and glazed opening: ≥ 1.2 m deep × (door width + 0.3 m each side) free of furniture, plus a ≥ 0.9 m route onward** — placing by free floor area puts pieces inside doorways, which are free floor too.
+- **Space groups by measurement: sofa ends ≥ 0.35 m apart or a side table between, seat fronts ≈ 0.45–0.55 m from the coffee table** — footprint-assembled U groups jammed arms together round a small table.
+- **When archiving furniture, move or archive its decor, then rebuild the LOD chains it belonged to and assert no LOD copy renders outside an active LODGroup** — a decor book ended up on a new bed, and nine orphaned LOD copies drew over the real objects at every distance.
+
 ## Wall-mounted items and trim
 
 - **For each wall-mounted prop assert it is on the occupied face, facing into that room, and inside a solid wall segment** — "at the wall" is ambiguous by the wall's thickness, so whole schemes end up on the far face (showing up as a light leak in the next room) or inside door openings.

@@ -9,7 +9,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [materials-textures-shaders](#materials-textures-shaders) (38)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (28)
 - [import-fbx-prefabs](#import-fbx-prefabs) (15)
-- [placement-layout-design](#placement-layout-design) (45)
+- [placement-layout-design](#placement-layout-design) (46)
 - [colliders-physics](#colliders-physics) (13)
 - [udonsharp-networking](#udonsharp-networking) (11)
 - [vrchat-sdk-upload-components](#vrchat-sdk-upload-components) (4)
@@ -225,6 +225,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Exploration landmarks pay off at close range — review them from the arrival viewpoint](notes/landmarks-as-close-range-rewards.md) — If a landmark is a reward for walking up to it, judge it at 2–15 m and from where the player arrives; distance silhouette is optional.
 - [If a measurement doesn't change across a swept parameter, it is measuring the wrong geometry](notes/constant-result-across-sweep-means-wrong-geometry.md) — A height-filtered vertex sweep returned the same answer at every yaw because it caught the parasol's own mast; filter radially from the axis, and widen the search before lowering the bar.
 - [In a collider-free world, verify prop seating with renderer bounds, not raycasts](notes/verify-prop-support-with-bounds-not-raycasts.md) — When props carry no colliders, a downward raycast cannot tell a seated prop from a floating one; test support renderer-bounds against renderer-bounds, then contact-test face-mounted parts.
+- [Lie-on seating added beside existing layouts read as random clutter; replacing whole groups fixed it](notes/lie-on-seating-beside-layouts-reads-as-clutter.md) — Daybeds dropped into open floor and doorways beside the existing sofa groups read as clutter; replacing each group as one composition (same U/L, lie-on pieces), a scripted door-zone check, end and table spacing rules, moving decor off archived spots and rebuilding LOD chains fixed it.
 - [Measure "orphaned prop" as open-floor radius, not neighbour distance](notes/prop-isolation-is-an-open-floor-radius.md) — Whether a prop looks orphaned is a free-space property; cast rays outward from the prop and rank by mean clear distance instead of comparing centre or edge distances to neighbours.
 - [Measure plant silhouette opacity before choosing a species for mass planting](notes/measure-plant-opacity-before-mass-planting.md) — Scanned shrubs can be ~5% opaque and broadleaf ~25-30%; no achievable count of a sparse plant hides the ground, so pick the mass species by measured cover per 1k tris.
 - [Measure sightlines by raycasting the route from the viewer, and raise viewing areas](notes/measure-sightlines-by-raycasting-the-route.md) — Turn "you should see part of the track from spawn" into a number by raycasting the whole route from eye height, and lift spectator areas so the view is not edge-on.

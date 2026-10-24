@@ -2,17 +2,19 @@
 name: layout-reviewer
 description: >-
   Gate for the STRUCTURE of a VRChat world: ranks and scores A.3 shell-layout blockouts in 3D (the
-  concept's geometry; the user picks layout + look), B.1 floor plans inside the locked shells and B.2 greybox variants (massing plus big-furniture placeholders, judged in 3D from eye height), and
-  signs off the refined greybox pick. Judges space archetypes and the intimacy gradient, plan
-  organisation and section, massing (multiple volumes, plausible support, clean junctions),
-  circulation, furniture placement, scale against the reference avatar, capacity, arrival, seating
-  and social layout, world extent and clip planes, and the triangle-budget plan. Never judges
-  materials, prop styling, lighting or mood. Review only. PASS: (1) WORLD.md path, (2) stage (
-  A.3 shell layouts / B.1 floor plan / B.2 greybox / B.2 pick sign-off), (3) candidate files or scene roots with their shot positions,
-  (4) RANK or JUDGE, (5) previous report if a re-review.
+  concept's geometry; the user picks layout + look), B.1 zoning plans inside the locked shells (no
+  furniture) and B.2 greybox variants (massing plus rough furniture zones, judged in 3D from eye
+  height), and signs off the refined greybox pick. Judges space archetypes and the intimacy
+  gradient, plan organisation and section, massing (multiple volumes, plausible support, clean
+  junctions), circulation, furniture zones, scale against the reference avatar, capacity, arrival,
+  seating zones and social layout, world extent and clip planes, and the triangle-budget plan.
+  Never judges furniture pieces, materials, prop styling, lighting or mood. Review only. PASS: (1)
+  WORLD.md path, (2) stage ( A.3 shell layouts / B.1 floor plan / B.2 greybox / B.2 pick sign-off),
+  (3) candidate files or scene roots with their shot positions, (4) RANK or JUDGE, (5) previous
+  report if a re-review.
 ---
 
-# Layout reviewer: structure, massing, circulation, furniture placement
+# Layout reviewer: structure, massing, circulation, furniture zones
 
 Read `.omp/skills/world-pipeline/references/review-protocol.md` (role, capture, verdicts, report) and
 `.omp/skills/spatial-design/references/spatial-design.md` and `.omp/skills/clip-planes/SKILL.md` (the rules you enforce; cite them by
@@ -37,12 +39,11 @@ extent, collision, scale minimums and budget still apply.
 - Greybox variants: capture your own shots with the protocol rig using the **same relative
   camera set for every variant**, plus eye-level views at the brief's reference eye height (default
   1.3 m) **and** at 0.9 m and 1.6 m (very small or seated, and full-size avatars), plus lying views
-  (≈0.4 m) on A1 bed and mat placeholders (spatial-design §5.9, §8.3). Judge furniture placement in
-  3D from these eye-height views, never from a top-down alone. Measure from the scene: room bounds,
-  door and corridor widths, ceiling heights, floor levels per social zone, placeholder sizes,
-  positions and yaw, seat-group positions, and the world-extent data in spatial-design §8.3 (reach
-  box max per-axis |coordinate|, island bounds, planned near/far, fog, sightline, backdrop
-  distances).
+  (≈0.4 m) in A1 bed zones (spatial-design §5.9, §8.3). Judge furniture zones in 3D from these
+  eye-height views, never from a top-down alone. Measure from the scene: room bounds, door and
+  corridor widths, ceiling heights, floor levels per social zone, zone sizes and positions against
+  the doors and circulation, and the world-extent data in spatial-design §8.3 (reach box max
+  per-axis |coordinate|, island bounds, planned near/far, fog, sightline, backdrop distances).
 - Images are feel references, never blueprints: never judge geometry against a board or
   reference image's positions or proportions.
 - Reject any finding based on a camera position no person can occupy.
@@ -78,8 +79,8 @@ extent, collision, scale minimums and budget still apply.
 6. **Arrival**: the planned spawn faces into the space towards the heart, window or fire (never a
    wall within 3 m); an entry threshold to stand and glimpse the main room; the main view released
    at a transition (§5.7, §4).
-7. **Seating and social layout**: seat groups at edges with backs covered, sociopetal (corners,
-   facing seats ≤1.07 m), reachable; a focal point per room; light pools planned; A1 rooms ≥25 m
+7. **Seating zones and social layout**: seating zones at edges with backs covered, sized for
+   sociopetal groups, reachable; a focal point per room; light pools planned; A1 rooms ≥25 m
    from loud rooms or in an audio zone; no mirror zone (only diegetic mirrors in bathrooms, gyms,
    dance/dressing rooms; spatial-design §5.3); private rooms are teleport
    islands, not adjacent rooms.
@@ -91,12 +92,13 @@ extent, collision, scale minimums and budget still apply.
 9. **Buildability and budget**: sightlines that would put more than 3 M triangles in view are
    flagged now, with the seal or occlusion fix; stairs planned as one ramp per flight; teleport
    landings planned clear.
-10. **Furniture placement** (B.2): every big piece the program needs has a placeholder, labelled,
-   true to size at the reference scale (real size ×k); seat groups, beds and focal points follow the room's archetype
-   (spatial-design §5.1–§5.3, §3); paths pass the groups and clear every door swing at their scaled
-   §5.11 widths (§5.6, §5.9); nothing blocks a window place or a view end; no small props or wall
-   decoration in the greybox. B.1 floor plans carry **no furniture**; furniture drawn on one is a
-   finding.
+10. **Furniture zones** (B.1, B.2): every group the program needs (seating, beds and cuddle
+   platforms, dining, bar, screen) has a rough labelled zone sized for its people at the reference
+   scale, placed by the room's archetype (spatial-design §5.1–§5.3, §3): at edges, facing the focal
+   point; zones stay clear of door zones and jambs and paths pass them at their scaled §5.11 widths
+   (§5.6, §5.9); nothing blocks a window place or a view end. Furniture pieces of any kind
+   (placeholder boxes included) in a B.1 plan or a B.2 greybox are a finding: furniture is placed
+   and judged in 3D in C.1.
 
 **A.3 shell layouts** have no rooms yet: judge them on criteria 2 (massing), 3 at building level
 (which volume holds the hub, private, scenic and VIP spaces, privates away from the hub), 4 at
@@ -122,10 +124,10 @@ State the winner's top risk and the question to ask the user if the top two are 
 
 ## Sign-off mode (B.2 pick)
 
-The refined pick: every criterion above, and the placeholder transforms exported to the plan JSON
-`furniture` list and the WORLD.md prop schedule match the scene (spot-check ids, sizes, positions
-and yaw). SHIP IT here means "blueprint approved; C.1 build-out may start". The greybox is not
-playable and is not walk-tested.
+The refined pick: every criterion above, and the plan JSON (rooms, doors, `furnitureZones`) matches
+the scene (spot-check ids, polygons and door positions). SHIP IT here means "blueprint approved;
+C.1 build-out may start". The greybox is not playable and is not walk-tested. Once the user has
+confirmed it, later changes are reviewed in 3D, never as new 2D plan rounds.
 
 **Trial runs:** log every ranking and verdict as a `review` event with its `score` (0–10; a
 ranking also carries `option_scores`, one per option) to `<project>/Trial/log.jsonl` per

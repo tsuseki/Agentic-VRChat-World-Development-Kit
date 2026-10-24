@@ -19,7 +19,7 @@ and reviews read `spatial-design §N.N`; they point into the guide below.
 
 - `world-architect`, `layout-reviewer`: the whole guide.
 - `world-builder`: C.1 the sections named in its "Build-out"; C.2 `.omp/skills/clip-planes/SKILL.md`.
-- `dressing-reviewer`: §1.5, the §3 row per archetype, §4, §5.1–§5.4, §5.9–§5.11; clip-planes §6.
+- `dressing-reviewer`: §1.5, the §3 row per archetype, §4, §5.1–§5.4, §5.6 (door zones), §5.9–§5.11, §8.2 C.1 furniture; clip-planes §6.
 - `final-reviewer`: §1.5, §3 Light rows, §5.4, §8.3; `.omp/skills/clip-planes/SKILL.md`.
 
 Stage order, gates and reviewers: `.omp/skills/world-pipeline/SKILL.md`. A user's reference that contradicts a rule

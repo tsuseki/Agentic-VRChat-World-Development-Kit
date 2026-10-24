@@ -28,9 +28,9 @@ proportions or layout from them: perspective and scale in AI images don't transl
 greyboxes and reviews work from this guide, the locked shell blockout (`SHELL_PICK`), the approved floor plan and the approved greybox
 (pipeline skill "Design Lock"; review-protocol "Images are feel references").
 
-**Pipeline stages** (`.omp/skills/world-pipeline/SKILL.md`): A.3 concept: shell-layout blockouts shown as plain captures (massing, links, arrival, extent; §2, §4, clip-planes), with style chosen separately by text → image concept art (mood and style only), B.1 floor plan inside the shells (§1–§4, §1.3 plan organisations, §8.1),
-B.2 greybox with big-furniture placeholders (§2, §5, §8.2), C.1 Build-out and C.2 interactions and
-playability (§5, clip-planes, §8.2 playability items), D.1 lighting (§5.4).
+**Pipeline stages** (`.omp/skills/world-pipeline/SKILL.md`): A.3 concept: shell-layout blockouts shown as plain captures (massing, links, arrival, extent; §2, §4, clip-planes), with style chosen separately by text → image concept art (mood and style only), B.1 zoning plan inside the shells (§1–§4, §1.3 plan organisations, §8.1; no furniture),
+B.2 greybox of massing and rough furniture zones (§2, §5, §8.2), C.1 Build-out where real furniture is placed and judged in 3D (§5) and C.2 interactions and
+playability (clip-planes, §8.2 playability items), D.1 lighting (§5.4). Once the user confirms a 3D blockout, changes happen in 3D, never in new 2D plan rounds. [user rule]
 
 **Words.** Write about **guests**, **residents** or **people**. "Player" appears only in VRChat technical
 facts (player capsule, player audio, `VRCPlayerApi`). Units: 1 Unity unit = 1 m. Eye heights: the
@@ -139,8 +139,9 @@ room sizes or decoration. [in-house]
 ### 1.4 Shotgun process
 - Present plans as rendered images, never ASCII. Draw doors. Ground floor above upper floor, portrait. [in-house]
 - One change-set per version, closing exactly the previous round's feedback. Keep every version. [in-house]
-- B.2 greybox variants side by side in one scene: walls, volumes and big-furniture placeholders, with the
-  reference-person capsule and area labels. Expect a pick "with changes", then 3–5 refinement rounds. [in-house]
+- B.2 greybox variants side by side in one scene: walls, volumes and rough labelled furniture-zone floor patches
+  (never furniture placeholders), with the reference-person capsule and area labels. Expect a pick "with changes",
+  then 3–5 refinement rounds, made in 3D. [in-house] [user rule]
 - Measure the live scene before redrawing it. Plans drawn from memory invented a wall and missed a
   freestanding one. [in-house]
 - Preserve approved layouts. Unsolicited reworks get reverted; change layout only against explicit
@@ -363,7 +364,11 @@ public ones.
 - ≥1 m ring behind seats; paths pass along the edge of groups, never through them.
 - Seats ≥0.6 × capacity (about half of people sit); vary seating types. [INFERENCE]
 - Chairs must be reachable: 0.84–0.85 m approach lanes. Unreachable seats are a blocker even when shots look good. [in-house]
-- Sofa → coffee table 0.36–0.46 m. In rooms >5 m wide, float groups with circulation round them.
+- Seat front → coffee table ≈0.45–0.55 m in the scene (supersedes the real-world 0.36–0.46 m). Sofa ends never
+  touch: ≥0.35 m apart or a side table between them. In rooms >5 m wide, float groups with circulation round them. [user rule]
+- **Replace, never add beside.** New seating (lie-on pieces included) replaces the spot's existing group as one
+  composed group keeping its U, L or facing composition; pieces dropped beside a layout read as clutter. Every
+  piece faces a view, table, fire or other seats and sits on a rug or against a wall or rail. [user rule]
 
 ### 5.3 Focal points and something to share
 - One primary focal point per room (fire, view, stair, bar, art wall), opposite or diagonal to the main entry; seat forward vectors converge on it within 30°. [INFERENCE]
@@ -402,6 +407,8 @@ public ones.
   hall with a sofa lounge worked); squash sealed rooms first to find the width. [in-house]
 - No corridor >10–15 m without a window, widening, niche, light change or turn. Circulation ≤20–25% of floor. [INFERENCE]
 - Doors near room corners, not mid-wall. Furniture ≥0.6 m clear of every jamb. [in-house]
+- **Door zones** (scene metres, checked by script): per door a box ≥1.2 m deep into the room × (door width +
+  0.3 m each side) holds no furniture, and a ≥0.9 m clear route leads on into the room. [user rule]
 - Stairs inside the building (U-turn stairs in volumes); the main stair central and visible, with the
   threshold into the private floor at its top. One smooth ramp collider per flight; no spiral stairs,
   ladders or required jumps. [in-house] [WORKSPACE RULE]
@@ -584,21 +591,28 @@ below and A1 suites as teleport islands). All [in-house].
 - [ ] Massing: 1 primary + 2–4 secondary + tertiary; primary ≥30% larger; each volume maps to program; ≥3 top heights; finished roof edges. [INFERENCE]
 - [ ] Every cut ends on a corner; no dents or pockets; overhangs ≤1/3 backspan or visibly supported; nothing floats. [in-house]
 - [ ] Section drawn: ceiling heights per archetype; ≤1 deliberate level change per social zone, ≥3 risers or ramp, none on the entrance → main-area path. [user rule]
-- [ ] Seat groups at edges, sociopetal, reachable; every room has a focal point; light pools planned.
+- [ ] Seating zones (rough, labelled, no furniture pieces) at edges, sized for sociopetal groups, reachable and clear of door zones; every room has a focal point; light pools planned.
 - [ ] Openings sized by role; private-room corridor ≥3.1 m; every view ends on something designed. [in-house]
 - [ ] Acoustic order: A1 ≥25 m from A3/A4 or audio zone.
 - [ ] World extent: occupied space < 512 m, cuddle zones < 256 m, islands placed per clip-planes §4; near/far/fog and backdrop plan per clip-planes §2 and §5. [INFERENCE]
 - [ ] Plan rendered as an image with doors drawn. [in-house]
 
-### 8.2 Greybox (B.2) and playability (C.2) checklist
+### 8.2 Greybox (B.2), furniture (C.1) and playability (C.2) checklist
 **B.2 greybox** (not playable: no colliders, spawn, stair ramps, teleport doors or clip planes yet):
 - [ ] Walls built from the plan JSON; live scene measured before any redraw. [in-house]
 - [ ] Floors, interior walls and exterior walls in three neutral tones; reference-person capsules in every room. [in-house]
-- [ ] Labelled, true-to-size low-poly placeholders for the big furniture only (couches, beds and cuddle platforms, tables, wardrobes and storage, bar, screen or stage, big rugs as slabs) in every pocket; no small props or wall decoration; placement per §5.1–§5.3, §5.11. [in-house]
-- [ ] Placeholder transforms exported from the scene to the plan JSON `furniture` list. [in-house]
+- [ ] At most rough furniture zones: flat labelled floor patches from the plan JSON `furnitureZones` (seating, bed, dining, bar, screen), placed per §5.1–§5.3 and clear of door zones (§5.6); no furniture placeholders, small props or wall decoration. No furniture transforms exported. [user rule]
+- [ ] Refinement rounds made in 3D and written back to the plan JSON from the scene; once the user confirms the greybox, no more 2D plan rounds. [user rule]
 - [ ] World size limits planned: the greybox bounds, spawn and island positions satisfy clip-planes §7 items 3–4; near/far/fog and backdrop plan per clip-planes §2 and §5. [in-house, measured] [INFERENCE]
 - [ ] Clearance ≥2.3 m over paths. [INFERENCE]
 - [ ] One neutral baked-light rig, no realtime lights; ≤3M visible triangles from every main viewpoint. [WORKSPACE RULE]
+
+**C.1 furniture** (real models placed directly in 3D, judged in 3D):
+- [ ] Groups composed per §5.1–§5.3 inside their furniture zones; new seating replaced the spot's layout as one group keeping its U/L/facing composition. [user rule]
+- [ ] Nothing alone in open floor: each piece faces a view, table, fire or other seats and sits on a rug or against a wall or rail. [user rule]
+- [ ] Door zones clear by script (§5.6); sofa ends ≥0.35 m apart or split by a side table; seat fronts ≈0.45–0.55 m from the coffee table (§5.2). [user rule]
+- [ ] No decor left on archived pieces' spots (books on beds or seats); LOD chains rebuilt after archiving, no LOD copy rendering outside an active LODGroup. [user rule]
+- [ ] Plan JSON `furniture` list and prop schedule written from the scene after the pass, never ahead of it. [user rule]
 
 **C.2 playability** (once the real objects exist):
 - [ ] Collision: blocking walls, floors, large solid masses and one ramp per stair flight only; primitive auto-colliders removed from props. [WORKSPACE RULE]

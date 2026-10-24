@@ -49,8 +49,8 @@ user, exit code 4 means ask the user to approve the spend.
 
 | Reviewer | Judges | Stages |
 |---|---|---|
-| `layout-reviewer` | shell-layout blockouts (the concept's geometry), floor plans, greybox variants with their furniture placeholders in 3D, world size limits | A.3, B.1, B.2 |
-| `dressing-reviewer` | Build-out passes and placed interaction objects: build quality and board match (separate style and build scores), geometry (z-fighting); decides lock gaps; never lighting | C.1, C.2 |
+| `layout-reviewer` | shell-layout blockouts (the concept's geometry), zoning plans, greybox variants with their rough furniture zones in 3D, world size limits | A.3, B.1, B.2 |
+| `dressing-reviewer` | Build-out passes and placed interaction objects: furniture as placed, judged in 3D (seating and layout rules), build quality and board match (separate style and build scores), geometry (z-fighting); decides lock gaps; never lighting | C.1, C.2 |
 | `final-reviewer` | lighting mood vs the boards, final render, visual regressions after perf fixes; the only sign-off for a finished area/world and for upload | D.1 (draft, then after bake + probe re-bake), D.2 |
 
 Every review gives `SHIP IT | MINOR FIXES | NEEDS WORK` plus `Score: N/10` with reasons (dressing: `Style N/10 · Build N/10`); SHIP IT needs no blocker or should-fix finding and a score ≥ 8, and the score never overrides findings. A.3 style rounds have no reviewer: the user picks.

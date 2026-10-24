@@ -121,9 +121,9 @@ every referenced image into `Trial/img/`, rewriting the path):
 python .omp/skills/pipeline-trial/scripts/trial_report.py <project>/Trial --append - <<'EOF'
 {"type": "review", "stage": "C.1", "id": "r-c1-lounge-1", "reviewer": "dressing-reviewer", "round": 1,
  "verdict": "NEEDS WORK", "score": 5, "scores": {"style": 7, "build": 4}, "target": "Lounge",
- "findings": [{"n": 1, "severity": "blocker", "title": "Sofa 0.6 m off its placeholder transform",
-   "reason": "lounge-sofa at (2.2, 6.2), greybox placeholder (2.2, 5.6); blocks the hall path", "section": "§5.2",
-   "fix": "move to the placeholder transform", "images": ["C:/Temp/world-review/C1-lounge-01/02_eyelevel.png"]}]}
+ "findings": [{"n": 1, "severity": "blocker", "title": "Daybed in the hall door zone",
+   "reason": "lounge-daybed reaches 0.4 m into the 1.2 m door zone of d1; dropped beside the sofa group, faces nothing", "section": "§5.6",
+   "fix": "replace the sofa group with a composed group holding the daybed; door zone clear", "images": ["C:/Temp/world-review/C1-lounge-01/02_eyelevel.png"]}]}
 EOF
 ```
 

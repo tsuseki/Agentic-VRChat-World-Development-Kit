@@ -9,9 +9,9 @@ adds only its own scope, criteria and verdict rules.
 |---|---|---|---|
 | A.3 Concept: shell layouts | `layout-reviewer` | rank the shell-layout blockouts in 3D (structure, massing, scale vs the reference eye height, world extent, divergence); the user picks layout + look | every option /10 |
 | A.3 Concept: text-route images and style rounds | none | the user picks | — |
-| B.1 Floor plan | `layout-reviewer` | rank the plan variants inside the locked shells | every option /10 |
-| B.2 Greybox | `layout-reviewer` | rank the variants in 3D from eye height (massing + furniture placeholders, world size limits), then judge the refined pick | every option /10, then `Score` |
-| C.1 Build-out (per pass) | `dressing-reviewer` | judge: build quality and board match; decides lock gaps; never lighting | `Style N/10 · Build N/10` |
+| B.1 Floor plan (zoning) | `layout-reviewer` | rank the zoning-plan variants inside the locked shells (no furniture) | every option /10 |
+| B.2 Greybox | `layout-reviewer` | rank the variants in 3D from eye height (massing + rough furniture zones, world size limits), then judge the refined pick | every option /10, then `Score` |
+| C.1 Build-out (per pass) | `dressing-reviewer` | judge the area as placed, in 3D: furniture placement (seating and layout rules), build quality and board match; decides lock gaps; never lighting | `Style N/10 · Build N/10` |
 | C.2 Interactions & playability | `dressing-reviewer` | judge the placed interaction objects | `Style N/10 · Build N/10` |
 | D.1 Lighting | `final-reviewer` | draft-bake mood vs the boards, then the final render after bake + probe re-bake; the only upload gate | `Score` |
 | D.2 Performance | `final-reviewer` | visual regressions from perf fixes (same-camera before/after) | `Score` |
@@ -66,8 +66,9 @@ AI images don't translate into 3D: their perspective and parallax lines don't li
 is ambiguous and their layouts are often impossible. From any image (lock images, concept art,
 user references) judge only **mood, palette, materials, lighting character and density**. The A.3
 style-track concept art is text → image and never binds geometry. Never raise a finding because positions, proportions
-or layout differ from an image. Geometry, dimensions and furniture placement are judged only
-against `SHELL_PICK`, the approved greybox (plan JSON `furniture` list) and spatial-design.
+or layout differ from an image. Geometry and dimensions are judged only against `SHELL_PICK`, the
+approved greybox and spatial-design; furniture placement is judged in 3D against spatial-design and
+the pipeline skill's "Seating and layout rules (C.1)", never against a planned position.
 
 ## Judging against the Design Lock (every reviewer)
 

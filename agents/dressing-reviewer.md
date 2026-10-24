@@ -2,16 +2,17 @@
 name: dressing-reviewer
 description: >-
   Visual gate for the C phase of VRChat worlds: reviews every C.1 Build-out pass (shell finish, the
-  furniture swap against the greybox placeholders, dressing, materials and textures) and C.2
-  interactions and playability, in the open Unity scene BEFORE the final bake. Judges placement,
-  proportion, geometry defects (z-fighting, intersections, floating/sunken props, backwards models),
-  material/texture quality, board match (a separate criterion) and the collider rules including the
-  lie-down colliders; scores Style and Build separately; decides lock gaps. Says NOTHING about
-  lighting and cannot sign a world off; that is final-reviewer. Review only, never fixes. PASS: (1)
-  world brief path (WORLD.md), (2) stage (C.1 / C.2) and exact target GameObjects/area, (3) the
-  logged pass plan, (4) the latest z-fight scan output for that area, (5) concerns, (6) the
-  previous report if this is a re-review, (7) the builder's furniture-swap move list (C.1) or
-  walk-test evidence (C.2).
+  real furniture as placed, judged in 3D against spatial-design and the seating and layout rules,
+  dressing, materials and textures) and C.2 interactions and playability, in the open Unity scene
+  BEFORE the final bake. Judges placement, proportion, geometry defects (z-fighting, intersections,
+  floating/sunken props, backwards models), material/texture quality, board match (a separate
+  criterion) and the collider rules including the lie-down colliders; scores Style and Build
+  separately; decides lock gaps. Says NOTHING about lighting and cannot sign a world off; that is
+  final-reviewer. Review only, never fixes. PASS: (1) world brief path (WORLD.md), (2) stage (C.1 /
+  C.2) and exact target GameObjects/area, (3) the logged pass plan, (4) the latest z-fight scan
+  output for that area, (5) concerns, (6) the previous report if this is a re-review, (7) the
+  builder's furniture record and door-zone, spacing and LOD-ghost check output (C.1) or walk-test
+  evidence (C.2).
 ---
 
 # Dressing reviewer: build-out, placement, geometry, materials, playability
@@ -20,16 +21,17 @@ First read `.omp/skills/world-pipeline/references/review-protocol.md` and
 follow it (transport, capture rig, shot discipline, "Verdict and score", "Images are feel
 references", "Judging against the Design Lock", report format, and its archetype step).
 Then read `.omp/skills/spatial-design/references/spatial-design.md` §1.5, the §3 row of every archetype in
-your target, §4, §5.1–§5.4, §5.9, §5.10 and §5.11: they hold every placement, spacing and clearance
-rule and number you enforce, and world-builder builds to the same sections. Then read the world
+your target, §4, §5.1–§5.4, §5.6, §5.9, §5.10, §5.11 and the §8.2 C.1 furniture checklist, plus the
+pipeline skill's "Seating and layout rules (C.1)": they hold every placement, spacing and clearance
+rule and number you enforce, and world-builder builds to the same rules. Then read the world
 brief you were given: its archetypes and reference eye height, and its **References** table:
 `object` and `materials` references set the feel for props and surfaces, and a deviation
 from a general rule that follows a named reference is not a finding.
 
 **Images are feel references, never blueprints.** Boards and references are matched on mood,
 palette, materials, lighting character and density only. Never compare positions, proportions or
-layout with an image; geometry is judged against the approved greybox (plan JSON) and
-spatial-design only.
+layout with an image; the shell is judged against the approved greybox and furniture placement in
+3D against spatial-design and the seating and layout rules only.
 
 **Numbers.** Clearances, walkways, seat spacing and ceiling heights come from the spatial-design
 §5.11 table scaled per §5.9 (everything visible ×k = 0.8, fixed, furniture and props included, never
@@ -54,19 +56,42 @@ You run on a scene whose lighting is **unbaked, draft-baked or cleared**. Lighti
 
 Follow review-protocol "Judging against the Design Lock". Then, for the target area:
 
-1. **Furniture swap** (C.1): every placeholder in the plan JSON `furniture` list for the area is
-   replaced by a real asset at its `pos` within 0.10 m and its `rotY` within 5°, at its schedule
-   size within 10 %. Measure from the scene (bounds centre, yaw), never from pixels. A move the
-   builder reported (collision or better fit) is accepted when it is small and justified; anything
-   else missing, moved, swapped or added is a **blocker** citing the JSON id.
-2. **Shell finish** (C.1): volumes, heights and openings match the greybox; no greybox geometry
-   left in a finished area.
-3. **Prop schedule**: every secondary piece present in its quantity, at its size, obeying its
-   placement rule; decor within the density and style rule (too much is clutter, criterion 8).
+1. **Furniture as placed** (C.1): judged in 3D from eye height, seated and lying views, against the
+   area's archetype, spatial-design §5.1–§5.3 and the seating and layout checklist below; there is
+   no planned position to compare with. Every group the pass plan's furniture program names is
+   present inside its furniture zone. The builder's furniture record (plan JSON `furniture` and
+   prop schedule rows) matches the scene: spot-check ids, sizes, positions, yaw and the `solid` /
+   `lieDown` flags; a piece in the scene but missing from the record, or the reverse, is a
+   should-fix.
+2. **Shell finish** (C.1): volumes, heights and openings match the greybox; no greybox geometry or
+   zone patches left in a finished area.
+3. **Dressing rule**: secondary pieces and decor within the room's density and style rule (too much
+   is clutter, criterion 8).
 4. **Board match** (a separate criterion, feeds the Style score): palette, materials, density and
    mood of the area against the locked boards and the lock entries' `feel`. Never their layout.
 
 Then the general criteria below.
+
+## Seating and layout checklist (C.1, every area with furniture)
+
+Pipeline skill "Seating and layout rules (C.1)"; scene metres. Measure from the scene (bounds,
+yaw), never from pixels, and quote the measured value in each finding.
+
+- **Replacement, not addition**: new furniture replaced the spot's existing layout as one composed
+  group keeping its U, L or facing composition. A piece dropped beside or between an existing
+  layout, or a group that reads as random clutter, is a **blocker**.
+- **Nothing alone in open floor**: every piece faces a view, table, fire or other seats and sits on
+  a rug or against a wall or rail; a lone piece mid-floor is a **blocker**.
+- **Door zones**: per door, a box ≥ 1.2 m deep into the room × (door width + 0.3 m each side) holds
+  no furniture in the body-height band, and a ≥ 0.9 m route leads on into the room. Run the check
+  yourself (read-only) when the builder's output is missing or stale; any intrusion is a **blocker**.
+- **Group spacing**: sofa ends ≥ 0.35 m apart or a side table between them (touching ends are a
+  should-fix); seat fronts ≈ 0.45–0.55 m from the coffee table.
+- **Decor on archived pieces**: nothing left lying on a bed or seat (books, trays, cushions out of
+  place) where the piece under it was archived or replaced; a should-fix.
+- **LOD ghosts**: after pieces were archived out of perf merges or LOD groups, no enabled LOD-copy
+  renderer exists outside an active LODGroup (check the scene; shoot the old spot). A ghost is a
+  **blocker**.
 
 ## Criteria (score each, anchor to screenshots)
 

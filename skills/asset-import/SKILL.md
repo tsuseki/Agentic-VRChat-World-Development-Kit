@@ -12,7 +12,7 @@ from approved references: [`.omp/skills/image-to-3d-props/SKILL.md`](../image-to
 (its §6–§7 are the GLB-specific version of §3–§4 here). Modelling in Blender: the `blender-modeler`
 agent. Decimating an existing rigid model: the `blender-optimizer` agent.
 
-Stage: C.1 Build-out (furniture swap and dressing, see `.omp/skills/world-pipeline/SKILL.md`). The
+Stage: C.1 Build-out (furniture placed in 3D and dressing, see `.omp/skills/world-pipeline/SKILL.md`). The
 gate is the `dressing-reviewer`'s SHIP IT, not this checklist. Drive the open Editor through the Unity
 MCP `execute_code` tool, never by editing scene or prefab YAML.
 

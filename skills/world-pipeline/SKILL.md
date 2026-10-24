@@ -1,6 +1,6 @@
 ---
 name: world-pipeline
-description: End-to-end procedure for building a complete VRChat world from a description — information gathering, the concept (text → image style concept art and style rounds, plus shell-layout blockouts in Unity shown as plain captures) and one Design Lock (phase A), a 2D floor plan inside the locked shells and a greybox with furniture placeholders (B), Build-out as the main plan → build → review loop per area plus interactions and playability (C), then lighting, performance, ship and retro (D), to a ready-to-upload world. Load at the start of any "make me a world" request, or when resuming a world that has a WORLD.md.
+description: End-to-end procedure for building a complete VRChat world from a description — information gathering, the concept (text → image style concept art and style rounds, plus shell-layout blockouts in Unity shown as plain captures) and one Design Lock (phase A), a 2D zoning plan inside the locked shells and a greybox of massing and rough furniture zones (B), Build-out as the main plan → build → review loop per area where real furniture is placed and judged in 3D, plus interactions and playability (C), then lighting, performance, ship and retro (D), to a ready-to-upload world. Load at the start of any "make me a world" request, or when resuming a world that has a WORLD.md.
 ---
 
 # VRChat world pipeline
@@ -42,7 +42,7 @@ resolve from the file that contains them.
 | `<project>/Design/concepts/genNN-<route>/` | A.3 images only, **one folder per generation** (route `text`, `3d` or `style`): `<letter>_<view>.png` (3D route: plain Unity captures, no paint-overs). This is the only folder the user looks at |
 | `<project>/Design/_prompts/genNN-<route>/` | Agent-only: the prompt files, pitches and notes for the matching generation. Never shown to the user; pitches are summarised in chat |
 | `<project>/Design/layout/` | A.3 shell layouts as data (`vN.json`: building and tree volumes, levels, bridges and paths, ground/water, spawn, extent); the picked one is also the scene root `SHELL_PICK` |
-| `<project>/Design/plans/` | B.1 floor plans inside the locked shells (`vN.png` + `vN.json`); after the B.2 pick the plan JSON also holds the `furniture` placeholder list |
+| `<project>/Design/plans/` | B.1 zoning plans inside the locked shells (`vN.png` + `vN.json`: rooms, doors, circulation, rough `furnitureZones`), refined from the 3D greybox in B.2; C.1 records the placed big furniture in the `furniture` list, exported from the scene |
 | [references/intake.md](references/intake.md) | Information gathering: the checklist of required facts, extraction from what the user supplied, gap questions, concept rounds, defaults, involvement, lock-gap questions |
 | [spatial-design](../spatial-design/SKILL.md) | Architecture and interior-design guide (`references/spatial-design.md`): space archetypes, massing, per-archetype rules, intimacy gradient, checklists for architect and reviewers; plus the sourced research and the case studies behind it |
 | [clip-planes](../clip-planes/SKILL.md) | Clip planes, fog vs the far cut, float precision and world extent (256/512 m radii), teleport-island placement, distant scenery, z-fight separation; setup checklist |
@@ -54,12 +54,12 @@ resolve from the file that contains them.
 
 | Agent | Role | Stages | Mutates |
 |---|---|---|---|
-| `world-architect` | World kind and optional VIP island; A.3 concepts: text → image style concept art (style track) and shell-layout blockouts in a scratch area of the open scene shown as plain captures (layout track), a pitch per option, then the text → image style rounds; B.1 floor plans inside the locked shells (room purposes, no furniture); B.2 greybox variants (massing plus big-furniture placeholders); the placeholder export after the pick | A.3, B.1, B.2 | Scratch roots / shell and greybox only |
+| `world-architect` | World kind and optional VIP island; A.3 concepts: text → image style concept art (style track) and shell-layout blockouts (massing) in a scratch area of the open scene shown as plain captures (layout track), a pitch per option, then the text → image style rounds; B.1 zoning plans inside the locked shells (room purposes, adjacencies, circulation, doors, zones); B.2 greybox variants (massing plus rough furniture zones). Never places furniture | A.3, B.1, B.2 | Scratch roots / shell and greybox only |
 | `world-builder` | Executes one pass of a build stage in Unity: Build-out areas, interactions and colliders, lighting | C.1, C.2, D.1 | Scene, within the pass's scope |
 | `asset-finder` | Finds existing models and materials as each Build-out pass needs them, before anything is modelled | C.1 | No |
 | `blender-modeler` | Models custom props and architecture pieces | C.1 | Blender + exports |
-| `layout-reviewer` | Ranks A.3 shell layouts (structure, massing, scale vs the reference eye height, world extent, divergence), B.1 floor plans and B.2 greybox variants with their furniture placement in 3D from eye height, plus world size limits; signs off the refined greybox | A.3, B.1, B.2 | No |
-| `dressing-reviewer` | Each Build-out pass and the placed interaction objects: build quality and board match, with separate **style** and **build** scores; decides lock gaps; never lighting | C.1, C.2 | No |
+| `layout-reviewer` | Ranks A.3 shell layouts (structure, massing, scale vs the reference eye height, world extent, divergence), B.1 zoning plans and B.2 greybox variants with their furniture zones in 3D from eye height, plus world size limits; signs off the refined greybox | A.3, B.1, B.2 | No |
+| `dressing-reviewer` | Each Build-out pass and the placed interaction objects: the furniture as placed, judged in 3D, build quality and board match, with separate **style** and **build** scores; decides lock gaps; never lighting | C.1, C.2 | No |
 | `final-reviewer` | Lighting incl. mood against the boards, final render; the only upload gate; visual regressions after perf fixes | D.1, D.2 | No |
 | `perf-optimizer` | Play-mode measurement, per-system cost attribution, reversible fixes with proof | D.2 | Scene (reversible fixes) |
 
@@ -124,9 +124,9 @@ in phase A and approved once at A.4; it is the user's last decision before D.3.
 | Lighting and time-of-day sheet (darkness level, warm/cool, light sources per archetype) | A.3 (style round) | `NN_lighting.png` | world-architect (`image-edit` tool, lock images as references) | none: user picks |
 
 The images show the world's **general feel**: there is no picture per room. The shells are locked
-as the `SHELL_PICK` blockout and its JSON, never taken from an image. The floor plan, greybox and
-prop schedule that follow are agent decisions recorded in WORLD.md and the plan JSON, not lock
-items; under "Every step" the user reviews them at the B checkpoint.
+as the `SHELL_PICK` blockout and its JSON, never taken from an image. The zoning plan and greybox
+that follow and the furniture placed in C.1 are agent decisions recorded in WORLD.md and the plan
+JSON, not lock items; under "Every step" the user reviews plan and greybox at the B checkpoint.
 
 **Images are feel references, never blueprints.** AI images don't translate into 3D: their
 perspective and parallax lines don't line up, their scale is ambiguous and their layouts are often
@@ -173,9 +173,10 @@ not bind (positions, proportions, layout, scale, structure). Add the same row to
 Lock table.
 
 **Precedence.** For style (colour, material, light, mood, density) the lock outranks the
-references, which outrank spatial-design's defaults. For geometry, dimensions and furniture
-placement `SHELL_PICK`, the approved greybox (plan JSON) and spatial-design's numbers and collision minimums
-rule; no image ever does.
+references, which outrank spatial-design's defaults. For geometry and dimensions `SHELL_PICK`, the
+approved greybox (plan JSON) and spatial-design's numbers and collision minimums rule; furniture
+placement follows spatial-design and "Seating and layout rules (C.1)" inside the greybox's
+furniture zones. No image ever does.
 
 **A.4 Design Lock.** Show one lock sheet: the brief summary (with the interactions list), the
 picked shell layout with its concept art, the style images with their `feel` lines, and the involvement preset. The user approves it
@@ -228,32 +229,62 @@ Scores show progress across passes; trials log them next to the user's own score
 
 ## Build-out — the main build loop
 
-C.1 turns the approved greybox, a bare shell with placeholders, into the finished, furnished world,
-**one area per pass**, until every area is ready for lighting. It is where most of the world gets
-built, and it runs the Plan → Build → Review loop above.
+C.1 turns the approved greybox, a bare shell with rough furniture zones, into the finished,
+furnished world, **one area per pass**, until every area is ready for lighting. It is where most of
+the world gets built, and it runs the Plan → Build → Review loop above.
 
 **Work items.** Each pass picks whatever its area still needs from three items:
 
 - **Shell finish**: real walls, floors, roofs, windows, doors, trims and materials (the materials
   board's feel, UV2, real-world texel scale) replacing the greybox geometry.
-- **Furniture swap**: each placeholder replaced by its real asset at the same transform; moved
-  only for collisions or a better fit, and every move reported.
-- **Dressing**: secondary pieces and decor, by the prop schedule's rules.
+- **Furniture, placed in 3D**: the pass plan names the area's furniture program (the seat groups,
+  beds, tables and storage its archetype and people need, inside the B.2 furniture zones) and the
+  room's dressing rule; the builder sources real models and places them directly in the room,
+  composed per spatial-design §5.1–§5.3 and "Seating and layout rules (C.1)" below.
+  dressing-reviewer judges the placement in 3D from eye height. There is no planned furniture
+  position to match.
+- **Dressing**: secondary pieces and decor by the room's dressing rule (density, style, examples).
+
+**Record what was placed.** At the end of every pass the builder exports the area's big pieces
+**from the scene** into the plan JSON `furniture` list and writes the WORLD.md prop schedule rows
+from it (id, type, size, `lieDown`, `solid`, source). The record follows the scene; it is never
+written ahead of placement.
 
 **Assets on demand.** There is no separate asset stage. As a pass needs them, asset-finder searches
-the `object`-tagged references and the schedule first, blender-modeler makes "to model" items,
-each close to its placeholder's size; record them in the prop schedule's Source column.
+the `object`-tagged references first, blender-modeler makes "to model" items, each at the size the
+pass plan gives (×k, fitting its furniture zone); the source goes in the prop schedule's Source column.
 
 **Briefing a modeller.** Point it at `WORLD.md` (Pitch, Brief rows for the asset, references) and
-state that greybox shapes are placeholders only, never the model's shape.
+state that greybox shapes and zones are rough massing only, never the model's shape.
 
-**Place every finished model on its spot** in the scene right away so the user can look; revisions
-export to the same paths and are swapped in place.
+**Place every finished model in its room** right away so the user can look; revisions export to
+the same paths and are swapped in place.
 
-**Gate per pass:** z-fight scan clean → dressing-reviewer SHIP IT against the greybox
-placeholders, the prop schedule and the boards' feel, with board match as a separate criterion and
-separate style and build scores. Track each area's passes, scores and verdicts in WORLD.md's
-Build-out area tracker. C.1 ends when every area has SHIP IT with nothing left on its plan.
+**Gate per pass:** z-fight scan clean → dressing-reviewer SHIP IT on the area as placed, against
+spatial-design, the seating and layout rules and the boards' feel, with board match as a separate
+criterion and separate style and build scores. Track each area's passes, scores and verdicts in
+WORLD.md's Build-out area tracker. C.1 ends when every area has SHIP IT with nothing left on its plan.
+
+### Seating and layout rules (C.1)
+
+World-builder builds to these and dressing-reviewer checks every one; door zones and spacing are
+measured from the scene, never estimated from shots. Numbers are scene metres.
+
+- **Replace, never add beside.** New furniture (lie-on seating, a new group) replaces the existing
+  layout of that spot as one composed group, keeping its composition (the U, L or facing pair);
+  it is never dropped beside or between existing pieces. The replaced pieces are archived as a group.
+- **Nothing stands alone in open floor.** Every piece faces something (a view, a table, a fire or
+  other seats) and sits on a rug or against a wall or rail.
+- **Door zones stay clear**, checked programmatically per door: a box ≥ 1.2 m deep into the room ×
+  (door width + 0.3 m each side) holds no furniture in the body-height band, and a ≥ 0.9 m clear
+  route leads on from it into the room.
+- **Group spacing.** Sofa ends never touch: ≥ 0.35 m apart or a side table between them. Seat
+  fronts sit ≈ 0.45–0.55 m from the coffee table.
+- **Archiving clears what sat on it.** Decor that stood on an archived piece is moved to a new
+  surface or archived with it: no books left lying on beds or seats.
+- **Archived pieces leave no LOD ghosts.** When an archived piece was part of a perf merge or an
+  LOD group, rebuild those LOD chains and verify no LOD copy renders outside an active LODGroup
+  (every enabled renderer of a LOD copy is referenced by an active LODGroup).
 
 ## Stages and gates
 
@@ -268,17 +299,23 @@ and you stop at a checkpoint after every stage (that skill's "Checkpoints").
 | A.3 Concept (style track + layout track) | Two separate tracks (Design Lock "Rounds"). **Style track (text → image only)**: world-architect generates `image-gen` text-to-image concept art from the brief and tagged references showing the **lived-in, furnished world, never empty spaces**; refining changes the prompt text, never feeds a picked image back in. **Layout track**: world-architect blocks out 2–3 divergent **shell layouts** in a scratch area of the open scene (massing only: building and tree volumes, multi-level house volumes, bridges and paths, ground/water plane, sky; no interiors, no furniture; roots `SHELL_A`, `SHELL_B`, …) and captures fixed shots per layout with WorldCapture / `__CapCam__` (eye-height arrival view at the reference eye height, an overview, one intimate view) as plain captures, no paint-overs. A text image never defines geometry; a layout like it is built as a blockout and shown as captures. Each concept has a pitch in words (idea and feel, signature feature, arrival and settling, strengths, tradeoffs), summarised to the user in chat. The user picks the look and the layout; then text → image style rounds produce palette, materials and lighting sheets conditioned on the lock images until approved. The picked blockout becomes `SHELL_PICK` + `layout/vN.json`; refining it changes only what the user asks for (Design Lock "Refining the pick"), with no reviewer sign-off and no detail sweeps | world-architect | `SHELL_*` roots, images-only `concepts/genNN-<route>/` per generation, agent-only `_prompts/genNN-<route>/`, `layout/vN.json`, lock images | layout-reviewer ranks and scores the shell layouts (structure, massing, scale vs reference eye height, world extent, divergence) → **user picks** the layout (the pick is the acceptance; no SHIP IT loop at A.3); style track and style rounds: no reviewer → **user picks** per round until approved |
 | A.4 Design Lock | The lock sheet: brief, lock images (style track), `SHELL_PICK` captures (layout track) (Design Lock above) | orchestrator | `Design/lock/` + `lock.json`, WORLD.md Design Lock | **user approves once** |
 | **B · Blueprint** | | | | |
-| B.1 Floor plan | Interior detail inside the locked shells: 2–3 variants on *different plan organisations* (spatial-design §1.3) within the shells; archetype table, which room is which, purpose, rough size, intimacy gradient, VIP placement (if the plan has one), adjacency, public → private zoning, doors, circulation; rendered as PNG with doors drawn. **No furniture** | world-architect | `plans/vN.png` + `plans/vN.json` (schema in world-architect) | layout-reviewer ranks and scores (spatial-design §1–§4) → pick |
-| B.2 Greybox | 3–4 variant blockouts of the picked plan, roots `GREY_A`, `GREY_B`, … side by side at fixed offsets in a scratch area of the open scene (well clear of the real build origin), built from the plan data: building volumes, walls, heights, roof forms, level changes, **plus labelled, true-to-size (real size ×k, see "Measured reference person") low-poly placeholders for the big furniture only** (couches, beds and cuddle platforms, tables, wardrobes and storage, bar, screen or stage, big rugs as slabs) under `GREY_<X>/Furniture/<room>/<id>`, each root with a reference-height capsule and area labels. One variant is picked and refined, then renamed `GREY_PICK`. Placeholder transforms are exported **from the 3D scene** to the plan JSON `furniture` list (`id`, `room`, `type`, `size`, `pos`, `rotY`, `lieDown` on lie-on furniture) and the WORLD.md prop schedule. **Not playable**: no colliders, spawn, stair ramps, teleport doors or clip planes yet | world-architect | `GREY_PICK`, plan JSON with `furniture`, prop schedule | layout-reviewer ranks and scores the variants in 3D from eye height → pick; then SHIP IT on the refined pick incl. world size limits (clip-planes §7) |
+| B.1 Floor plan (zoning) | Zoning only, inside the locked shells: 2–3 variants on *different plan organisations* (spatial-design §1.3) within the shells; archetype table, room purposes, rough sizes, intimacy gradient, VIP placement (if the plan has one), adjacencies, public → private zones, door positions, circulation, rough furniture zones (labelled areas such as "seating for 5", never pieces); rendered as PNG with doors drawn. **No furniture** | world-architect | `plans/vN.png` + `plans/vN.json` (schema in world-architect) | layout-reviewer ranks and scores (spatial-design §1–§4) → pick |
+| B.2 Greybox | 3–4 variant blockouts of the picked plan, roots `GREY_A`, `GREY_B`, … side by side at fixed offsets in a scratch area of the open scene (well clear of the real build origin), built from the plan data: building volumes, walls, heights, roof forms, level changes, **plus at most rough furniture zones**: flat labelled floor patches (`lounge seating`, `bed`, `dining`) from the plan JSON `furnitureZones`, never true-to-size furniture placeholders; each root with a reference-height capsule and area labels. One variant is picked and refined, then renamed `GREY_PICK`. No furniture transforms are exported. **Not playable**: no colliders, spawn, stair ramps, teleport doors or clip planes yet | world-architect | `GREY_PICK`, plan JSON with `furnitureZones` | layout-reviewer ranks and scores the variants in 3D from eye height → pick; then SHIP IT on the refined pick incl. world size limits (clip-planes §7) |
 | B review | Optional user review of plan and greybox: off by default, on in "Every step" | orchestrator | — | user (if on) |
 | **C · Build** | | | | |
-| C.1 Build-out | The main build loop (above): per area, shell finish, furniture swap, dressing; assets sourced on demand. Built at the real origin from the plan JSON, replacing `GREY_PICK`; the other `GREY_*` roots are deleted at the start of C.1 | world-builder (+ asset-finder, blender-modeler) | finished, furnished areas | z-fight scan clean → dressing-reviewer SHIP IT per pass |
+| C.1 Build-out | The main build loop (above): per area, shell finish, real furniture sourced and placed directly in 3D (seating and layout rules), dressing; the placed big pieces recorded from the scene into the plan JSON `furniture` list and the prop schedule. Built at the real origin from the plan JSON, replacing `GREY_PICK`; the other `GREY_*` roots are deleted at the start of C.1 | world-builder (+ asset-finder, blender-modeler) | finished, furnished areas; furniture record | z-fight scan clean → dressing-reviewer SHIP IT per pass, judged in 3D |
 | C.2 Interactions & playability | Once the real objects exist: colliders on walls, floors and big solid masses; **lie-down colliders** (below); one ramp box per stair flight; spawn; walk test in play mode; Udon (load `unity-vrc-udon-sharp`): clickable teleport doors on the real doors, teleport islands inside the clip-planes §4 radii, toggles incl. the lie-down toggle, video, no world mirrors (VRChat has personal mirrors; only real ones in bathrooms, gyms, dance/dressing rooms), pickups (only if requested), the VIP gate if the plan has one; Reference Camera near/far, runtime near/far Udon script (cuddle worlds: near 0.001–0.01) and fog per clip-planes §2 | world-builder | working Udon, collision, walk-test evidence, world-extent data | ClientSim/play-mode test passes; console clean; z-fight scan + WorldAudit clean → dressing-reviewer SHIP IT on the placed interaction objects |
 | **D · Finish** | | | | |
 | D.1 Lighting | Draft bake → final-reviewer mood check against the boards → final bake → reflection probes immediately | world-builder (`bakery-light-baking`; its Progressive GPU section without Bakery) | baked scene + lightmap/probe timestamps | final-reviewer SHIP IT (mood vs boards, final render) |
 | D.2 Performance | Measure, attribute, reversible fixes | perf-optimizer | measured report + applied fixes | budgets in `perf-optimizer` (`.omp/agents/perf-optimizer.md`) "Default budgets" met (or the brief's own); any visual change → final-reviewer regression check |
 | D.3 Ship | Sweep `__*__` objects, assert 0 realtime/mixed lights, thumbnail ([`.omp/skills/vrchat-world-thumbnail/SKILL.md`](../vrchat-world-thumbnail/SKILL.md)), SDK build & test → ready-to-upload report → **the user uploads** | orchestrator | build | user |
 | D.4 Retro | Lessons capture (below); every lock gap becomes an information-gathering question or lock item ("Lock gaps") | orchestrator | notes/skills, intake.md | — |
+
+**Confirmed 3D is never redrawn in 2D.** Once the user confirms a 3D blockout, never go back to 2D
+plan rounds for what it settled; changes happen in 3D. Shell changes after the A.3 pick are made on
+`SHELL_PICK` (B.1 only zones the interior inside it); once the greybox (or any built state after
+it) is confirmed, every change, a room swap or re-zoning included, is made on the scene, captured
+from eye height and reviewed there, and the plan JSON is updated from the scene.
 
 Always load the matching skill before a stage: Udon → `unity-vrc-udon-sharp`; SDK/components →
 `unity-vrc-world-sdk-3`; bake → `bakery-light-baking`; assets → `worldbuilding-assets`;
@@ -288,7 +325,7 @@ perf → `vrchat-world-optimization`; clip planes, fog, world extent → `clip-p
 
 Small props get no collider. Two furniture exceptions (user, 2026-10-13 for the solid ones):
 
-- **Solid big furniture** (`solid: true` in the plan JSON): big tables (dining, kitchen, work),
+- **Solid big furniture** (`solid: true` in the plan JSON furniture record): big tables (dining, kitchen, work),
   kitchen counters and islands, bar counters, cabinets, sideboards, dressers, wardrobes, bookcases
   and appliance-sized pieces. Each gets a child GameObject named `SolidCollider` with one always-on,
   non-trigger `BoxCollider` over its footprint from the floor to its top surface. Players can't walk
@@ -338,9 +375,9 @@ must report 1 pair; offset one by 5 mm, so it must report 0.
   user's editor with unsaved work.**
 - Scripted hierarchy edits need `EditorSceneManager.MarkSceneDirty`; save at the end of each
   stage; commit a checkpoint (never push).
-- Regenerable layout: encode plans as data (room polygons, the `furniture` list) consumed by a
-  builder script, so "make the hallway wider" is a data change, not hand surgery. Keep hand
-  dressing outside generated roots.
+- Regenerable layout: encode the shell as data (room polygons, doors, furniture zones) consumed by
+  a builder script, so "make the hallway wider" is a data change, not hand surgery. Keep furniture
+  and hand dressing outside generated roots; the `furniture` list records them, it never drives them.
 
 ## Measured reference person
 
