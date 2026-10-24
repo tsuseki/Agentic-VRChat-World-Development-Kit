@@ -1,0 +1,61 @@
+// MCP execute_code body. SessionState "FumoPickup" = "<Name>|<fbx path>|<mat path>|<parent path or empty>|x,y,z|height|yaw"
+// e.g. "Name|Assets/World/Plush/Fumo_Name.fbx|Assets/World/Plush/M_Fumo_Name.mat|LIVING/Dressing|1.20,0.45,3.10|0.25|90"
+// One copy per character: if Fumo_<Name> already exists in the scene it is replaced in place (same parent, floor
+// contact, centre, height and yaw; the trailing fields are then ignored). Otherwise the new one goes under <parent>
+// with its bottom centre at x,y,z (the support's top surface), scaled to <height> m, turned <yaw> degrees
+// (0 = faces +Z, 90 = faces +X; the exported FBX faces +Z after import - confirm with a screenshot).
+// Result: one tight BoxCollider, Rigidbody (gravity on, not kinematic), VRCPickup (proximity 0.1, AutoHold No),
+// VRCObjectSync, layer Pickup, not static, probe / Light Volume lit. Reports the support under it and the gap.
+var ci = System.Globalization.CultureInfo.InvariantCulture;
+var a = SessionState.GetString("FumoPickup", "").Split('|'); if (a.Length < 3) return "set SessionState FumoPickup";
+string nm = "Fumo_" + a[0];
+Transform old = null; int found = 0;
+foreach (var t in Resources.FindObjectsOfTypeAll<Transform>())
+    if (t.gameObject.scene.IsValid() && t.name == nm) { old = t; found++; }
+if (found > 1) return "DUPLICATE: " + found + " objects named " + nm + " - one copy per character; resolve first";
+Transform parent; Vector3 bottom; float height, yaw; int sib = -1;
+if (old != null) {
+    if (!old.gameObject.activeInHierarchy) return nm + " exists but is inactive: activate it or delete it first (one copy per character)";
+    var ob = old.GetComponent<Renderer>().bounds; bottom = new Vector3(ob.center.x, ob.min.y, ob.center.z); height = ob.size.y;
+    parent = old.parent; sib = old.GetSiblingIndex(); yaw = old.eulerAngles.y;
+} else {
+    if (a.Length < 7) return "no " + nm + " in the scene and no placement given";
+    parent = a[3].Length > 0 ? GameObject.Find(a[3])?.transform : null;
+    if (a[3].Length > 0 && parent == null) return "parent not found: " + a[3];
+    var p = a[4].Split(','); bottom = new Vector3(float.Parse(p[0], ci), float.Parse(p[1], ci), float.Parse(p[2], ci));
+    height = float.Parse(a[5], ci); yaw = float.Parse(a[6], ci);
+}
+var src = AssetDatabase.LoadAssetAtPath<GameObject>(a[1]); var mat = AssetDatabase.LoadAssetAtPath<Material>(a[2]);
+if (src == null || mat == null) return "missing asset";
+var go = (GameObject)PrefabUtility.InstantiatePrefab(src, parent);
+PrefabUtility.UnpackPrefabInstance(go, PrefabUnpackMode.Completely, InteractionMode.AutomatedAction);
+var mf = go.GetComponentInChildren<MeshFilter>();
+if (mf.gameObject != go) { var c = mf.transform; c.SetParent(parent, true); UnityEngine.Object.DestroyImmediate(go); go = c.gameObject; }
+var importRot = go.transform.rotation;
+if (old != null) go.transform.rotation = old.rotation; else go.transform.rotation = Quaternion.Euler(0, yaw, 0) * importRot;
+go.transform.localScale = Vector3.one;
+var r = go.GetComponent<MeshRenderer>(); var nb = r.bounds;
+float s = height / nb.size.y; go.transform.localScale = go.transform.localScale * s; nb = r.bounds;
+go.transform.position += new Vector3(bottom.x - nb.center.x, bottom.y - nb.min.y, bottom.z - nb.center.z);
+if (old != null) UnityEngine.Object.DestroyImmediate(old.gameObject);
+go.name = nm; if (sib >= 0) go.transform.SetSiblingIndex(sib);
+r.sharedMaterial = mat;
+GameObjectUtility.SetStaticEditorFlags(go, 0);
+r.lightProbeUsage = UnityEngine.Rendering.LightProbeUsage.BlendProbes;
+r.reflectionProbeUsage = UnityEngine.Rendering.ReflectionProbeUsage.BlendProbes;
+r.receiveGI = ReceiveGI.LightProbes; r.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
+go.layer = LayerMask.NameToLayer("Pickup");
+foreach (var col in go.GetComponents<Collider>()) UnityEngine.Object.DestroyImmediate(col);
+var bc = go.AddComponent<BoxCollider>(); var mb = mf.sharedMesh.bounds; bc.center = mb.center; bc.size = mb.size;
+var rb = go.AddComponent<Rigidbody>(); rb.useGravity = true; rb.isKinematic = false; rb.mass = 0.3f; // fresh FBX instance: no components yet
+var pu = go.AddComponent<VRC.SDK3.Components.VRCPickup>();
+pu.proximity = 0.1f; pu.AutoHold = VRC.SDKBase.VRC_Pickup.AutoHoldMode.No; pu.InteractionText = a[0];
+go.AddComponent<VRC.SDK3.Components.VRCObjectSync>();
+UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(go.scene);
+// support check: what is under the bottom centre, and how far (own collider off for the ray)
+var fb = r.bounds; Physics.SyncTransforms(); bc.enabled = false;
+string support = "NO SUPPORT within 0.5 m"; RaycastHit hit;
+if (Physics.Raycast(new Vector3(fb.center.x, fb.min.y + 0.05f, fb.center.z), Vector3.down, out hit, 0.55f, ~0, QueryTriggerInteraction.Ignore))
+    support = "support=" + hit.collider.name + " layer=" + LayerMask.LayerToName(hit.collider.gameObject.layer) + " gap_mm=" + ((fb.min.y - hit.point.y) * 1000f).ToString("F1", ci);
+bc.enabled = true;
+return go.name + " tris=" + (mf.sharedMesh.triangles.Length / 3) + " scale=" + s.ToString("F3", ci) + " c/s=" + fb.center.ToString("F3") + "/" + fb.size.ToString("F3") + " " + support;

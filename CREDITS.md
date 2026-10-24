@@ -148,7 +148,10 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   `.omp/knowledge/notes/saccflight-ground-vehicles-install-and-seating.md`.
 - **REDSIM** — [VRC Light Volumes](https://github.com/REDSIM/VRCLightVolumes) (`red.sim.lightvolumes`),
   MIT (README, docs, releases, issue #95). Used by `.omp/knowledge/notes/vrc-light-volumes-traps.md`,
-  `.omp/knowledge/notes/lightvolume-component-repushes-intensity.md`.
+  `.omp/knowledge/notes/lightvolume-component-repushes-intensity.md`, `.omp/skills/fumo-plushie/SKILL.md`.
+- **mworchel** — [xatlas-python](https://github.com/mworchel/xatlas-python), MIT, Python bindings of
+  [xatlas](https://github.com/jpcy/xatlas) (Jonathan Young, MIT); installed by the user, not bundled. Used by
+  `.omp/skills/fumo-plushie/scripts/` (`retopo_prep.py`, `fumo_remesh_bake.py`).
 - **PiMaker** — [LTCGI](https://github.com/PiMaker/ltcgi) ([docs](https://ltcgi.dev/)), MIT plus required
   attribution. **llealloo** — [AudioLink](https://github.com/llealloo/audiolink), MIT. **oneVR** —
   [VRWorld Toolkit](https://github.com/oneVR/VRWorldToolkit), MIT. Used by

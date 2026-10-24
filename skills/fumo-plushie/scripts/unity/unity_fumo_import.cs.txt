@@ -1,0 +1,33 @@
+// MCP execute_code body. SessionState "FumoImport" = "<fbx path>|<BaseColor png path>|<material path>|<shader name or empty>"
+// e.g. "Assets/World/Plush/Fumo_Name.fbx|Assets/World/Plush/Fumo_Name_BaseColor.png|Assets/World/Plush/M_Fumo_Name.mat|"
+// Model: metres as exported (scale 1, file scale), no generated lightmap UVs (UV2 is authored in Blender or not needed),
+// no imported materials/cameras/lights, not readable. Texture: 512 max, crunched, sRGB, mipmaps.
+// Material: the given shader; empty = "Light Volume Samples/Light Volume PBR" when the project has VRC Light Volumes,
+// else Standard. Matte felt: metallic 0, smoothness 0.1. Run, then measure in a LATER call (import is not visible
+// to the call that triggered it).
+var a = SessionState.GetString("FumoImport", "").Split('|'); if (a.Length < 3) return "set SessionState FumoImport";
+var mi = AssetImporter.GetAtPath(a[0]) as ModelImporter; if (mi == null) return "no model at " + a[0];
+mi.globalScale = 1f; mi.useFileScale = true;
+mi.generateSecondaryUV = false;
+mi.materialImportMode = ModelImporterMaterialImportMode.None;
+mi.importCameras = false; mi.importLights = false; mi.importAnimation = false; mi.animationType = ModelImporterAnimationType.None;
+mi.isReadable = false; mi.meshCompression = ModelImporterMeshCompression.Off;
+mi.importNormals = ModelImporterNormals.Import;
+mi.SaveAndReimport();
+var ti = AssetImporter.GetAtPath(a[1]) as TextureImporter; if (ti == null) return "no texture at " + a[1];
+ti.textureType = TextureImporterType.Default; ti.sRGBTexture = true; ti.mipmapEnabled = true;
+ti.maxTextureSize = 512; ti.textureCompression = TextureImporterCompression.Compressed;
+ti.crunchedCompression = true; ti.compressionQuality = 50; ti.alphaSource = TextureImporterAlphaSource.None;
+ti.SaveAndReimport();
+string shaderName = a.Length > 3 && a[3].Length > 0 ? a[3]
+    : (Shader.Find("Light Volume Samples/Light Volume PBR") != null ? "Light Volume Samples/Light Volume PBR" : "Standard");
+var sh = Shader.Find(shaderName); if (sh == null) return "shader not found: " + shaderName;
+var mat = AssetDatabase.LoadAssetAtPath<Material>(a[2]);
+if (mat == null) { mat = new Material(sh); AssetDatabase.CreateAsset(mat, a[2]); } else mat.shader = sh;
+mat.mainTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(a[1]);
+if (mat.HasProperty("_Color")) mat.SetColor("_Color", Color.white);
+if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
+if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0.1f);
+mat.enableInstancing = true;
+EditorUtility.SetDirty(mat); AssetDatabase.SaveAssets();
+return "imported " + a[0] + " | tex 512 crunched | mat " + a[2] + " shader=" + sh.name + " mainTexBound=" + (mat.mainTexture != null);

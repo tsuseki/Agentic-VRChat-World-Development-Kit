@@ -22,6 +22,9 @@ image or a text prompt — the full pipeline is for pieces where proportions and
 Before generating anything, check whether a suitable asset already exists — see
 [worldbuilding-assets](../worldbuilding-assets/SKILL.md).
 
+A plush or fumo of a character or avatar has its own pipeline:
+[fumo-plushie](../fumo-plushie/SKILL.md).
+
 ## 1. Blockout in Unity at reference-scale dimensions
 
 Grey-box the prop at its **reference-scale dimensions**: real-world size ×k (k = 0.8,

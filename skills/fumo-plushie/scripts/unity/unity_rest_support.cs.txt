@@ -1,0 +1,29 @@
+// MCP execute_code body. SessionState "RestSupport" = "<Surface>|<room path>|x,yTop,z|sizeX,sizeZ|yaw[|thickness]"
+// e.g. "SofaSeat_W|LIVING|2.10,0.42,3.40|0.60,0.45|90"
+// A plush with gravity needs something solid under it. Shelves, sofas, side tables and dressing carry no colliders
+// (players walk through small furniture), so the plush gets its own support: <room>/PickupRests/Rest_<Surface>,
+// one non-trigger BoxCollider on layer Walkthrough (17: pickups rest on it, players and hands pass through),
+// top face exactly at yTop (the visible surface the plush sits on), default 4.5 cm thick, no renderer.
+// Keep PickupRests out of dressing/props roots that a prop-collider audit scans.
+var ci = System.Globalization.CultureInfo.InvariantCulture;
+var a = SessionState.GetString("RestSupport", "").Split('|'); if (a.Length < 5) return "set SessionState RestSupport";
+var room = GameObject.Find(a[1]); if (room == null) return "room not found: " + a[1];
+var group = room.transform.Find("PickupRests");
+if (group == null) { var g0 = new GameObject("PickupRests"); g0.transform.SetParent(room.transform, false); GameObjectUtility.SetStaticEditorFlags(g0, 0); group = g0.transform; }
+var p = a[2].Split(','); var sz = a[3].Split(',');
+float x = float.Parse(p[0], ci), yTop = float.Parse(p[1], ci), z = float.Parse(p[2], ci);
+float sx = float.Parse(sz[0], ci), sz2 = float.Parse(sz[1], ci), yaw = float.Parse(a[4], ci);
+float th = a.Length > 5 ? float.Parse(a[5], ci) : 0.045f;
+string nm = "Rest_" + a[0];
+var t = group.Find(nm); var go = t != null ? t.gameObject : new GameObject(nm);
+if (t == null) go.transform.SetParent(group, false);
+go.transform.position = new Vector3(x, yTop - th / 2f, z);
+go.transform.rotation = Quaternion.Euler(0, yaw, 0);
+var ls = go.transform.parent.lossyScale; go.transform.localScale = new Vector3(1f / ls.x, 1f / ls.y, 1f / ls.z);
+go.layer = 17;
+GameObjectUtility.SetStaticEditorFlags(go, 0);
+var bc = go.GetComponent<BoxCollider>(); if (bc == null) bc = go.AddComponent<BoxCollider>();
+bc.isTrigger = false; bc.center = Vector3.zero; bc.size = new Vector3(sx, th, sz2);
+UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(go.scene);
+Physics.SyncTransforms();
+return nm + " top=" + bc.bounds.max.y.ToString("F3", ci) + " size=" + bc.bounds.size.ToString("F3") + " layer=" + LayerMask.LayerToName(go.layer);

@@ -80,6 +80,7 @@ The reviewer may leave `__CapCam__` **and an active realtime directional `__CapL
 | Model a custom prop; avatar exports to Blender, avatar clothing | agent `blender-modeler` ("Avatar work"); [`.omp/skills/lowpoly-tree-generation/SKILL.md`](skills/lowpoly-tree-generation/SKILL.md) |
 | Make an existing rigid model cheaper (tris, materials) without a visible change or a re-bake | agent `blender-optimizer`; [`.omp/skills/vrchat-world-optimization/SKILL.md`](skills/vrchat-world-optimization/SKILL.md) |
 | Image-to-3D props, GLB scale and placement | [`.omp/skills/image-to-3d-props/SKILL.md`](skills/image-to-3d-props/SKILL.md); the `image-to-3d` tool ([`.omp/docs/tools.md`](docs/tools.md)) |
+| Plush / fumo of a character or avatar: concept views, generation, prep, pickup, fire screams, placement | [`.omp/skills/fumo-plushie/SKILL.md`](skills/fumo-plushie/SKILL.md) |
 | Generate images (concepts, references, textures, outfits) | the `image-gen` / `image-edit` tools ([`.omp/docs/tools.md`](docs/tools.md)) |
 | Scene setup, VRC components, build and upload | [`.omp/skills/unity-vrc-world-sdk-3/SKILL.md`](skills/unity-vrc-world-sdk-3/SKILL.md) |
 | Android/Quest/iOS version of a world: intake decision, port-friendly design choices, porting a finished PC world (mobile shaders, ASTC and lightmap-encoding overrides, EasyQuestSwitch, mobile budgets, Build & Test on device, same-blueprint upload) | [`.omp/skills/vrchat-android-worlds/SKILL.md`](skills/vrchat-android-worlds/SKILL.md) |
