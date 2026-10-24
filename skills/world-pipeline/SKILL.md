@@ -348,7 +348,7 @@ Gather the capacity *and the typical avatar eye height* of the group (A.2). The 
 is a **1.3 m eye** (avatar about 1.4 m); full-size groups use 1.6 m. A world sized for a 1.75 m
 person (1.6 m eye) felt empty to a group whose avatars averaged 1.2 m, and the shell had to be
 rebuilt at ×0.625; an imported prop pack later came in "super huge" in a room and had to be scaled
-down. **Everything visible scales by k = eye ÷ 1.6** (≈0.81 at 1.3 m) from real-world sizes: shell,
+down. **Everything visible scales by a fixed k = 0.8** from real-world sizes: shell,
 built-ins, loose furniture (seat ≈0.36 m, table ≈0.60 m), props, decor, pickups, stair risers and
 goings, outdoor features (trees, shrubs, rocks, landmarks). Catalogue and vendor dimensions are
 full-size adult values: shrink them. The only exception is the fixed player-collision minimums

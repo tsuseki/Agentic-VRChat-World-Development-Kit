@@ -101,18 +101,12 @@ geometry) live in the homes above. Unlike the hard rules (`.omp/RULES.md`), the 
 of them for a specific world; record the change and the user's words in that world's `WORLD.md`
 Decisions log, and every agent then follows `WORLD.md`.
 
-**Scale: build as if people were 1.4 m tall.** The kit builds for adults who play small avatars
-(reference eye height 1.3 m), never for normal-size 1.75 m humans. Everything built, sourced, generated
-or placed is ×k = eye ÷ 1.6 (≈0.81) of its real-world size: rooms, ceilings, doors, corridors, stairs,
-built-ins, **loose furniture** (seats ≈0.36 m, tables ≈0.60 m), **props, decor and pickups**, and outdoor
-features (trees, shrubs, rocks, landmarks, terrain, outbuildings). Real-world specs, vendor sizes and
-asset packs are adult-sized or larger: an imported ASMR prop pack came in "super huge" in a room and had
-to be scaled down. Fix import scale to real size first (asset-import skill), then apply ×k. The one
-exception is VRChat's player collision, which does not shrink with the avatar: clear heights, doors,
-stair widths and headroom, paths and walkways never go below the collision minimums. Rules, numbers and
-minimums: spatial-design §5.9 and §5.11. A world's `WORLD.md` may set a different reference height for
-a group that plays full-size avatars. This is a rule for new work; existing worlds are not rescaled
-unless the user asks.
+**Scale: people are 1.4 m tall (eye 1.3 m) in all worlds; everything is ×0.8 of real-world size.** Use a
+1.4 m person for every scale figure, review camera, capture, fit test and brief. Shell, built-ins, loose
+furniture (seat ≈0.36 m, table ≈0.60 m), props, pickups and outdoor features are all ×0.8. Fix an import
+to real size first (asset-import skill), then apply ×0.8. Collision minimums (clear heights, doors, stairs,
+paths) never shrink. Details: spatial-design §5.9, §5.11. Existing worlds are not rescaled unless the user
+asks.
 
 ## Collision, seats and pickups
 

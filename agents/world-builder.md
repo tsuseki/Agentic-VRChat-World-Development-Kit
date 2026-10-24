@@ -146,7 +146,7 @@ criteria:
 - Composition per §5.10: loose props against a wall or beside furniture, never alone mid-floor; leave
   standing and walking space, no clutter; no slatted cage screens; ≥3 depth planes in key views.
 - Mark each threshold between archetypes per §4 (ceiling, floor material, light, sound, enclosure).
-- Sizes and clearances from the §5.11 table scaled per §5.9: everything visible ×k (k = eye ÷ 1.6):
+- Sizes and clearances from the §5.11 table scaled per §5.9: everything visible ×k (k = 0.8, fixed):
   shell, built-ins, loose furniture, props, decor, pickups and outdoor features (trees, shrubs,
   rocks, landmarks, outbuildings); only the collision minimums never go below the Min column.
   Real-world catalogue sizes are full-size adult values: shrink them. Furniture clear of door jambs (§5.6).

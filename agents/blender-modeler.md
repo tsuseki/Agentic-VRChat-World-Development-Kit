@@ -126,7 +126,7 @@ User: "He took the blockout too literally didn't make realistic trees".
 
 - **Work in meters; target = real size ×k.** Blender's default unit = 1 m, VRChat
   1 unit = 1 m. Worlds are built for ~1.4 m people: every visible piece is its real-world
-  size × k (k = eye_ref ÷ 1.6, ≈0.81 at the default 1.3 m eye; WORLD.md may set eye_ref), so a
+  size × k (k = 0.8, fixed; WORLD.md may override), so a
   table ~0.6 m tall, a seat ~0.36 m, a mug ~0.08 m. Collision minimums (door height 2.1 m, door
   clear 0.81 m) don't scale. Block out to those target dimensions first, then detail.
 - **Apply all transforms before export.** `Object > Apply > All Transforms` so

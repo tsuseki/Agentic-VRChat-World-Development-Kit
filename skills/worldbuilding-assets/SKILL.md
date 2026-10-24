@@ -67,7 +67,7 @@ Details: agent `asset-finder` §2.
 2. **spookyghostboo** — https://spookyghostboo.booth.pm/ — Western creator, free furniture
    & interior prop packs plus free starter worlds. Note: modeled at **larger/real-world
    scale** — expect to scale down ~0.6–0.7× to real-world size (measure a door or chair
-   first), then ×k (k = eye ÷ 1.6) like everything visible: furniture, props, buildings, trees
+   first), then ×k (k = 0.8, fixed) like everything visible: furniture, props, buildings, trees
    and other environment pieces alike (spatial-design §5.9).
 3. **Unity Asset Store** — https://assetstore.unity.com/ — rotating free assets, native
    `.unitypackage` import. E.g. **Furniture Mega Pack (Free)**:

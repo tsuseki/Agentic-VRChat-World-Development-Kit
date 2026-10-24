@@ -35,8 +35,8 @@ Set on the `ModelImporter`, `SaveAndReimport()`, read back in the next call.
 
 - **Scale:** fix units in the importer (`globalScale`, or `useFileScale = false, globalScale = 1` for a
   metre FBX that a Blender round-trip declared in cm), not by scaling each instance. The importer
-  fix brings the model to real-world size; the placed instance then goes ×k (k = eye ÷ 1.6, ≈0.81
-  at the default 1.3 m eye; spatial-design §5.9), furniture and props included. Real size is the
+  fix brings the model to real-world size; the placed instance then goes ×k (k = 0.8,
+  fixed; spatial-design §5.9), furniture and props included. Real size is the
   full-size adult value: an imported prop pack placed at real size came in "super huge" in a room
   and had to be scaled down.
 - **Rig and animation off:** `animationType = None`, `importAnimation = false`, so instances get no

@@ -38,7 +38,7 @@ Extracted from what the user supplied; gaps asked. Source: user / doc / referenc
 | Space archetypes (A1–A5) and people each | A1 bedroom ×2 (2–4), A2 lounge (8) | user |
 | Cuddling / lying close | yes | user |
 | Capacity typical / peak | 8 / 16 | user |
-| Reference eye height / avatar height | 1.3 m / about 1.4 m (full-size groups: 1.6 m / 1.75 m); everything visible built at real size ×k (k = eye ÷ 1.6), only collision minimums fixed | default |
+| Reference eye height / avatar height | 1.3 m / about 1.4 m (full-size groups: 1.6 m / 1.75 m); everything visible built at real size ×0.8 (fixed), only collision minimums fixed | default |
 | Platform | PC; Android: later \| yes \| no; iOS: Android fallback \| own build \| no | user |
 | Setting / theme | ... | user |
 | Mood, time of day, weather | ... | user |
@@ -114,7 +114,7 @@ Variants `GREY_A..D` (layout-reviewer scores: A 7, B 8, C 6). Picked B YYYY-MM-D
 
 ## Prop schedule (from the B.2 placeholders)
 Exported from the greybox scene: one row per placeholder, id = the plan JSON `furniture` id (`pos`, `rotY`
-there). Sizes are W×D×H in metres at the reference scale: real-world size ×k (k = eye ÷ 1.6, ≈0.81 at 1.3 m). `Lie-down` = gets a `LieDownCollider` in C.2; `Solid` = big
+there). Sizes are W×D×H in metres at the reference scale: real-world size ×0.8 (fixed). `Lie-down` = gets a `LieDownCollider` in C.2; `Solid` = big
 furniture that gets an always-on `SolidCollider` in C.2. Source is filled in C.1 as assets are found.
 
 ### <Room id> (<archetype>)

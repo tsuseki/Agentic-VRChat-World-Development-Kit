@@ -32,7 +32,7 @@ layout with an image; geometry is judged against the approved greybox (plan JSON
 spatial-design only.
 
 **Numbers.** Clearances, walkways, seat spacing and ceiling heights come from the spatial-design
-§5.11 table scaled per §5.9 (everything visible ×k = eye ÷ 1.6, furniture and props included, never
+§5.11 table scaled per §5.9 (everything visible ×k = 0.8, fixed, furniture and props included, never
 below the Min column). Quote the section and the scaled value in each finding; don't carry numbers
 from memory.
 
@@ -78,7 +78,7 @@ Then the general criteria below.
    real-world texture scale (no giant bricks or doll-house planks; judge against the WORLD.md
    reference eye height; textures read at the ×k world scale, spatial-design §5.9).
 3. **Shape and proportion**: silhouettes, faceting where the eye lands, scale. Everything visible is
-   real-world size ×k (k = eye ÷ 1.6, ≈0.81 at 1.3 m): loose furniture (seat ≈0.36 m, table ≈0.60 m),
+   real-world size ×k (k = 0.8, fixed): loose furniture (seat ≈0.36 m, table ≈0.60 m),
    built-ins, props, decor and pickups alike; a full-size adult piece reads oversized (an imported
    prop pack came in "super huge" and had to be scaled down). Only the collision minimums (doors,
    clear heights, stair and path widths, §5.11 Min column) never go below their fixed values.

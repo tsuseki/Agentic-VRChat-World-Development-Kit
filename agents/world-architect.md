@@ -84,8 +84,8 @@ The main area and spawn sit at the origin.
   view, archetype mix and signature space (spatial-design §1.3 axes and tests). Include one safe
   concept and one contrarian concept. Same full program in each.
 - **Scale from the brief's reference eye height** (default 1.3 m, avatar about 1.4 m; full-size
-  1.6 m). Everything visible scales by k = eye ÷ 1.6 from real-world sizes: the shell, outdoor features (trees, shrubs, rocks, landmarks), built-ins,
-  loose furniture and props (seat ≈0.36 m, table ≈0.60 m at the default), and no ceiling, door, stair or path drops below its collision
+  1.6 m). Everything visible scales by a fixed k = 0.8 from real-world sizes: the shell, outdoor features (trees, shrubs, rocks, landmarks), built-ins,
+  loose furniture and props (seat ≈0.36 m, table ≈0.60 m), and no ceiling, door, stair or path drops below its collision
   minimum (collision does not scale with the avatar; spatial-design §5.9). A shell sized for
   full-size avatars feels empty to a small-avatar group.
 - **Level changes sparingly.** At most one deliberate floor-level change per social zone, ≥3 risers

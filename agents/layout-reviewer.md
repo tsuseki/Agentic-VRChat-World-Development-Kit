@@ -64,14 +64,14 @@ extent, collision, scale minimums and budget still apply.
    island (user rule, trial 1, 2026-10-10): VRChat voice is not occluded by walls, so anyone in
    the same connected area can still hear you; only distance (a far island) makes a space private.
    Within walkable spaces, still order loud → quiet (spatial-design §4).
-4. **Circulation**: main paths at their scaled width (2.4–3 m for a 1.6 m eye, ×eye ÷ 1.6, never
-   below 2.0 m; 2.0–2.25 m at the default); corridors are rooms (seating pockets, ends that
+4. **Circulation**: main paths at their scaled width (2.4–3 m real, ×0.8, never
+   below 2.0 m; 2.0–2.4 m scaled); corridors are rooms (seating pockets, ends that
    terminate on something designed); at least one loop through the common rooms; doors
    sized to role (private 1.0–1.2 m, main portals 2.2–2.4 m); openings ≥ 3.1 m read as holes
    (spatial-design §4.2).
 5. **Scale and section**: rooms feel right at the reference eye height, and neither empty nor
    cramped at the 0.9 m and 1.6 m views; shell dimensions match spatial-design §5.11 scaled by
-   eye ÷ 1.6 (§5.9), and **no ceiling, door, stair or path is below its collision minimum** (≥2.3 m
+   ×0.8 (§5.9), and **no ceiling, door, stair or path is below its collision minimum** (≥2.3 m
    clear over paths: collision does not scale with the avatar); ceiling heights per archetype (lower over beds and nooks);
    at most one deliberate level change per social zone, ≥3 risers or a ramp, none on the entrance →
    main-area path, no decorative half-steps (§5.5); stairs sized to role.

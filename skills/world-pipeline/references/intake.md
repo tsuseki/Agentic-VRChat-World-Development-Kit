@@ -49,7 +49,7 @@ and approves, and end in the **Design Lock** (pipeline skill "Design Lock").
   colliders").
 - **Reference eye height** (always confirm): the group's typical avatar eye height. Offer **1.3 m**
   (avatar about 1.4 m) as the default; full-size groups use 1.6 m. It sets the world scale: everything
-  visible, furniture and props included, ×eye ÷ 1.6, with only the collision minimums fixed
+  visible, furniture and props included, ×0.8 (fixed), with only the collision minimums fixed
   (spatial-design §5.9); size the world for the wrong height and it feels empty or cramped.
 - **Platform** (always confirm unless the material says): **PC is the primary target**; every stage
   builds, reviews and ships the PC world first. An **Android version** (Meta Quest, Android phones
