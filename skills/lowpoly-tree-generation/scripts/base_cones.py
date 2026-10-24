@@ -12,7 +12,8 @@ base apex lies below the ground (the root skirt) is a ground stem: no parent. Th
 axis passes closest (in local radii) to the child's base ring centre and is wider there than the child (siblings at one fork
 have equal radii and are never parents). "Outside" = signed distance to the UNION of every other tube > 0 (nearest-surface
 distance, negative inside by ray parity): a cone point hidden in a sibling or grandparent is fine, only what a player can see
-counts. Samples per child: the apex, every ring vertex, and the ring->apex edges at 0.5 and 0.8.
+counts. Samples per child: the apex, every ring vertex, the ring->apex edges at 0.5 and 0.8, and a barycentric grid inside every cone
+triangle (10 points each; edge samples alone miss a face that crosses a crease between equal limbs).
 
 `scan(bm, fix=False, k=1.0)` returns the report; with fix=True it also moves vertices:
   1. ring vertices > TRIGGER outside are pulled toward the parent axis to TARGET inside (nothing else moves; UVs are per
@@ -155,9 +156,20 @@ class _Tubes:
         return best
 
 
-def _samples(t):
-    ap = t["apex"].co; ring0 = t["rings"][0]
-    return [("apex", ap.copy())] + [("ring", v.co.copy()) for v in ring0] + [("edge", v.co.lerp(ap, f)) for v in ring0 for f in (0.5, 0.8)]
+def _face_pts(ring, apex, n=4):
+    """Barycentric grid inside every cone triangle (ring[s], ring[s+1], apex): where three equal limbs meet, a cone face can
+    cross the crease between two of them with its middle outside while every edge point is inside."""
+    out = []; m = len(ring)
+    for s in range(m):
+        a, b = ring[s], ring[(s + 1) % m]
+        out += [a + (b - a) * (i + 0.33) / n + (apex - a) * (j + 0.33) / n for i in range(n) for j in range(n - i)]
+    return out
+
+
+def _samples(t, apex=None):
+    ap = (t["apex"].co if apex is None else apex).copy(); ring0 = t["rings"][0]; rc = [v.co.copy() for v in ring0]
+    return ([("apex", ap)] + [("ring", c) for c in rc] + [("edge", c.lerp(ap, f)) for c in rc for f in (0.5, 0.8)]
+            + [("face", q) for q in _face_pts(rc, ap)])
 
 
 def _pick_parent(T, t, c, r0):
@@ -221,7 +233,7 @@ def scan(bm, fix=False, k=1.0):
                 def ok(s_):
                     a = a0.lerp(c2, s_)
                     if T.usd(t, a) > -tgt: return False
-                    return all(T.usd(t, v.co.lerp(a, f)) <= eok for v in ring0 for f in (0.5, 0.8))
+                    return all(T.usd(t, q) <= eok for q in [v.co.lerp(a, f) for v in ring0 for f in (0.5, 0.8)] + _face_pts([v.co.copy() for v in ring0], a))
                 if not ok(0.0):
                     hi = None
                     for i in range(1, 21):
@@ -251,6 +263,7 @@ def scan(bm, fix=False, k=1.0):
                                 apex_out_mm=round(res[0][1] * 1000 / k, 1),
                                 ring_out_mm=round(max(d for kk, d in res if kk == "ring") * 1000 / k, 1),
                                 edge_out_mm=round(max(d for kk, d in res if kk == "edge") * 1000 / k, 1),
+                                face_out_mm=round(max(d for kk, d in res if kk == "face") * 1000 / k, 1),
                                 worst_mm=round(worst * 1000 / k, 1), exposed_cm2=round(exp * 1e4 / (k * k), 1),
                                 cone_faces=sorted(f.index for f in t["tri"])))
     return dict(tubes=len(T.tubes), roots=roots, children=children, orphans=flush, flush=flush, bad=T.bad,
