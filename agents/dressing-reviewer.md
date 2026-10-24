@@ -116,6 +116,21 @@ yaw), never from pixels, and quote the measured value in each finding.
      yourself with `rootPath` set to the target (read-only, time-sliced) and note that in Caveats.
    - Also shoot skimming angles over coplanar-prone spots: rugs, decals, wall panels, shelves,
      stacked kit pieces, floor trims.
+   - **Per-object contact sweep, every pass, measured not eyeballed.** Room-wide shots miss small
+     defects that players see at arm's length. For every dressing prop, fixture and bedding part
+     in the target, raycast and report: resting props (towels, books, bowls, pillows) have their
+     lowest point ≤ 5 mm above the supporting surface and their footprint fully on it (not over a
+     basin cut-out, counter edge or another prop); hung items (towels on rails, robes) rest on the
+     bar; wall-mounted fixtures (shower valves and arms, rails, mirrors, sconces, TVs) have their
+     back plate ≤ 3 mm off the wall face; layered soft goods (duvet, throw, blanket, sheet) do not
+     interpenetrate each other or the frame. Then take a close-up from 0.6–1.0 m of every bathroom
+     fixture, every bed and every counter top. Any miss is a should-fix; several are a blocker.
+   - **Imported multi-part models placed "as in" another world**: compare the active children,
+     uniform scale and material slots with the source scene's prefab instance; extra or
+     reactivated layers and non-uniform scale are findings.
+   - **Materials**: emission used to brighten a dark spot, open meshes seen from below (back-face
+     culled stripes), missing normal maps where siblings have them, and two stone materials with
+     different tiling on one surface are findings, not lighting.
 5. **Archetype fit** (spatial-design §3, the area's own row):
    - **A1** (§3.1): refuge (three enclosed sides plus overhead cover: alcove, canopy, bed alcove);
      the bed or cuddle platform sheltered, never floating mid-room under a bare ceiling; lying layout
