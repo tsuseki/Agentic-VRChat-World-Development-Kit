@@ -15,6 +15,9 @@
 #   buttress=dict(n, z=(lo,hi), reach=(lo,hi), r)   flaring roots from the lower trunk down to z=0
 #   flare=dict(r=1.3, h=0.35, skirt=0.05, steps=2)   root flare: ground-rooted stems widen to r x at z=0 over h m
 #                                    (<= 30 % of the stem; `steps` rings), plus a closed skirt ring `skirt` m below ground
+#       opt-in skirt_axis=s: the skirt runs on along the stem's first segment instead of straight down (no kink at
+#       the ground on leaning stems when the base is seen without terrain); s = the pack scale the mesh ships at
+#       (horizontal offset / s, because the pack scales x/y but keeps underground depths). Off = identical builds.
 #   side=[dict(n, z=(lo,hi), len, ang, r, tip, gnarl, up)]  extra trunk limbs/stubs at given heights (no children)
 #   vines=dict(count, size, z=(lo,hi))   hanging sprig cards under depth>=1 branches (epiphytes / draped foliage)
 #   low_tips=dict(min=3, n=4, reach=1.0, size=0.6, ground=0.1, cut=0.3)   bare low limbs (sprig): every terminal limb
@@ -28,15 +31,44 @@
 #       card differently. Off = identical builds.
 #   crown tip_upbias=<float> (sprig, opt-in; bamboo): the card on every ground-stem tip uses this upbias instead of
 #       `upbias` (e.g. +0.4 under a hanging -1.8 crown), so the culm tip carries its own rising spray instead of a bare
-#       whip above the crown. No extra random draws. Off = identical builds.
+#       whip above the crown. crown tip_upbias_all=True (opt-in): every terminal tip's card uses it (weeping mound:
+#       low drooping twig ends get a level tip card that clears the ground instead of being skipped, tips_uncovered).
+#       No extra random draws. Off = identical builds.
+#   crown surface=dict(c=(x, y, z), rad=(rx, ry, rz), chord=1.0, max_up=None) (sprig, opt-in; clipped topiary): each
+#       card keeps its root on the twig but lies along the level surface through that root of the ellipsoid (c, rad),
+#       facing out, dipped by `chord` x the angle that brings its far end back onto that surface (osculating circle, <= 40 deg);
+#       max_up (deg) rolls it about its axis just enough that its face stays >= max_up off horizontal. Use without
+#       roll_tilt (it would override the roll). c="root": the ellipsoid is centred on the root of each card's own twig
+#       (+ lift m up), one small dome per twig cluster (cloud-pruned pads). No extra random draws: off = identical builds.
+#   crown cells=[i, ...] (sprig/bamboo, opt-in): cards draw only these cells of <tex>_Leaves_Cards.json (one atlas, a
+#       dense twig-free clipped-surface cell for the topiary variants and open sprays for the free ones). Same single
+#       rng.choice per card: off = identical builds.
+#   crown max_rise=<deg> (sprig, opt-in; weeping mounds): a card whose axis rises more than max_rise deg above
+#       horizontal is lowered to max_rise, keeping its heading (0: every card tip-out or tip-down, the willow rule).
+#       Applied after `flat`, before surface/roll_tilt. No extra random draws: off = identical builds.
+#   crown max_fall=<deg> (sprig, opt-in): likewise a card whose tip falls more than max_fall deg below horizontal is
+#       raised to -max_fall (55: no card within 35 deg of hanging vertical; an edge-on hanging card reads as a
+#       stippled vertical stripe). Off = identical builds.
+#   crown fill up=0.6, minz=<crown minz> (opt-in): the fill cards' up lean (d*0.4 + to_axis*inward + UP*up; < 0 leans
+#       them down over the limbs) and the lowest fill root. Defaults = the old fixed values: off = identical builds.
+#   low_tips out=(lo, hi) (opt-in): each low_tips card is re-aimed tip-out: heading = radial from the trunk + its own
+#       drawn heading, elevation lo..hi deg (own random sequence 7937), so no low card hangs vertically (an edge-on
+#       hanging card reads as a stippled vertical stripe). Off = identical builds.
 #   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
 #       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
 #       ground-stem root crown below `fuse` m are allowed overlap); see BoothAssets/Tools/trees/declip.py. Off = identical builds.
+#   bury=1.5 (opt-in): depth of the cone that closes a child's base ring, behind the ring x its base radius (min 2 cm).
+#       Thick limbs on a thin lobed 6-sided trunk poke the default cone out of the trunk's far side as a strap or
+#       faceted wedge (BoothAssets BlackPine BP6); 0.25 keeps it inside. Mesh only, no draws: off = identical builds.
 #   base_clamp=True (default; False = the old builds): after the tubes are meshed, `base_cones.clamp` pulls every child's
 #       base cone (apex depth) and any ring corner that leaves the other tubes by > 2 mm back inside the parent tube,
 #       using the parent's actual meshed ring (lobe, 4/3 sides, taper, merge, declip): no light wedge of cone faces on the
 #       trunk's far side (BoothAssets olives 2026-10-23). Prints `STAT <name> base cones clamped N` only when it moves
 #       something, so trees that never poked stay geometry-identical (UV2 is smart-projected from the geometry).
+#   levels[i] root_out=<k> (opt-in): every limb of that level is shifted rigidly k x the parent radius out along its own
+#       radial (shape, noise and draws unchanged), so a thick limb (r 0.55 x trunk) leaves the trunk wall within the
+#       trunk radius instead of running ~1.2 trunk radii inside it (BlackPine BP6, k 0.35 with bury 0.25: base ring
+#       still inside the trunk). Its children and cards move with it. Off = identical builds.
 #   lod1_cards (0.6), lod1_size (1.35)   LOD1 card count and size factors
 #   lod1_subset=dict(keep=1.0, grow=1.0)   LOD1 = LOD0 thinned in place instead of rebuilt: same skeleton and card
 #       draws, every other tube ring, lod1_sides, all tip cards plus a `keep` share of the rest, `grow` x larger and
@@ -392,7 +424,9 @@ def stem_layout_points(SL, cnt, seed):
     """CFG stem_layout (opt-in): cnt stem bases scattered over an area with its own random sequence, at least `gap` m
     apart. kind "disc" (r), "ellipse" (rx, ry) or "strip" (w along x, d along y; a hedge/screen row). Sorted by
     distance from the origin, so stem 0 (the full-size one) stands in the middle. Also read by build_skeleton: `rim`
-    (m, default 1) = distance at which a stem reaches its full lean, `lean_min` (0.3) = lean share at the centre."""
+    (m, default 1) = distance at which a stem reaches its full lean, `lean_min` (0.3) = lean share at the centre;
+    opt-in `axis_out` (m): stems lean out from the centre segment x in [-axis_out, axis_out] (y = 0) instead of the
+    centre point, so a strip fans to both sides along its whole length (no bare middle); off = identical builds."""
     rng = random.Random(seed * 101 + 7); pts = []; gap = SL.get("gap", 0.12); kind = SL.get("kind", "disc")
     for _ in range(cnt * 400):
         if len(pts) == cnt: break
@@ -422,7 +456,9 @@ def build_skeleton(seed):
         base = Vector((math.cos(az) * spread, math.sin(az) * spread, 0.0))
         if SL:  # base from the layout; lean outward from the centre (or lean_dir), scaled up toward the rim
             base = SLP[k]; rad = Vector((base.x, base.y, 0.0)); rim = SL.get("rim", 1.0)
-            if "lean_dir" not in CFG and rad.length > 1e-3: az = math.atan2(base.y, base.x) + (az - 2 * math.pi * k / cnt)
+            if SL.get("axis_out") is not None:  # opt-in: out from the centre segment, not the centre point
+                rad.x -= max(-SL["axis_out"], min(SL["axis_out"], base.x))
+            if "lean_dir" not in CFG and rad.length > 1e-3: az = math.atan2(rad.y, rad.x) + (az - 2 * math.pi * k / cnt)
             le *= SL.get("lean_min", 0.3) + (1.0 - SL.get("lean_min", 0.3)) * min(1.0, rad.length / rim)
             d = Vector((math.cos(az) * le, math.sin(az) * le, 1.0))
         sc = 1.0 if k == 0 or cnt < 4 else rng.uniform(0.7, 1.0)
@@ -526,6 +562,10 @@ def build_skeleton(seed):
                 c = grow(p - d * min(0.03, r), cd, ln, rr, P["tip"] * rr if P["tip"] > 0.05 else P["tip"],
                          P.get("segs", 4 if lv == 0 else 3), lv + 1, out, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
                          up_end=P.get("up_end"), flat=P.get("flat", 0.0))
+                if c and P.get("root_out"):  # opt-in: the whole limb shifted rigidly root_out x parent radius out along
+                    rad = cd - d * cd.dot(d)  # its own radial (same shape and noise), so a thick limb clears the parent wall sooner
+                    if rad.length > 1e-6:
+                        sh = rad.normalized() * r * P["root_out"]; c.pts = [q + sh for q in c.pts]
                 if c: nxt.append(c)
         parents = nxt
     side_limbs(False)  # stubs etc.: no children
@@ -579,7 +619,12 @@ def flare_axis(br):
                 pts.append(a.lerp(b, t)); radii.append((br.radii[i - 1] + (br.radii[i] - br.radii[i - 1]) * t) * ease(s))
         acc += L
         pts.append(b.copy()); radii.append(br.radii[i] * ease(acc))
-    return [pts[0] - Vector((0, 0, sk))] + pts, [radii[0]] + radii, sk, h
+    sp = pts[0] - Vector((0, 0, sk))
+    sa = F.get("skirt_axis")
+    if sa:  # opt-in: skirt on the stem axis (offset / ship scale: the pack keeps underground depths, scales x/y)
+        d0 = br.pts[1] - br.pts[0]
+        if d0.z > 1e-4: sp = pts[0] - Vector((d0.x / d0.z * sk / sa, d0.y / d0.z * sk / sa, sk))
+    return [sp] + pts, [radii[0]] + radii, sk, h
 
 def tube(bm, br, sides, lobe_amt, cap):
     rings = []; acc = 0.0; prev_n = None
@@ -588,7 +633,8 @@ def tube(bm, br, sides, lobe_amt, cap):
         t = (pts[i + 1] - p).normalized() if i < len(pts) - 1 else (p - pts[i - 1]).normalized()
         if i > 0: acc += (p - pts[i - 1]).length
         if skirt is not None:  # flare rings tilt from horizontal at the ground (no flattened ellipse, no squashed
-            w = min(1.0, max(0.0, (acc - skirt) / max(fh, 1e-3)))  # quads on a leaning stem) to the axis direction at h
+            s0 = (pts[1] - pts[0]).length if CFG["flare"].get("skirt_axis") else skirt  # skirt_axis: slanted skirt length
+            w = min(1.0, max(0.0, (acc - s0) / max(fh, 1e-3)))  # quads on a leaning stem) to the axis direction at h
             t = (UP * (1.0 - w) + t * w).normalized()
         if prev_n is None:
             n = UP.cross(t)
@@ -624,7 +670,9 @@ def tube(bm, br, sides, lobe_amt, cap):
     if br.depth > 0 and (CFG.get("taper") or rosette):  # base ring closed by a cone buried in the parent: no open fork ring
         ring = rings[0][0]
         t = (br.pts[1] - br.pts[0]).normalized()
-        q = br.pts[0] - t * max(br.radii[0] * 1.5, 0.02)
+        # opt-in `bury` (default 1.5): apex depth behind the base ring x its radius. A thick limb on a thin lobed trunk
+        # pokes the default cone out of the trunk's far side (a strap / faceted wedge); 0.25 keeps it inside the trunk
+        q = br.pts[0] - t * max(br.radii[0] * CFG.get("bury", 1.5), 0.02)
         if q.z < 0.0: q.z = 0.0  # a low sucker's buried cone stays above ground (it sits in the flared trunk base)
         apex = bm.verts.new(q)
         for s in range(sides):
@@ -766,7 +814,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     cards = []  # every placed card (counts drive the loops below); dropped subset cards have first = None
     krng = random.Random(7919)  # own sequence: the subset choice never shifts the placement draws
     trng = random.Random(6007)  # own sequence for roll_tilt: card positions/directions stay those of the plain build
-    def place(b, t, d0, hang=False, nrm=None, exact=True, ub=None):
+    def place(b, t, d0, hang=False, nrm=None, exact=True, ub=None, aim=None):
         UB = C["upbias"] if ub is None else ub  # ub: per-card upbias (tip_upbias on ground-stem tips)
         A, r, d = point_at(b, t)
         sz = size * rng.uniform(0.85, 1.15)
@@ -791,6 +839,34 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         if fl:  # flat (sprig): cards lie toward horizontal with their face toward the sky (layered flat crowns)
             if Vector((d.x, d.y, 0.0)).length > 1e-6: d = Vector((d.x, d.y, d.z * (1.0 - fl))).normalized()
             roll = roll.lerp(UP, fl).normalized()
+        MR = C.get("max_rise") if C["mode"] == "sprig" and not hang else None
+        MF = C.get("max_fall") if C["mode"] == "sprig" and not hang else None
+        for lim, bad in ((MR, MR is not None and d.z > math.sin(math.radians(MR or 0.0))),
+                         (None if MF is None else -MF, MF is not None and d.z < -math.sin(math.radians(MF or 0.0)))):
+            if not bad: continue  # opt-in: card tip clamped to <= max_rise / >= -max_fall deg, heading kept
+            h = Vector((d.x, d.y, 0.0))
+            if h.length < 1e-6: h = Vector((A.x, A.y, 0.0)) if Vector((A.x, A.y, 0.0)).length > 1e-6 else Vector((1.0, 0.0, 0.0))
+            h.normalize(); d = (h * math.cos(math.radians(lim)) + UP * math.sin(math.radians(lim))).normalized()
+        if aim is not None: d = aim(A, d)  # low_tips out: re-aimed tip-out
+        SF = C.get("surface") if C["mode"] == "sprig" and not hang else None
+        if SF:  # opt-in (sprig, clipped topiary): the card lies along the level surface through A of the ellipsoid
+            c0 = b.pts[0] + UP * SF.get("lift", 0.0) if SF["c"] == "root" else Vector(SF["c"])  # "root": one dome per twig (cloud pads)
+            q = A - c0; R2 = [x * x for x in SF["rad"]]  # (c, rad), face out, painted twig still on A
+            g = Vector((q.x / R2[0], q.y / R2[1], q.z / R2[2]))
+            if g.length > 1e-9:
+                n = g.normalized(); tv = d - n * d.dot(n)  # (tv/bv: place() keeps its own b and t)
+                tv = (tv if tv.length > 1e-4 else n.orthogonal()).normalized()
+                k = (tv.x * tv.x / R2[0] + tv.y * tv.y / R2[1] + tv.z * tv.z / R2[2]) / g.length  # normal curvature along tv
+                dip = math.asin(min(0.64, sz * k * 0.5)) * SF.get("chord", 1.0)  # chord: far end back on the surface (<= 40 deg)
+                d = (tv * math.cos(dip) - n * math.sin(dip)).normalized()
+                n = (n - d * n.dot(d)).normalized(); roll = n
+                if SF.get("max_up") is not None:  # smallest roll about d that keeps |normal.z| <= cos(max_up)
+                    m = math.cos(math.radians(SF["max_up"])); bv = d.cross(n); Rm = math.hypot(n.z, bv.z)
+                    if Rm > m:
+                        p0 = math.atan2(bv.z, n.z); al = math.acos(m / Rm)
+                        ph = min(((p0 + s * al + o + math.pi) % (2 * math.pi) - math.pi
+                                  for s in (-1, 1) for o in (0.0, math.pi)), key=abs)
+                        roll = n * math.cos(ph) + bv * math.sin(ph)
         RT = C.get("roll_tilt") if C["mode"] == "sprig" and not hang else None
         if RT:  # opt-in (sprig): roll each card about its own axis d so its plane stands RT deg (lo, hi) off the plane
             u = UP - d * UP.dot(d)  # through d and the horizontal: no card faces the sky flat (mat shrubs read as rosettes)
@@ -811,14 +887,17 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             cards.append((None, None, None, b, t)); return True
         first, grid, att = sprig_card(bm, uvl, A, d, roll, sz * (keep.get("grow", 1.3) if keep else 1.0), fold, cell)
         cards.append((first, grid, att, b, t)); return True
-    cards_cells = cells
+    # opt-in crown cells=[i, ...] (sprig/bamboo): cards draw only these atlas cells (e.g. a dense clipped-surface cell for
+    # topiary variants, open sprays for the free-growing ones); same single rng.choice per card, off = identical
+    cards_cells = [cells[i] for i in C["cells"]] if C.get("cells") is not None else cells
     bm.verts.ensure_lookup_table()
     # every terminal end above the leaf zone gets a card rooted just inside its cone cap; opt-in crown tip_upbias
     # (sprig, bamboo): the cards on ground-stem (culm) tips use this upbias instead of `upbias`, so a hanging-card
     # crown still dresses the nodding culm tip (no bare whip above the crown). No extra random draws: off = identical.
     for b in terminal_ends(branches):
         if b.pts[-1].z >= C["minz"] * 0.8:
-            _, _, d = point_at(b, 0.97); place(b, 0.97, d, ub=C.get("tip_upbias") if b.depth == 0 else None)
+            _, _, d = point_at(b, 0.97)
+            place(b, 0.97, d, ub=C.get("tip_upbias") if b.depth == 0 or C.get("tip_upbias_all") else None)
     fill = C.get("fill")  # share of the cards spread over the inner limbs to close the gaps between clumps
     if fill:
         inner = [b for b in branches if b.depth >= fill["mindepth"]]
@@ -832,10 +911,10 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             b = rng.choices(inner, ilens)[0]
             t = rng.uniform(0.35, 0.97)
             A, _, d = point_at(b, t)
-            if A.z < C["minz"]: continue
+            if A.z < fill.get("minz", C["minz"]): continue
             # lean toward the crown axis and up, so fill cards close the hollow between splayed limbs
             to_axis = Vector((-A.x, -A.y, 0.0))
-            if to_axis.length > 1e-3: d = (d * 0.4 + to_axis.normalized() * fill.get("inward", 0.0) + UP * 0.6).normalized()
+            if to_axis.length > 1e-3: d = (d * 0.4 + to_axis.normalized() * fill.get("inward", 0.0) + UP * fill.get("up", 0.6)).normalized()
             place(b, t, d)
         size = base
     if C.get("per_tip"):  # dense clusters on the outer part of every leaf-bearing branch, gaps between them
@@ -896,6 +975,15 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         base, size = size, LT.get("size", size); g0 = C.get("ground"); C["ground"] = LT.get("ground", 0.1)
         cut = {id(branches[i]) for i in low_cut(branches)}
         blen = lambda x: sum((x.pts[i + 1] - x.pts[i]).length for i in range(len(x.pts) - 1))
+        aim = None
+        if LT.get("out"):  # opt-in: low cards tip-out (radial + own heading) at lo..hi deg elevation, never hanging
+            orng = random.Random(7937)
+            def aim(A, d):
+                rad = Vector((A.x, A.y, 0.0)); h = Vector((d.x, d.y, 0.0))
+                h = (rad.normalized() if rad.length > 1e-6 else Vector()) + (h.normalized() * 0.5 if h.length > 1e-6 else Vector())
+                h = h.normalized() if h.length > 1e-6 else Vector((1.0, 0.0, 0.0))
+                e = math.radians(orng.uniform(*LT["out"]))
+                return (h * math.cos(e) + UP * math.sin(e)).normalized()
         for b in terminal_ends(branches):
             ch = limb_chain(branches, b); ids = {id(x) for x in ch}
             if id(ch[0]) in cut or sum(id(c[3]) in ids for c in cards) >= LT.get("min", 3): continue
@@ -906,7 +994,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
                     if s <= L or x is ch[0]: break
                     s -= L
                 t = max(0.05, min(0.97, 1.0 - s / max(L, 1e-6)))
-                _, _, d = point_at(x, t); place(x, t, d)
+                _, _, d = point_at(x, t); place(x, t, d, aim=aim)
         C["ground"] = g0
         if g0 is None: del C["ground"]
         size = base

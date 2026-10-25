@@ -16,6 +16,10 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   VRChat avatar work. Its structure (bootstrap doc, routing docs, skills, an editor tools package
   with two-phase async calls) inspired AWDK; no code from it was copied. Used by
   `.omp/docs/bootstrap.md`, `.omp/docs/unity-tools.md`.
+- **arjun988** — [blender-skills](https://github.com/arjun988/blender-skills), MIT: its
+  reference-image-match workflow (reference analysis, camera match first, ranked gap list, capped
+  self-iterations) and silhouette → panel breaks → detail order were adapted in our own words; no text
+  or code copied. Used by `.omp/agents/blender-modeler.md`.
 
 ## Guides & documentation
 

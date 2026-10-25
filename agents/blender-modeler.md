@@ -122,6 +122,20 @@ User: "He took the blockout too literally didn't make realistic trees".
 - Model from real photos; measure part sizes against the reference avatar.
 - Prove it: render beside a figure, at eye height, a 1.2 m texture close-up, and views matching the user's references.
 
+### Reference-match loop (self-check before the reviewer)
+
+When the user or WORLD.md supplies a reference image for the asset:
+1. **Write a short analysis before touching Blender**: proportions as ratios (e.g. height : width :
+   depth, seat at 40 % of height), 5–8 hex colours sampled from the image (not guessed), the
+   material types and their roughness, and the 3 must-have features that make it this object.
+2. **Match the camera first.** Set the review camera to the reference's angle, lens feel and
+   framing; a wrong angle makes every later comparison misleading.
+3. **After each pass, render at that camera beside the reference and list at most 5 gaps,
+   ranked**: camera/framing → silhouette and proportions → flat or boxy forms → material value
+   range → missing features → detail density. Fix the top ones, re-render.
+4. Stop self-iterating after 3 passes and hand over with the remaining gaps stated honestly; the
+   stage reviewer's loop then runs until SHIP IT as usual.
+
 ## Modeling discipline
 
 - **Work in meters; target = real size ×k.** Blender's default unit = 1 m, VRChat
@@ -129,6 +143,11 @@ User: "He took the blockout too literally didn't make realistic trees".
   size × k (k = 0.8, fixed; WORLD.md may override), so a
   table ~0.6 m tall, a seat ~0.36 m, a mug ~0.08 m. Collision minimums (door height 2.1 m, door
   clear 0.81 m) don't scale. Block out to those target dimensions first, then detail.
+- **Detail in order: silhouette → secondary breaks → small detail.** Lock the main masses and
+  proportions first, then add the forms that stop it reading as a box (recesses, steps, insets,
+  chamfers on 90° silhouette corners), and only then small parts. A model that looks "boxy,
+  toy-like" skipped the middle step; adding small parts won't fix it. Small surface detail still
+  goes into maps (above), not triangles.
 - **Apply all transforms before export.** `Object > Apply > All Transforms` so
   rotation and scale are **baked into the vertices**. Object-level rotation/scale
   that isn't applied gets discarded or misreads on import — and note that
