@@ -43,6 +43,8 @@ It is common across species and worse on near-camera trees.
   its circumference and trunks get ≥ 8 at a stated reference resolution, with the asset's lightmap scale left
   at 1. Engines size an instance's lightmap rect from world area vs UV area. Moving share from leaves (~97 %
   of the area) to bark is enough for most trees, with no extra lightmap memory.
+- Kit implementation: `.omp/skills/lowpoly-tree-generation/scripts/lightmap_uv.py` (`repack`, `choose_bark`,
+  CLI `--auto`). The builder and `tree_finish.py` call it.
 - A UV-space "bark ×N" figure is not a texel gain: raising total fill shrinks every texel. Normalise by
   √(fill_after / fill_before). Example: ×8.5 in UV space at fill 0.10 → 0.49 is ≈ ×3.8 in texels, leaves ≈ ×0.76.
 - Make this the pack step's default for new trees; an automatic area-weighted unwrap must never ship.
@@ -57,7 +59,8 @@ It is common across species and worse on near-camera trees.
 - Positive control: the old area-weighted UV on the same camera and bake must show the dark/bright limbs.
 
 **Pitfalls.**
-- The re-pack script edits the source `.blend` in place and is not idempotent. Restore the `.blend` from
-  version control before re-running, or the second pass re-weights already re-weighted bark.
+- A re-pack that sizes charts from the previous lightmap layout is not idempotent: a second pass re-weights
+  already re-weighted bark. Lay the charts from the texture UV (as the kit script does), so a re-run gives the
+  same layout.
 - Raising the scene's lightmap scale alone multiplies the leaf share too; it costs memory and still leaves
   bark under-allocated.

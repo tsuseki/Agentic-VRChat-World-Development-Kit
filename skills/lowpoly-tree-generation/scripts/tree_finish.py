@@ -6,7 +6,7 @@
 #   1. (--sprig) cap every branch end with a short pointed cone (no open/flat ends) and add leaf
 #      cards on any branch end that no card covers, so no limb ends bare in the air
 #   2. (--sprig) centre the leaf cards on their anchor point (atlas = one centred cluster)
-#   3. bark UVs: uniform-density cylinders (tree_uv.cylinder_uvs), UV2 re-packed for lightmaps
+#   3. bark UVs: uniform-density cylinders (tree_uv.cylinder_uvs), Lightmap UV re-laid (lightmap_uv.repack)
 #   4. crown-proxy normals + outward card winding (tree_normals.transfer_crown_normals)
 #   5. export <out>/<Species>_Tree.fbx and save the .blend
 import bpy, bmesh, sys, os, math, random
@@ -15,6 +15,7 @@ from mathutils.kdtree import KDTree
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tree_normals import transfer_crown_normals, leaf_normal_spread
 from tree_uv import cylinder_uvs, stretch_stats, tubes
+import lightmap_uv
 
 args = sys.argv[sys.argv.index("--") + 1:]
 NAME, KIND = args[0], args[1]
@@ -115,11 +116,7 @@ def finish(ob, rng):
     me = ob.data
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = ob; ob.select_set(True)
-    me.uv_layers.active = me.uv_layers["UV2"]
-    bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.01)
-    bpy.ops.object.mode_set(mode='OBJECT')
-    me.uv_layers.active = me.uv_layers["UVMap"]
+    stats["lightmap"] = lightmap_uv.repack(ob, check=False)
     ob.select_set(False)
     stats["proxy"] = transfer_crown_normals(ob, KIND)
     stats["leaf_ndot"] = leaf_normal_spread(ob)

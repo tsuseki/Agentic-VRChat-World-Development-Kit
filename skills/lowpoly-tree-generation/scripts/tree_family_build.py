@@ -64,7 +64,7 @@
 #       base cone (apex depth) and any ring corner that leaves the other tubes by > 2 mm back inside the parent tube,
 #       using the parent's actual meshed ring (lobe, 4/3 sides, taper, merge, declip): no light wedge of cone faces on the
 #       trunk's far side (BoothAssets olives 2026-10-23). Prints `STAT <name> base cones clamped N` only when it moves
-#       something, so trees that never poked stay geometry-identical (UV2 is smart-projected from the geometry).
+#       something, so trees that never poked stay geometry-identical (the Lightmap UV is re-laid from the UVMap charts).
 #   levels[i] root_out=<k> (opt-in): every limb of that level is shifted rigidly k x the parent radius out along its own
 #       radial (shape, noise and draws unchanged), so a thick limb (r 0.55 x trunk) leaves the trunk wall within the
 #       trunk radius instead of running ~1.2 trunk radii inside it (BlackPine BP6, k 0.35 with bury 0.25: base ring
@@ -131,6 +131,7 @@ from tree_normals import transfer_crown_normals, leaf_normal_spread
 from tree_checks import floating_bark_components, floating_islands
 import base_cones
 from tree_uv import cylinder_uvs, stretch_stats
+import lightmap_uv
 import json, statistics
 UP = Vector((0, 0, 1))
 # --------------------------------------------------------------------------- species
@@ -1217,7 +1218,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
             DECLIP_STATS["mod"] = _dmod
         DECLIP_STATS[name] = DECLIP_STATS["mod"].declip(branches, low_cut(branches), CFG, ("declip", NAME, seed), NAME)
     me = bpy.data.meshes.new(name); bm = bmesh.new()
-    uvl = bm.loops.layers.uv.new("UVMap"); bm.loops.layers.uv.new("UV2")
+    uvl = bm.loops.layers.uv.new("UVMap"); bm.loops.layers.uv.new(lightmap_uv.LAYER)
     deep = max(b.depth for b in branches)
     S0, S1 = CFG.get("sides", (7, 5, 4)), CFG.get("lod1_sides", (5, 4, 3))
     spans = []  # (skeleton index, first bark face, end) per meshed tube
@@ -1280,10 +1281,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
     SKELETONS[name] = (branches, cards or [])
     ob.data.materials.append(mat_bark); ob.data.materials.append(mat_leaf)
     bpy.context.view_layer.objects.active = ob; ob.select_set(True)
-    me.uv_layers.active = me.uv_layers["UV2"]
-    bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.uv.smart_project(angle_limit=math.radians(66), island_margin=0.01)
-    bpy.ops.object.mode_set(mode='OBJECT')
+    print("STAT", name, "lightmap", lightmap_uv.repack(ob, bark=CFG.get("lightmap_bark", 5.0), check=False))
     me.uv_layers.active = me.uv_layers["UVMap"]
     for p in me.polygons: p.use_smooth = p.material_index == 0
     ob.select_set(False); return ob
