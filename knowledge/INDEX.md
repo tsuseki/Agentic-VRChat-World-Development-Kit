@@ -7,7 +7,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [lighting-baking](#lighting-baking) (66)
 - [probes-reflection-and-light](#probes-reflection-and-light) (21)
 - [materials-textures-shaders](#materials-textures-shaders) (38)
-- [geometry-meshes-uvs](#geometry-meshes-uvs) (28)
+- [geometry-meshes-uvs](#geometry-meshes-uvs) (29)
 - [import-fbx-prefabs](#import-fbx-prefabs) (15)
 - [placement-layout-design](#placement-layout-design) (46)
 - [colliders-physics](#colliders-physics) (13)
@@ -162,6 +162,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [A prop that renders as a blank slab is facing away — measure the submesh normal](notes/featureless-prop-check-facing-before-material.md) — When a prop renders featureless but materials, textures and bounds all check out, measure the content submesh's mean local normal; it is probably presenting its back.
 - [A prop with a wide flat foot cannot be tilted as a whole object](notes/tilt-base-plate-props-by-hinging-the-mesh.md) — Rotating a prop that has a wide base plate always drives a plate corner underground; hinge the mesh above a joint instead.
 - [Alpha-cutout leaf cards need crown-proxy normals, and the shader must not flip them](notes/foliage-cards-need-crown-proxy-normals.md) — Give leaf-card vertices the normals of a smooth ellipsoid/hull fitted to the crown, import FBX normals (not Calculate), and disable the shader's back-face normal flip, or the canopy reads flat, speckled or black.
+- [Area-weighted lightmap unwraps starve tree bark because alpha-cut leaf cards count as full quads](notes/tree-lightmap-uv-transparency-trap.md) — An automatic lightmap unwrap sizes charts by 3D surface area and ignores transparency, so thousands of mostly see-through leaf quads take the lightmap and thin bark limbs get about one texel each; ship a hand-built lightmap UV in the FBX that gives bark its own budget.
 - [Bad textures" on a hand-built mesh is usually material tiling anisotropy; fix it in UV1](notes/fix-texture-stretch-via-effective-repeats-per-metre.md) — Measure effective repeats per metre per axis (mesh UV per metre x material tiling); fix anisotropy with a per-axis world box projection in UV1, leaving shared materials and UV2 untouched.
 - [Check wall-panel UV handedness against siblings and a text panel](notes/wall-panel-uv-handedness-sibling-check.md) — Deciding a panel's outward face by raycast fails silently on collider-less walls, mirroring some panels; assert sibling panels on the same wall share handedness and validate with a panel showing text.
 - [EditorUtility.CopySerialized into an existing Mesh asset keeps rendering the old geometry](notes/copyserialized-into-existing-mesh-renders-stale.md) — Rewriting a mesh asset in place with CopySerialized updates its CPU data but the renderer keeps drawing the old mesh; write a new asset instead.
