@@ -43,6 +43,14 @@
 #   crown cells=[i, ...] (sprig/bamboo, opt-in): cards draw only these cells of <tex>_Leaves_Cards.json (one atlas, a
 #       dense twig-free clipped-surface cell for the topiary variants and open sprays for the free ones). Same single
 #       rng.choice per card: off = identical builds.
+#   crown roles=dict(frac=0.2, low=True) (sprig, opt-in; needs Cards.json cells with "role": "full" | "lateral" |
+#       "shoot" | "sprig", optional "scale" = card length multiplier, default 1): a dry first pass on a copy of the
+#       random state finds every card's far end; the cards that stick out of the crown (the `frac` share of tip and
+#       main cards furthest out of the crown ellipsoid, plus every low_tips card if `low`) show a lateral/shoot/sprig
+#       cell, the interior and fill cards a "full" cell (per-card own sequence). Same cards, places, directions and
+#       count; a role cell that would hit `clear`/`ground` falls back to the drawn cell. Prints STAT crown roles.
+#   crown mirror=True (sprig, opt-in): about half the cards (per-card own sequence) show their cell U-mirrored; the
+#       mirrored attach point stays on the branch axis. Off (both) = identical builds.
 #   crown max_rise=<deg> (sprig, opt-in; weeping mounds): a card whose axis rises more than max_rise deg above
 #       horizontal is lowered to max_rise, keeping its heading (0: every card tip-out or tip-down, the willow rule).
 #       Applied after `flat`, before surface/roll_tilt. No extra random draws: off = identical builds.
@@ -710,13 +718,15 @@ def card(bm, uvl, base, d, nrm, s, fold, cell=None):
         f = bm.faces.new(vs); f.material_index = 1
         for loop, (u, v) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))): loop[uvl].uv = (u0 + u * (u1 - u0), v0 + v * (v1 - v0))
 
-def sprig_card(bm, uvl, A, d, roll, s, fold, cell, dry=False):
+def sprig_card(bm, uvl, A, d, roll, s, fold, cell, dry=False, mirror=False):
     """Card whose atlas stem-base attach point lands exactly on A (a point on a branch axis); s = card length,
     width = s x the cell's width/height (square cells: square cards).
-    dry: only return its corner points (0,0), (1,0), (1,1), (0,1), nothing is created."""
+    dry: only return its corner points (0,0), (1,0), (1,1), (0,1), nothing is created.
+    mirror: the cell is shown U-mirrored (same winding); the mirrored attach point still lands on A."""
     d = d.normalized(); n = (roll - d * roll.dot(d)).normalized(); side = n.cross(d)
     u0, v0, u1, v1 = cell["rect"]
     au = (cell["attach"][0] - u0) / (u1 - u0); av = (cell["attach"][1] - v0) / (v1 - v0)
+    if mirror: au = 1.0 - au
     sw = s * (u1 - u0) / (v1 - v0)
     fv = n * s * fold
     O = A - (side * (au - 0.5) * sw + d * av * s + fv * max(0.0, 1.0 - abs(au - 0.5) * 2))
@@ -728,7 +738,7 @@ def sprig_card(bm, uvl, A, d, roll, s, fold, cell, dry=False):
     for q in quads:
         f = bm.faces.new([vs[k] for k in q]); f.material_index = 1
         for loop, k in zip(f.loops, q):
-            lu, lv = grid[k]; loop[uvl].uv = (u0 + lu * (u1 - u0), v0 + lv * (v1 - v0))
+            lu, lv = grid[k]; loop[uvl].uv = (u0 + ((1.0 - lu) if mirror else lu) * (u1 - u0), v0 + lv * (v1 - v0))
     return first, grid, (au, av)
 
 def card_attach_point(P, grid, au, av):
@@ -810,9 +820,12 @@ def low_cut(branches):
         out.add(idx[id(ch[0])])
     return out
 
-def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
+def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None, probe=None, roles=None):
     """keep (lod1_subset): place the LOD0 cards with the LOD0 random sequence, but build only the tip cards plus
-    a `keep` share of the others, `grow` times larger around the same attach point (LOD1 = LOD0 thinned)."""
+    a `keep` share of the others, `grow` times larger around the same attach point (LOD1 = LOD0 thinned).
+    probe (crown roles, first pass): a list that gets (A, d, size, kind) per placed card instead of any geometry;
+    roles (second pass): per placed card "full" or "out" (see card_roles); the card keeps its place, direction and roll
+    and only its atlas cell (and the cell's `scale`) changes, falling back to the drawn cell if the new one would not fit."""
     C = CFG["crown"]
     cells = json.load(open(TEX + f"{TEXN}_Leaves_Cards.json"))["cells"]
     md = C["mindepth"]
@@ -822,6 +835,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     cards = []  # every placed card (counts drive the loops below); dropped subset cards have first = None
     krng = random.Random(7919)  # own sequence: the subset choice never shifts the placement draws
     trng = random.Random(6007)  # own sequence for roll_tilt: card positions/directions stay those of the plain build
+    KIND = ["tip"]  # which loop places the card (crown roles: tip / main / fill / low / hang)
     def place(b, t, d0, hang=False, nrm=None, exact=True, ub=None, aim=None):
         UB = C["upbias"] if ub is None else ub  # ub: per-card upbias (tip_upbias on ground-stem tips)
         A, r, d = point_at(b, t)
@@ -881,23 +895,46 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             if u.length > 1e-3:
                 u.normalize(); a = math.radians(trng.uniform(*RT)) * (1.0 if trng.random() < 0.5 else -1.0)
                 roll = (u * math.cos(a) + d.cross(u) * math.sin(a)).normalized()
-        if exact and CFG.get("clear"):  # the real card surface (its back overhang and corners too) must stay out of the volumes
-            q = sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True)
-            if any(in_clear(q[0].lerp(q[1], i / 4).lerp(q[3].lerp(q[2], i / 4), j / 4)) for i in range(5) for j in range(5)):
-                return False
-        if C.get("ground") is not None:  # hanging cards stay above this height: shrink, then skip
-            for _ in range(5):
-                if min(x.z for x in sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True)) >= C["ground"]: break
-                sz *= 0.75
-            else:
-                return False
+        def fits(cl, s, m=False):  # the card's real surface must stay out of keep-out volumes and above `ground` (shrunk)
+            if exact and CFG.get("clear"):  # the real card surface (its back overhang and corners too) must stay out of the volumes
+                q = sprig_card(bm, uvl, A, d, roll, s, fold, cl, dry=True, mirror=m)
+                if any(in_clear(q[0].lerp(q[1], i / 4).lerp(q[3].lerp(q[2], i / 4), j / 4)) for i in range(5) for j in range(5)):
+                    return None
+            if C.get("ground") is not None:  # hanging cards stay above this height: shrink, then skip
+                for _ in range(5):
+                    if min(x.z for x in sprig_card(bm, uvl, A, d, roll, s, fold, cl, dry=True, mirror=m)) >= C["ground"]: break
+                    s *= 0.75
+                else:
+                    return None
+            return s
+        s0 = fits(cell, sz)  # the drawn cell decides whether the card is placed: roles/mirror never change the card count
+        if s0 is None: return False
+        idx = len(cards); mir = False
+        if roles is not None or C.get("mirror"):
+            # crown roles: the cell of the card's role (own per-card sequence, no shared draws), `scale` = its card length
+            # multiplier; crown mirror: half the cards U-mirrored. Each falls back (unmirrored, then drawn cell) if it won't fit.
+            M = (True, False) if C.get("mirror") and random.Random(7963 + idx).random() < 0.5 else (False,)
+            cands = [(cell, sz)]
+            if roles is not None:
+                rc = random.Random(7951 + idx).choice(OUT if roles[idx] == "out" else FULL)
+                cands.insert(0, (rc, sz * rc.get("scale", 1.0)))
+            for cl, s in cands:
+                hit = next(((m, s2) for m in M for s2 in (fits(cl, s, m),) if s2 is not None), None)
+                if hit: cell, (mir, s0) = cl, hit; break
+        sz = s0
+        if probe is not None: probe.append((A.copy(), d.copy(), sz, "hang" if hang else KIND[0]))
         if keep is not None and t < 0.95 and krng.random() >= keep.get("keep", 0.5):
             cards.append((None, None, None, b, t)); return True
-        first, grid, att = sprig_card(bm, uvl, A, d, roll, sz * (keep.get("grow", 1.3) if keep else 1.0), fold, cell)
+        if probe is not None: cards.append((-1, None, None, b, t)); return True
+        first, grid, att = sprig_card(bm, uvl, A, d, roll, sz * (keep.get("grow", 1.3) if keep else 1.0), fold, cell, mirror=mir)
         cards.append((first, grid, att, b, t)); return True
     # opt-in crown cells=[i, ...] (sprig/bamboo): cards draw only these atlas cells (e.g. a dense clipped-surface cell for
     # topiary variants, open sprays for the free-growing ones); same single rng.choice per card, off = identical
     cards_cells = [cells[i] for i in C["cells"]] if C.get("cells") is not None else cells
+    if roles is not None:  # crown roles: interior cards show "full" cells, the protruding ones lateral/shoot/sprig
+        FULL = [c for c in cards_cells if c.get("role") == "full"]
+        OUT = [c for c in cards_cells if c.get("role") in ("lateral", "shoot", "sprig")]
+        assert FULL and OUT, "crown roles: the Cards.json cells need role full and lateral/shoot/sprig"
     bm.verts.ensure_lookup_table()
     # every terminal end above the leaf zone gets a card rooted just inside its cone cap; opt-in crown tip_upbias
     # (sprig, bamboo): the cards on ground-stem (culm) tips use this upbias instead of `upbias`, so a hanging-card
@@ -908,6 +945,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             place(b, 0.97, d, ub=C.get("tip_upbias") if b.depth == 0 or C.get("tip_upbias_all") else None)
     fill = C.get("fill")  # share of the cards spread over the inner limbs to close the gaps between clumps
     if fill:
+        KIND[0] = "fill"
         inner = [b for b in branches if b.depth >= fill["mindepth"]]
         ilens = [sum((b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)) for b in inner]
         target = len(cards) + int(count * fill["frac"])
@@ -925,6 +963,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             if to_axis.length > 1e-3: d = (d * 0.4 + to_axis.normalized() * fill.get("inward", 0.0) + UP * fill.get("up", 0.6)).normalized()
             place(b, t, d)
         size = base
+    KIND[0] = "main"
     if C.get("per_tip"):  # dense clusters on the outer part of every leaf-bearing branch, gaps between them
         k = C["per_tip"] if not lod1 else max(2, int(C["per_tip"] * CFG.get("lod1_cards", 0.6)))
         for b in twigs:
@@ -965,6 +1004,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         f = Vector((math.cos(az), math.sin(az), 0.0)); sdir = Vector((-f.y, f.x, 0.0))
         hosts = [b for b in branches if getattr(b, "screen", None) == k]
         base, size = size, Sc.get("card", size)
+        KIND[0] = "hang"
         made = tries = 0
         while hosts and made < Sc["count"] and tries < Sc["count"] * 30:
             tries += 1
@@ -979,6 +1019,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         size = base
     LT = CFG.get("low_tips")
     if LT:  # bare low limbs: chains with fewer than `min` cards get `n` cards over their outer `reach` m, one at the tip
+        KIND[0] = "low"
         rng = random.Random(7907)  # own sequence, placed last: every card above is unchanged (place() reads this rng)
         base, size = size, LT.get("size", size); g0 = C.get("ground"); C["ground"] = LT.get("ground", 0.1)
         cut = {id(branches[i]) for i in low_cut(branches)}
@@ -1093,10 +1134,38 @@ def rosette_crown(bm, uvl, branches, rng, fold):
             if r: cards.append(r + (b, 1.0))
     return cards
 
+def card_roles(probe, frac=0.2, low=True):
+    """crown roles: "out" for the cards that stick out of the crown, "full" for the rest. The crown is the ellipsoid
+    through the far card ends (A + d x size) of the tip and main cards: horizontal centre = their mean, horizontal
+    radius = 90th percentile distance, vertical centre/radius from z10..z90. Out = the `frac` share of tip and main
+    cards whose far end lies furthest out (stray tips and the silhouette edge), plus every low_tips card if `low`.
+    Fill and hanging cards stay "full"."""
+    far = [(A + d * s) for A, d, s, k in probe]
+    ids = [i for i, p in enumerate(probe) if p[3] in ("tip", "main")]
+    roles = ["out" if low and p[3] == "low" else "full" for p in probe]
+    if not ids: return roles
+    pct = lambda xs, q: sorted(xs)[min(len(xs) - 1, int(q * len(xs)))]
+    cx = sum(far[i].x for i in ids) / len(ids); cy = sum(far[i].y for i in ids) / len(ids)
+    rh = max(1e-3, pct([math.hypot(far[i].x - cx, far[i].y - cy) for i in ids], 0.9))
+    z10, z90 = pct([far[i].z for i in ids], 0.1), pct([far[i].z for i in ids], 0.9)
+    zc, rz = (z10 + z90) / 2, max(1e-3, (z90 - z10) / 2)
+    sc = {i: math.hypot(math.hypot(far[i].x - cx, far[i].y - cy) / rh, (far[i].z - zc) / rz) for i in ids}
+    for i in sorted(ids, key=lambda i: -sc[i])[:int(round(frac * len(ids)))]: roles[i] = "out"
+    return roles
+
 def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
     C = CFG["crown"]; mode = C["mode"]
     if mode == "sprig":
-        return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep)
+        R = C.get("roles")
+        if not R: return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep)
+        # opt-in crown roles=dict(frac=0.2, low=True): a dry first pass on a copy of the random state finds where each
+        # card lands, the real pass places the very same cards and only swaps their cells by role (card count/tris kept)
+        r1 = random.Random(); r1.setstate(rng.getstate()); probe = []
+        sprig_crown(bm, uvl, branches, r1, count, size, fold, lod1, keep, probe=probe)
+        roles = card_roles(probe, R.get("frac", 0.2), R.get("low", True))
+        print(f"STAT crown roles {'lod1' if lod1 else 'lod0'} cards {len(probe)} out {roles.count('out')} "
+              f"(low {sum(p[3] == 'low' for p in probe)}) full {roles.count('full')} mirror {'Y' if C.get('mirror') else 'N'}")
+        return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep, roles=roles)
     if mode == "rosette":  # lod1_subset (keep): fronds identical to LOD0 (unfolding moves the edges by fold x width)
         return rosette_crown(bm, uvl, branches, rng, C.get("fold", 0.0) if keep is not None else fold)
     cells = None  # atlas: each card shows one cell of <tex>_Leaves_Cards.json instead of the whole texture
