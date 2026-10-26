@@ -49,6 +49,10 @@
 #       main cards furthest out of the crown ellipsoid, plus every low_tips card if `low`) show a lateral/shoot/sprig
 #       cell, the interior and fill cards a "full" cell (per-card own sequence). Same cards, places, directions and
 #       count; a role cell that would hit `clear`/`ground` falls back to the drawn cell. Prints STAT crown roles.
+#       roles group=<k> (opt-in): every card rooted on the same branch within k x the median card length of an "out"
+#       card's root (the whole cluster on a protruding tip, low limb chains) turns "out" too, and the out cards of each
+#       branch take the lateral/shoot/sprig cells in turn along the branch (no two neighbours alike) instead of the
+#       per-card draw. Off = identical builds.
 #   crown mirror=True (sprig, opt-in): about half the cards (per-card own sequence) show their cell U-mirrored; the
 #       mirrored attach point stays on the branch axis. Off (both) = identical builds.
 #   crown max_rise=<deg> (sprig, opt-in; weeping mounds): a card whose axis rises more than max_rise deg above
@@ -916,13 +920,15 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             M = (True, False) if C.get("mirror") and random.Random(7963 + idx).random() < 0.5 else (False,)
             cands = [(cell, sz)]
             if roles is not None:
-                rc = random.Random(7951 + idx).choice(OUT if roles[idx] == "out" else FULL)
+                r = roles[idx]
+                rc = (OUT[int(r[4:]) % len(OUT)] if r.startswith("out:")  # roles group: cells in turn along the branch
+                      else random.Random(7951 + idx).choice(OUT if r == "out" else FULL))
                 cands.insert(0, (rc, sz * rc.get("scale", 1.0)))
             for cl, s in cands:
                 hit = next(((m, s2) for m in M for s2 in (fits(cl, s, m),) if s2 is not None), None)
                 if hit: cell, (mir, s0) = cl, hit; break
         sz = s0
-        if probe is not None: probe.append((A.copy(), d.copy(), sz, "hang" if hang else KIND[0]))
+        if probe is not None: probe.append((A.copy(), d.copy(), sz, "hang" if hang else KIND[0], id(b), t))
         if keep is not None and t < 0.95 and krng.random() >= keep.get("keep", 0.5):
             cards.append((None, None, None, b, t)); return True
         if probe is not None: cards.append((-1, None, None, b, t)); return True
@@ -1134,23 +1140,37 @@ def rosette_crown(bm, uvl, branches, rng, fold):
             if r: cards.append(r + (b, 1.0))
     return cards
 
-def card_roles(probe, frac=0.2, low=True):
+def card_roles(probe, frac=0.2, low=True, group=None):
     """crown roles: "out" for the cards that stick out of the crown, "full" for the rest. The crown is the ellipsoid
     through the far card ends (A + d x size) of the tip and main cards: horizontal centre = their mean, horizontal
     radius = 90th percentile distance, vertical centre/radius from z10..z90. Out = the `frac` share of tip and main
     cards whose far end lies furthest out (stray tips and the silhouette edge), plus every low_tips card if `low`.
-    Fill and hanging cards stay "full"."""
-    far = [(A + d * s) for A, d, s, k in probe]
+    Fill and hanging cards stay "full".
+    group (opt-in): every non-hanging card on the same branch whose root lies within group x the median card length of
+    an out card's root turns out too (the whole cluster on that tip), and the out cards of each branch get "out:<k>",
+    k counting along the branch (by t) from a per-branch offset: the cells are taken in turn, neighbours differ."""
+    far = [(p[0] + p[1] * p[2]) for p in probe]
     ids = [i for i, p in enumerate(probe) if p[3] in ("tip", "main")]
     roles = ["out" if low and p[3] == "low" else "full" for p in probe]
-    if not ids: return roles
-    pct = lambda xs, q: sorted(xs)[min(len(xs) - 1, int(q * len(xs)))]
-    cx = sum(far[i].x for i in ids) / len(ids); cy = sum(far[i].y for i in ids) / len(ids)
-    rh = max(1e-3, pct([math.hypot(far[i].x - cx, far[i].y - cy) for i in ids], 0.9))
-    z10, z90 = pct([far[i].z for i in ids], 0.1), pct([far[i].z for i in ids], 0.9)
-    zc, rz = (z10 + z90) / 2, max(1e-3, (z90 - z10) / 2)
-    sc = {i: math.hypot(math.hypot(far[i].x - cx, far[i].y - cy) / rh, (far[i].z - zc) / rz) for i in ids}
-    for i in sorted(ids, key=lambda i: -sc[i])[:int(round(frac * len(ids)))]: roles[i] = "out"
+    if ids:
+        pct = lambda xs, q: sorted(xs)[min(len(xs) - 1, int(q * len(xs)))]
+        cx = sum(far[i].x for i in ids) / len(ids); cy = sum(far[i].y for i in ids) / len(ids)
+        rh = max(1e-3, pct([math.hypot(far[i].x - cx, far[i].y - cy) for i in ids], 0.9))
+        z10, z90 = pct([far[i].z for i in ids], 0.1), pct([far[i].z for i in ids], 0.9)
+        zc, rz = (z10 + z90) / 2, max(1e-3, (z90 - z10) / 2)
+        sc = {i: math.hypot(math.hypot(far[i].x - cx, far[i].y - cy) / rh, (far[i].z - zc) / rz) for i in ids}
+        for i in sorted(ids, key=lambda i: -sc[i])[:int(round(frac * len(ids)))]: roles[i] = "out"
+    if not group: return roles
+    reach = group * sorted(p[2] for p in probe)[len(probe) // 2]
+    byb = {}
+    for i, p in enumerate(probe): byb.setdefault(p[4], []).append(i)
+    for s in [i for i, r in enumerate(roles) if r == "out"]:
+        for j in byb[probe[s][4]]:
+            if probe[j][3] != "hang" and (probe[j][0] - probe[s][0]).length <= reach: roles[j] = "out"
+    for b, js in byb.items():
+        outs = sorted((j for j in js if roles[j] == "out"), key=lambda j: probe[j][5])
+        k0 = random.Random(7951 + js[0]).randrange(3)
+        for k, j in enumerate(outs): roles[j] = f"out:{k0 + k}"
     return roles
 
 def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
@@ -1162,9 +1182,11 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
         # card lands, the real pass places the very same cards and only swaps their cells by role (card count/tris kept)
         r1 = random.Random(); r1.setstate(rng.getstate()); probe = []
         sprig_crown(bm, uvl, branches, r1, count, size, fold, lod1, keep, probe=probe)
-        roles = card_roles(probe, R.get("frac", 0.2), R.get("low", True))
-        print(f"STAT crown roles {'lod1' if lod1 else 'lod0'} cards {len(probe)} out {roles.count('out')} "
-              f"(low {sum(p[3] == 'low' for p in probe)}) full {roles.count('full')} mirror {'Y' if C.get('mirror') else 'N'}")
+        roles = card_roles(probe, R.get("frac", 0.2), R.get("low", True), R.get("group"))
+        n_out = sum(r.startswith("out") for r in roles)
+        print(f"STAT crown roles {'lod1' if lod1 else 'lod0'} cards {len(probe)} out {n_out} "
+              f"(low {sum(p[3] == 'low' for p in probe)}) full {len(roles) - n_out} mirror {'Y' if C.get('mirror') else 'N'}"
+              + (f" group {R['group']}" if R.get("group") else ""))
         return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep, roles=roles)
     if mode == "rosette":  # lod1_subset (keep): fronds identical to LOD0 (unfolding moves the edges by fold x width)
         return rosette_crown(bm, uvl, branches, rng, C.get("fold", 0.0) if keep is not None else fold)
