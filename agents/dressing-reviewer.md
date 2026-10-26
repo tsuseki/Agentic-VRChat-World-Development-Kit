@@ -81,7 +81,15 @@ yaw), never from pixels, and quote the measured value in each finding.
   group keeping its U, L or facing composition. A piece dropped beside or between an existing
   layout, or a group that reads as random clutter, is a **blocker**.
 - **Nothing alone in open floor**: every piece faces a view, table, fire or other seats and sits on
-  a rug or against a wall or rail; a lone piece mid-floor is a **blocker**.
+  a rug or against a wall or rail. A lone piece mid-floor is a **blocker**.
+  - **Measure it, don't eyeball it.** For every floor-standing loose piece in the target (floor lamps,
+    plant pots, planters, sculptures, side tables, stools, baskets), compute the gap from its footprint
+    to the nearest wall or rail and to the nearest furniture piece.
+  - **Gap rule.** It is a blocker if both gaps exceed 0.30 m, or if the piece sits in a route or the
+    room's central open area.
+  - **Coverage.** Take a top-down capture per room with every such piece labelled, and list each
+    piece with its gaps.
+  - Wide eye-height poses hide this, so never pass it from them alone.
 - **Door zones**: per door, a box ≥ 1.2 m deep into the room × (door width + 0.3 m each side) holds
   no furniture in the body-height band, and a ≥ 0.9 m route leads on into the room. Run the check
   yourself (read-only) when the builder's output is missing or stale; any intrusion is a **blocker**.
