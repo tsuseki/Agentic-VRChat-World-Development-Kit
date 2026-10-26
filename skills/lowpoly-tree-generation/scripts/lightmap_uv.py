@@ -10,20 +10,33 @@ What it does (only the lightmap layer changes; positions, UVMap, vertex colours,
 - each chart is made isotropic in metres (per-chart u/v stretch from its triangles' Jacobians, so a squeezed bark
   column still gets texels around the limb) and scaled to a uniform density per m2, bark x `bark` (linear) over
   leaves x `leaf`;
-- shelf-packed into the unit square (long side horizontal, 90 degree rotation, no mirroring) with one uniform
-  scale found by bisection; margins per chart type;
+- bark ribbons longer than ~0.45 x the layout side are cut into pieces along the limb (at face borders, no new
+  geometry), so one long thin limb chain can't force a tiny uniform scale;
+- packed in chart units on shelves (long side horizontal, 90 degree rotation, no mirroring), shelf width tried over a
+  range for the best fill (aspect <= 2), then scaled into 0-1. Margins are lightmap texels at the reference
+  resolution: >= 2 x MARGIN_PX between bark charts, MARGIN_PX between bark and leaves, LEAF_MARGIN_PX between leaves;
 - the layer is UV channel 1, named `Lightmap`.
 
-Module:  from lightmap_uv import repack, choose_bark;  stats = repack(ob, bark=5.0)
+How the engine sizes it: Unity's Progressive lightmapper (measured 2026-10-26 on 15 trees, within 1 %) gives an instance
+a rect whose side is ref * sqrt(world area / UV bounding-box area) * Scale In Lightmap (an earlier Bakery bake reading
+0.57x the area-only prediction fits the same model). So the texels a chart gets depend on the
+fill (triangle area / bounding box) as well as on the weights: texels per metre = ref * sqrt(A / bbox) * UV scale.
+`_stats` and `choose_bark` use that model.
+
+Module:  from lightmap_uv import repack, choose_bark;  stats = repack(ob, bark=5.0, ref=10)
 CLI:     blender --background <tree>.blend --python lightmap_uv.py -- <Object> [--fbx out.fbx] [--bark B | --auto]
-                 [--ref 5] [--around 2] [--leaf 1] [--margin 0.010] [--lmargin 0.010] [--u0 0.76] [--dry] [--save]
+                 [--ref 10] [--around 2] [--trunk 8] [--leaf-floor 0.5] [--leaf 1] [--margin-px 2] [--leaf-margin-px 0.5]
+                 [--u0 0.76] [--dry] [--save]
 Prints `LIGHTMAPUV <ob> ...` and `LIGHTMAPOVERLAP <ob> covered N overlapped M` (M must be 0).
-Run it on the mesh that ships, after every geometry step (LOD thinning, card cull, base-cone clamp); it is
+Run it on the mesh that ships, after every geometry step (LOD thinning, card cull, base-cone clamp, pack scale); it is
 deterministic from the UVMap, so re-running on the same mesh gives the same layout (idempotent).
 """
 import bpy, bmesh, math, os, sys
 
 LAYER = "Lightmap"
+REF = 10.0           # reference resolution (texels/unit, Scale In Lightmap 1) for the targets and margins
+MARGIN_PX = 2.0      # gap around every bark chart, lightmap texels at the reference resolution (tuned on test bakes)
+LEAF_MARGIN_PX = 0.5  # gap between two leaf cards (leaves tolerate a shared rim texel; bark never shares one)
 
 
 def _bark_pred(ob, bm, u0):
@@ -78,33 +91,72 @@ def _chart(faces, lay, bark):
     return dict(faces=faces, pts=pts, w=max(xs) - x0, h=max(ys) - y0, a3=a3, bark=bark)
 
 
-def _pack(charts, margin, lmargin):
-    def attempt(g):
-        rects = []
-        for n, c in enumerate(charts):
-            s = g * c["k"]; w, h = c["w"] * s, c["h"] * s; m = margin if c["bark"] else lmargin
-            rot = h > w
-            if rot: w, h = h, w
-            rects.append((n, w + m, h + m, s, rot, m))
-        rects.sort(key=lambda r: -r[2])
-        shelves, out, ytop = [], {}, 0.0
-        for n, w, h, s, rot, m in rects:
-            if w > 1.0: return None
-            for sh in shelves:
-                if sh[1] >= h and sh[2] + w <= 1.0:
-                    out[n] = (sh[2], sh[0], rot, s, m); sh[2] += w; break
-            else:
-                if ytop + h > 1.0: return None
-                shelves.append([ytop, h, w]); out[n] = (0.0, ytop, rot, s, m); ytop += h
-        return out
+def _split(charts, limit):
+    """Cut bark ribbons longer than `limit` (weighted chart units) into pieces along their long axis, at face borders
+    (no new geometry: the cut ring's vertices just get one lightmap UV per side). Pieces stay >= 3 x the short side."""
+    out = []
+    for c in charts:
+        L, S = max(c["w"], c["h"]) * c["k"], min(c["w"], c["h"]) * c["k"]
+        n = int(math.ceil(L / limit)) if c["bark"] else 1
+        n = max(1, min(n, int(L / max(3.0 * S, 1e-9))))
+        if n == 1: out.append(c); continue
+        ax = 0 if c["w"] >= c["h"] else 1; step = max(c["w"], c["h"]) / n
+        groups = {}
+        for f in c["faces"]:
+            lo = min(c["pts"][l.index][ax] for l in f.loops)
+            groups.setdefault(min(n - 1, int(lo / step)), []).append(f)
+        for fs in groups.values():
+            pts = {l.index: c["pts"][l.index] for f in fs for l in f.loops}
+            xs = [q[0] for q in pts.values()]; ys = [q[1] for q in pts.values()]; x0, y0 = min(xs), min(ys)
+            out.append(dict(faces=fs, pts={i: (x - x0, y - y0) for i, (x, y) in pts.items()}, w=max(xs) - x0,
+                            h=max(ys) - y0, a3=sum(f.calc_area() for f in fs), bark=True, k=c["k"]))
+    return out
 
-    lo, hi, best = 1e-4, 1e4, None
-    for _ in range(40):
-        mid = (lo * hi) ** 0.5; r = attempt(mid)
-        if r is None: hi = mid
-        else: lo, best = mid, r
-    assert best is not None, "could not pack"
-    return best
+
+def _shelf(rects, W):
+    """First-fit decreasing-height shelves of width W. rects: (n, w, h) with w >= h. -> ({n: (x, y)}, height)."""
+    shelves, out, ytop = [], {}, 0.0
+    for n, w, h in rects:
+        for sh in shelves:
+            if sh[2] + w <= W:
+                out[n] = (sh[2], sh[0]); sh[2] += w; break
+        else:
+            shelves.append([ytop, h, w]); out[n] = (0.0, ytop); ytop += h
+    return out, ytop
+
+
+def _pack(charts, A, ref, margin_px, leaf_margin_px):
+    """Pack in weighted chart units (metres x k). Unity (and Bakery) size an instance's lightmap rect from world area /
+    UV bounding-box area (checked on a Progressive bake, 2026-10-26: rect side = ref * sqrt(world area / bbox area)
+    within 1 %), so the texels per chart unit are ref * sqrt(A / (W * H)) for a W x H layout: margins are set in
+    texels at `ref` from that (two passes), and the layout is scale-free, so it packs once and is scaled to fit 0-1.
+    Shelf width tried over a range; the best fill with aspect <= 2 wins. -> (placements, W, H, texels per unit)."""
+    area = sum(c["w"] * c["h"] * c["k"] ** 2 for c in charts)
+    longest = max(max(c["w"], c["h"]) * c["k"] for c in charts)
+    tpu = ref * math.sqrt(A / (area / 0.7))
+    best = None
+    for _ in range(2):
+        ml = leaf_margin_px / tpu; mb = max(ml, 2.0 * margin_px / tpu - ml)   # bark-bark gap >= 2 x, bark-leaf >= 1 x
+        rects, mar = [], {}
+        for n, c in enumerate(charts):
+            m = mar[n] = mb if c["bark"] else ml
+            w, h = c["w"] * c["k"] + m, c["h"] * c["k"] + m
+            rects.append((n, max(w, h), min(w, h), h > w))
+        rot = {n: r for n, _, _, r in rects}
+        rects = sorted(((n, w, h) for n, w, h, _ in rects), key=lambda r: (-r[2], -r[1]))
+        tot = sum(w * h for _, w, h in rects); side = math.sqrt(tot)
+        best = None
+        for f in (0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.2, 1.3, 1.45):
+            Wt = max(side * f, longest + mb)
+            pl, H = _shelf(rects, Wt)
+            Wu = max(pl[n][0] + w for n, w, h in rects)
+            if max(Wu, H) > 2.0 * min(Wu, H) and best is not None: continue
+            fill = tot / (Wu * H)
+            if best is None or fill > best[0]: best = (fill, pl, Wu, H)
+        tpu = ref * math.sqrt(A / (best[2] * best[3]))
+    fill, pl, Wu, H = best
+    g = 1.0 / max(Wu, H)
+    return {n: (x * g, y * g, rot[n], charts[n]["k"] * g, mar[n] * g) for n, (x, y) in pl.items()}, Wu * g, H * g, tpu
 
 
 def _overlap(bm, new, isl_of, N=2048):
@@ -129,14 +181,16 @@ def _overlap(bm, new, isl_of, N=2048):
     return cover, over
 
 
-def _layout(ob, bark, leaf, margin, lmargin, u0):
+def _layout(ob, bark, leaf, margin_px, u0, ref, leaf_margin_px=LEAF_MARGIN_PX, split=0.45):
     me = ob.data
     bm = bmesh.new(); bm.from_mesh(me); bm.faces.ensure_lookup_table()
     uv0 = bm.loops.layers.uv["UVMap"]; is_bark = _bark_pred(ob, bm, u0)
-    charts = [_chart(fs, uv0, is_bark(fs[0])) for fs in _islands(bm, uv0)]
-    for c in charts:
+    whole = [_chart(fs, uv0, is_bark(fs[0])) for fs in _islands(bm, uv0)]
+    for c in whole:
         c["k"] = bark if c["bark"] else leaf   # charts are already in metres: uniform density x weight
-    best = _pack(charts, margin, lmargin)
+    A = sum(c["a3"] for c in whole)
+    charts = _split(whole, split * math.sqrt(sum(c["w"] * c["h"] * c["k"] ** 2 for c in whole)))
+    best, W, H, tpu = _pack(charts, A, ref, margin_px, leaf_margin_px)
     new, isl_of = {}, {}
     for n, (px, py, rot, s, m) in best.items():
         c = charts[n]
@@ -146,28 +200,35 @@ def _layout(ob, bark, leaf, margin, lmargin, u0):
             if rot: u, v = v, c["w"] * s - u
             new[li] = (px + m * 0.5 + u, py + m * 0.5 + v)
     assert len(new) == len(me.loops)
-    return bm, charts, best, new, isl_of
+    return bm, dict(whole=whole, charts=charts, A=A, W=W, H=H, tpu=tpu, best=best), new, isl_of
 
 
-def _stats(charts, best, ref):
-    """Predicted texels at `ref` texels/unit, Scale In Lightmap 1, assuming the lightmapper sizes an instance so its
-    mean density over the whole surface equals `ref` (rect side = ref * sqrt(world area / UV fill)). Verify by bake."""
-    A = sum(c["a3"] for c in charts); fill = sum(c["w"] * c["h"] * best[n][3] ** 2 for n, c in enumerate(charts))
-    side = ref * math.sqrt(A / fill) if fill else 0.0
-    bs = sorted(min(c["w"], c["h"]) for c in charts if c["bark"])            # ribbon short side = circumference (m)
-    bark_tpm = side * next((best[n][3] for n, c in enumerate(charts) if c["bark"]), 0.0)
-    leaf_tpm = side * next((best[n][3] for n, c in enumerate(charts) if not c["bark"]), 0.0)
+def _stats(L, ref):
+    """Texels at `ref` texels/unit with Scale In Lightmap 1, for a lightmapper that sizes the rect from world area /
+    UV bounding-box area (Unity Progressive, Bakery): texels per metre = ref * sqrt(A / bbox) * scale."""
+    whole, charts, A, W, H, best = L["whole"], L["charts"], L["A"], L["W"], L["H"], L["best"]
+    side = ref * math.sqrt(A / (W * H))                        # rect side of the 0-1 square, texels
+    uv_tri = sum(c["a3"] * best[n][3] ** 2 for n, c in enumerate(charts))
+    kb = next((c["k"] for c in whole if c["bark"]), 0.0); kl = next((c["k"] for c in whole if not c["bark"]), 0.0)
+    g = best[0][3] / charts[0]["k"]
+    bark_tpm, leaf_tpm = side * g * kb, side * g * kl
+    bs = sorted(min(c["w"], c["h"]) for c in whole if c["bark"])            # ribbon short side = circumference (m)
     thin = bs[len(bs) // 10] if bs else 0.0; trunk = bs[-1] if bs else 0.0
-    return dict(fill=fill, side=side, bark_tpm=bark_tpm, leaf_tpm=leaf_tpm, thin_circ=thin, trunk_circ=trunk,
-                thin_tex=thin * bark_tpm, trunk_tex=trunk * bark_tpm, bark_share=sum(c["a3"] for c in charts if c["bark"]) / A)
+    return dict(fill=uv_tri / (W * H), bbox=W * H, side=side, bark_tpm=bark_tpm, leaf_tpm=leaf_tpm, thin_circ=thin,
+                trunk_circ=trunk, thin_tex=thin * bark_tpm, trunk_tex=trunk * bark_tpm, charts=len(charts),
+                bark_charts=sum(c["bark"] for c in charts), bark_share=sum(c["a3"] for c in whole if c["bark"]) / A)
 
 
-def choose_bark(ob, ref=5.0, around=2.0, trunk=8.0, leaf_floor=0.5, leaf=1.0, margin=0.010, lmargin=0.010, u0=0.76,
-                lo=1.0, hi=40.0):
+def choose_bark(ob, ref=REF, around=2.0, trunk=8.0, leaf_floor=0.5, leaf=1.0, margin_px=MARGIN_PX, u0=0.76,
+                lo=1.0, hi=60.0, leaf_margin_px=LEAF_MARGIN_PX):
     """Per-tree bark weight: the smallest that gives the p10 limb `around` texels and the trunk `trunk` texels at `ref`
     texels/unit, capped so leaves keep >= leaf_floor * ref texels/m. Returns (weight, reached_targets)."""
+    memo = {}
+
     def st(b):
-        bm, ch, best, _, _ = _layout(ob, b, leaf, margin, lmargin, u0); s = _stats(ch, best, ref); bm.free(); return s
+        if b not in memo:
+            bm, L, _, _ = _layout(ob, b, leaf, margin_px, u0, ref, leaf_margin_px); memo[b] = _stats(L, ref); bm.free()
+        return memo[b]
 
     def bisect(good, a, b):            # good(a) False, good(b) True -> smallest good
         for _ in range(12):
@@ -175,7 +236,7 @@ def choose_bark(ob, ref=5.0, around=2.0, trunk=8.0, leaf_floor=0.5, leaf=1.0, ma
             if good(m): b = m
             else: a = m
         return b
-    need = lambda b: (lambda s: s["thin_tex"] >= around and s["trunk_tex"] >= trunk)(st(b))
+    need = lambda b: st(b)["thin_tex"] >= around and st(b)["trunk_tex"] >= trunk
     leaf_ok = lambda b: st(b)["leaf_tpm"] >= leaf_floor * ref
     cap = hi if leaf_ok(hi) else (lo if not leaf_ok(lo) else 1.0 / bisect(lambda r: leaf_ok(1.0 / r), 1.0 / hi, 1.0 / lo))
     if need(lo): return lo, True
@@ -183,20 +244,18 @@ def choose_bark(ob, ref=5.0, around=2.0, trunk=8.0, leaf_floor=0.5, leaf=1.0, ma
     return bisect(need, lo, cap), True
 
 
-def repack(ob, bark=5.0, leaf=1.0, margin=0.010, lmargin=0.010, u0=0.76, ref=5.0, check=True):
+def repack(ob, bark=5.0, leaf=1.0, margin_px=MARGIN_PX, u0=0.76, ref=REF, check=True, leaf_margin_px=LEAF_MARGIN_PX):
     me = ob.data
-    bm, charts, best, new, isl_of = _layout(ob, bark, leaf, margin, lmargin, u0)
-    st = _stats(charts, best, ref); st.update(bark=bark, charts=len(charts), bark_charts=sum(c["bark"] for c in charts))
+    bm, L, new, isl_of = _layout(ob, bark, leaf, margin_px, u0, ref, leaf_margin_px)
+    st = _stats(L, ref); st.update(bark=bark)
     if check: st["covered"], st["overlapped"] = _overlap(bm, new, isl_of)
     bm.free()
-    nrm = [tuple(n.vector) for n in me.corner_normals] if me.has_custom_normals else None
-    # channel 1, named LAYER: rename an existing second layer (old "UV2") or create it
+    # channel 1, named LAYER: rename an existing second layer (old "UV2") or create it. Only UV data is written, so the
+    # custom normals are left exactly as they were (re-setting them would re-quantise them by ~0.05 degrees).
     if len(me.uv_layers) < 2: me.uv_layers.new(name=LAYER)
     lay = me.uv_layers[1]; lay.name = LAYER
     for li, p in new.items(): lay.data[li].uv = p
     me.uv_layers.active = me.uv_layers[0]
-    me.update()
-    if nrm: me.normals_split_custom_set(nrm)
     return st
 
 
@@ -213,8 +272,9 @@ if __name__ == "__main__" and "--" in sys.argv:
     a = sys.argv[sys.argv.index("--") + 1:]
     opt = lambda k, d: float(a[a.index(k) + 1]) if k in a else d
     ob = bpy.data.objects[a[0]]
-    kw = dict(leaf=opt("--leaf", 1.0), margin=opt("--margin", 0.010), lmargin=opt("--lmargin", 0.010), u0=opt("--u0", 0.76))
-    ref = opt("--ref", 5.0)
+    kw = dict(leaf=opt("--leaf", 1.0), margin_px=opt("--margin-px", MARGIN_PX), u0=opt("--u0", 0.76),
+              leaf_margin_px=opt("--leaf-margin-px", LEAF_MARGIN_PX))
+    ref = opt("--ref", REF)
     reached = None
     if "--auto" in a:
         b, reached = choose_bark(ob, ref=ref, around=opt("--around", 2.0), trunk=opt("--trunk", 8.0),
@@ -223,8 +283,8 @@ if __name__ == "__main__" and "--" in sys.argv:
         b = opt("--bark", 5.0)
     if reached is not None: print("LIGHTMAPAUTO %s bark x%.2f targets %s" % (ob.name, b, "MET" if reached else "SHORT (leaf floor)"))
     if "--dry" in a:
-        bm, ch, best, _, _ = _layout(ob, b, kw["leaf"], kw["margin"], kw["lmargin"], kw["u0"])
-        st = _stats(ch, best, ref); st.update(bark=b, charts=len(ch), bark_charts=sum(c["bark"] for c in ch)); bm.free()
+        bm, L, _, _ = _layout(ob, b, kw["leaf"], kw["margin_px"], kw["u0"], ref, kw["leaf_margin_px"])
+        st = _stats(L, ref); st.update(bark=b); bm.free()
         print(_fmt(ob.name, st))
     else:
         print(_fmt(ob.name, repack(ob, bark=b, ref=ref, **kw)))
