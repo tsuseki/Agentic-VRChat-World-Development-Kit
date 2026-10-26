@@ -15,6 +15,9 @@ What it does (only the lightmap layer changes; positions, UVMap, vertex colours,
 - packed in chart units on shelves (long side horizontal, 90 degree rotation, no mirroring), shelf width tried over a
   range for the best fill (aspect <= 2), then scaled into 0-1. Margins are lightmap texels at the reference
   resolution: >= 2 x MARGIN_PX between bark charts, MARGIN_PX between bark and leaves, LEAF_MARGIN_PX between leaves;
+- small rects (`small_fit`: the leaves miss the leaf floor even at bark weight 1, i.e. the margins are as big as the
+  cards): margins x SMALL_MARGIN and leaf floor = SMALL_KEEP x an area-weighted pack's leaf density, so a small sasa or
+  ilex never gets fewer texels than an auto-unwrap gave it; printed as `small rect` on the LIGHTMAPUV line;
 - the layer is UV channel 1, named `Lightmap`.
 
 How the engine sizes it: Unity's Progressive lightmapper (measured 2026-10-26 on 15 trees, within 1 %) gives an instance
@@ -36,6 +39,8 @@ import bpy, bmesh, math, os, sys
 LAYER = "Lightmap"
 REF = 10.0           # reference resolution (texels/unit, Scale In Lightmap 1) for the targets and margins
 MARGIN_PX = 2.0      # gap around every bark chart, lightmap texels at the reference resolution (tuned on test bakes)
+SMALL_MARGIN = 0.25  # small_fit: margins x this when they leave the leaves under the floor even at bark weight 1
+SMALL_KEEP = 0.8     # small_fit: leaf floor = this x the leaf density of a uniform zero-margin (area-weighted) pack
 LEAF_MARGIN_PX = 0.5  # gap between two leaf cards (leaves tolerate a shared rim texel; bark never shares one)
 
 
@@ -221,10 +226,25 @@ def _stats(L, ref):
                 bark_charts=sum(c["bark"] for c in charts), bark_share=sum(c["a3"] for c in whole if c["bark"]) / A)
 
 
+def small_fit(ob, ref=REF, leaf=1.0, margin_px=MARGIN_PX, u0=0.76, leaf_margin_px=LEAF_MARGIN_PX, leaf_floor=0.5):
+    """Small rects (sasa patches, clipped ilex: hundreds of cards in a 17-47 px rect): the texel margins are as big as the
+    cards, so even at bark weight 1 the leaves miss the leaf floor (fill 0.08-0.27, both bark and leaves fell to 37-75 %
+    of an area-weighted unwrap's density). Then the margins shrink to SMALL_MARGIN x and the leaf floor rises to
+    SMALL_KEEP x the leaf density of a uniform zero-margin pack (what an area-weighted unwrap reaches), so neither bark
+    nor leaves end up below that unwrap; bark gets the rest. Any other tree: unchanged.
+    -> (margin_px, leaf_margin_px, leaf_floor, small)"""
+    bm, L, _, _ = _layout(ob, 1.0, leaf, margin_px, u0, ref, leaf_margin_px); lt = _stats(L, ref)["leaf_tpm"]; bm.free()
+    if lt >= leaf_floor * ref: return margin_px, leaf_margin_px, leaf_floor, False
+    bm, L, _, _ = _layout(ob, 1.0, leaf, 0.0, u0, ref, 0.0); base = _stats(L, ref)["leaf_tpm"]; bm.free()
+    return margin_px * SMALL_MARGIN, leaf_margin_px * SMALL_MARGIN, max(leaf_floor, SMALL_KEEP * base / ref), True
+
+
 def choose_bark(ob, ref=REF, around=2.0, trunk=8.0, leaf_floor=0.5, leaf=1.0, margin_px=MARGIN_PX, u0=0.76,
                 lo=1.0, hi=60.0, leaf_margin_px=LEAF_MARGIN_PX):
     """Per-tree bark weight: the smallest that gives the p10 limb `around` texels and the trunk `trunk` texels at `ref`
-    texels/unit, capped so leaves keep >= leaf_floor * ref texels/m. Returns (weight, reached_targets)."""
+    texels/unit, capped so leaves keep >= leaf_floor * ref texels/m (small rects: see small_fit, applied the same way
+    by repack). Returns (weight, reached_targets)."""
+    margin_px, leaf_margin_px, leaf_floor, _ = small_fit(ob, ref, leaf, margin_px, u0, leaf_margin_px, leaf_floor)
     memo = {}
 
     def st(b):
@@ -246,10 +266,12 @@ def choose_bark(ob, ref=REF, around=2.0, trunk=8.0, leaf_floor=0.5, leaf=1.0, ma
     return bisect(need, lo, cap), True
 
 
-def repack(ob, bark=5.0, leaf=1.0, margin_px=MARGIN_PX, u0=0.76, ref=REF, check=True, leaf_margin_px=LEAF_MARGIN_PX):
+def repack(ob, bark=5.0, leaf=1.0, margin_px=MARGIN_PX, u0=0.76, ref=REF, check=True, leaf_margin_px=LEAF_MARGIN_PX,
+           leaf_floor=0.5):
     me = ob.data
+    margin_px, leaf_margin_px, _, small = small_fit(ob, ref, leaf, margin_px, u0, leaf_margin_px, leaf_floor)
     bm, L, new, isl_of = _layout(ob, bark, leaf, margin_px, u0, ref, leaf_margin_px)
-    st = _stats(L, ref); st.update(bark=bark)
+    st = _stats(L, ref); st.update(bark=bark, small=small)
     if check: st["covered"], st["overlapped"] = _overlap(bm, new, isl_of)
     bm.free()
     # channel 1, named LAYER: rename an existing second layer (old "UV2") or create it. Only UV data is written, so the
@@ -266,6 +288,7 @@ def _fmt(name, st):
          "bark %.1f tex/m, leaf %.1f tex/m, p10 limb %.3f m -> %.1f tex around, trunk %.3f m -> %.1f tex"
          % (name, st["bark"], st["charts"], st["bark_charts"], st["fill"], st["bark_share"], st["side"], st["bark_tpm"],
             st["leaf_tpm"], st["thin_circ"], st["thin_tex"], st["trunk_circ"], st["trunk_tex"]))
+    if st.get("small"): s += " | small rect: margins x%.2f" % SMALL_MARGIN
     if "overlapped" in st: s += "\nLIGHTMAPOVERLAP %s covered %d overlapped %d" % (name, st["covered"], st["overlapped"])
     return s
 
@@ -285,11 +308,12 @@ if __name__ == "__main__" and "--" in sys.argv:
         b = opt("--bark", 5.0)
     if reached is not None: print("LIGHTMAPAUTO %s bark x%.2f targets %s" % (ob.name, b, "MET" if reached else "SHORT (leaf floor)"))
     if "--dry" in a:
-        bm, L, _, _ = _layout(ob, b, kw["leaf"], kw["margin_px"], kw["u0"], ref, kw["leaf_margin_px"])
-        st = _stats(L, ref); st.update(bark=b); bm.free()
+        mp, lmp, _, small = small_fit(ob, ref, kw["leaf"], kw["margin_px"], kw["u0"], kw["leaf_margin_px"], opt("--leaf-floor", 0.5))
+        bm, L, _, _ = _layout(ob, b, kw["leaf"], mp, kw["u0"], ref, lmp)
+        st = _stats(L, ref); st.update(bark=b, small=small); bm.free()
         print(_fmt(ob.name, st))
     else:
-        print(_fmt(ob.name, repack(ob, bark=b, ref=ref, **kw)))
+        print(_fmt(ob.name, repack(ob, bark=b, ref=ref, leaf_floor=opt("--leaf-floor", 0.5), **kw)))
         if "--fbx" in a:
             sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
             from tree_wind_data import export_fbx
