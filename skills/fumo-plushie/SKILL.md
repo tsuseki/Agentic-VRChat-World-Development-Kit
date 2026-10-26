@@ -116,7 +116,7 @@ local backup commit of the project.
 ## Placement rules
 
 - One copy per character, active. Move, never duplicate; never place clay placeholders.
-- Plushies are decoration at the side of a room. Put them on a shelf. Where the room has no shelf, use a sideboard, credenza, window or fireplace ledge, or a desk corner.
+- Plushies are decoration at the side of a room. Put them on a shelf; a bar back shelf counts. Where the room has no shelf, use a sideboard, credenza, window or fireplace ledge, or a desk corner. Several plushies may share one shelf, spaced naturally.
 - Never put them on a sofa, armchair, chair or bed, on a walkway, on stairs, in a door swing, on a counter in use, in front of a screen or inside a fire zone.
 - Never move a plush the user placed. Check git history first.
 - Scattered through the world, one or two per room, facing into the room or the approach; not lined
