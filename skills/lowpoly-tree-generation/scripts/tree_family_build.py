@@ -65,6 +65,12 @@
 #       using the parent's actual meshed ring (lobe, 4/3 sides, taper, merge, declip): no light wedge of cone faces on the
 #       trunk's far side (BoothAssets olives 2026-10-23). Prints `STAT <name> base cones clamped N` only when it moves
 #       something, so trees that never poked stay geometry-identical (the Lightmap UV is re-laid from the UVMap charts).
+#   base_fix=True (default with base_clamp; False = the builds before 2026-10-26): after the clamp, `base_cones.contacts`
+#       flags child limbs whose base floats > 1 mm clear of every other tube, and flat caps (cones the clamp closed flush)
+#       showing >= 0.1 cm2 outside the other tubes. The flagged limb's MESHED axis (skeleton, cards, children unchanged)
+#       gets its base on the parent's meshed axis and, for a flat cap, a base ring narrowed to 0.85^n x its radius that
+#       widens back over 3 radii (n = passes it still shows, <= 4); the LOD is meshed again. Prints `STAT <name> base fix
+#       moved N narrowed M passes P left [...]` only when it fires: trees without the defect stay geometry-identical.
 #   levels[i] root_out=<k> (opt-in): every limb of that level is shifted rigidly k x the parent radius out along its own
 #       radial (shape, noise and draws unchanged), so a thick limb (r 0.55 x trunk) leaves the trunk wall within the
 #       trunk radius instead of running ~1.2 trunk radii inside it (BlackPine BP6, k 0.35 with bury 0.25: base ring
@@ -479,7 +485,7 @@ def build_skeleton(seed):
                 rr = r * S["r"]
                 c = grow(p - d * min(0.03, r), cd, rng.uniform(*S["len"]), rr, S["tip"] * rr if S["tip"] > 0.05 else S["tip"],
                          4 if grown else 3, 1, out, S.get("gnarl", 0.2), S.get("up", 0.0), seed * 13 + j + k * 17)
-                if c: made.append(c)
+                if c: c.par = trunk; made.append(c)
         return made
     for lv, P in enumerate(CFG["levels"]):
         nxt = []
@@ -491,7 +497,7 @@ def build_skeleton(seed):
                 c = grow(st, v.normalized(), v.length, X["r"][0], X["r"][1], 6, 1, out, X.get("gnarl", 0.0), 0.0,
                          seed * 17 + k, keep_out=False)
                 if c:
-                    c.radii[-1] = X["r"][1]; c.keep = True  # no taper to a tip: the pod rope is lashed at its end
+                    c.par = trunk; c.radii[-1] = X["r"][1]; c.keep = True  # no taper to a tip: the pod rope is lashed at its end
                     n = len(c.pts) - 1
                     for i in range(1, n):  # gentle upward arch, ends stay put
                         t = i / n; c.pts[i].z += X.get("arch", 0.0) * 4 * t * (1 - t)
@@ -508,11 +514,12 @@ def build_skeleton(seed):
                     hl = grow(axis, v.normalized(), v.length, Sc.get("r", 0.16), 0.05, 4, 2, out, 0.05, 0.0,
                               seed * 23 + k * 2 + side, keep_out=False)
                     if not hl: continue
+                    hl.par = trunk
                     for j in range(Sc.get("twigs", 7)):  # hanging twigs through the box
                         p0 = point_at(hl, rng.uniform(0.35, 1.0))[0] + f * rng.uniform(-dd / 2, dd / 2) * 0.6
                         tw = grow(p0, (-UP + rand_unit(rng) * 0.15).normalized(), h + 0.2 - (ztop - 0.4 - p0.z) * 0, 0.03,
                                   TIP_R, 3, 3, out, 0.1, 0.0, seed * 29 + j + k * 31, keep_out=False)
-                        if tw: tw.screen = k
+                        if tw: tw.screen = k; tw.par = hl
             parents = parents + nxt_extra
         if lv == 0 and CFG.get("fork"):  # decurrent crown: the trunk splits into its major limbs at the top
             F = CFG["fork"]; pt, rt, dt = point_at(trunk, 1.0); az0 = rng.uniform(0, 2 * math.pi)
@@ -528,7 +535,7 @@ def build_skeleton(seed):
                 start = pt - dt * rt * 0.6 if lead else p - d * min(0.03, r)
                 c = grow(start, cd, rng.uniform(*F["len"]), rr, F["tip"] * rr, 5, 1, out, F.get("gnarl", 0.1),
                          F.get("up", 0.0), seed * 5 + j)
-                if c: nxt.append(c)
+                if c: c.par = trunk; nxt.append(c)
             trunk.radii[-1] = rt * 0.8  # the leader (0.85 x) sheathes the trunk end
         for b in parents:
             n = P["n"]; wk = P.get("whorl")
@@ -567,7 +574,7 @@ def build_skeleton(seed):
                     rad = cd - d * cd.dot(d)  # its own radial (same shape and noise), so a thick limb clears the parent wall sooner
                     if rad.length > 1e-6:
                         sh = rad.normalized() * r * P["root_out"]; c.pts = [q + sh for q in c.pts]
-                if c: nxt.append(c)
+                if c: c.par = b; nxt.append(c)
         parents = nxt
     side_limbs(False)  # stubs etc.: no children
     L = CFG.get("lianas")
@@ -1165,9 +1172,55 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
             if low < C["ground"]: p = p + UP * (C["ground"] - low)
         card(bm, uvl, p, d, nrm, s, fold, cl)
 
-def make_lod(name, seed, lod1, full_rings=frozenset()):
+def base_axis(pts, radii, ov):
+    """Mesh-only axis of a child limb the base fix touched (the skeleton, cards and grandchildren stay put): ov["P"] puts
+    the base on the parent's meshed axis (a limb floating off its branch), ov["rb"] narrows the base ring to rb and widens
+    it back to the limb's own radius over a neck of BASE_NECK base radii (a limb as thick as its parent there, whose cone
+    could only be closed by a flat disc)."""
+    pts, radii = list(pts), list(radii)
+    if ov.get("P") is not None: pts[0] = ov["P"].copy()
+    rb = ov.get("rb")
+    if rb is not None and rb < radii[0] and len(pts) > 1:
+        e = pts[1] - pts[0]; L1 = e.length; s = min(0.5 * L1, BASE_NECK * radii[0])
+        if s > 1e-4:
+            pts.insert(1, pts[0] + e * (s / L1)); radii.insert(1, radii[0] + (radii[1] - radii[0]) * s / L1)
+        radii[0] = rb
+    return pts, radii
+
+BASE_NECK = 3.0  # base fix: a narrowed base ring widens back to the limb's radius over this many limb radii
+BASE_STEP = 0.85  # base fix: a flat cap's base ring narrows to BASE_STEP ** n x the limb radius on its n-th pass
+BASE_ROUNDS = 4  # base fix: mesh -> clamp -> contacts passes at most (narrowest base 0.85 ** 4 = 0.52 x the limb)
+
+def base_fix(branches, meshed, vspans, bad, over):
+    """CFG base_fix (default on with base_clamp): per child base that base_cones.contacts flags on the clamped mesh, a
+    mesh-only override for the next pass (see base_axis). Floating: the base goes onto the nearest point of its parent's
+    meshed axis (the head of the parent's merge chain; without a recorded parent, the nearest other meshed tube). A base
+    that already sits within half the parent radius of that axis is left alone (its gap comes from elsewhere). Flat cap:
+    the base goes onto that axis too, and the base ring narrows by BASE_STEP on every pass the cap still shows (the
+    parent tapered under the fork, a three-way fork of equal limbs). Returns the new override dict (== `over`: done)."""
+    new = {k: dict(v) for k, v in over.items()}; idx = {id(b): i for i, b in enumerate(branches)}
+    for c in bad:
+        bi = next((i for i, v0, v1 in vspans if v0 <= c["vert"] < v1), None)
+        if bi is None: continue
+        b = branches[bi]; A = b.pts[0]; p = getattr(b, "par", None)
+        while p is not None and getattr(p, "merged_into", None) is not None: p = p.merged_into
+        pi = idx.get(id(p)) if p is not None else None
+        if pi not in meshed:
+            cand = [(axis_gap(A, *meshed[j]), j) for j in meshed if j != bi]
+            if not cand: continue
+            pi = min(cand)[1]
+        dd, P, rp = nearest_on_axis(A, *meshed[pi])
+        if not c["flat_cap"] and dd <= 0.5 * rp and bi not in over: continue  # base already on the parent axis: nothing to move
+        ov = new.setdefault(bi, {}); ov["P"] = P.copy()
+        if c["flat_cap"]:
+            ov["n"] = ov.get("n", 0) + 1; ov["rb"] = max(TIP_R, b.radii[0] * BASE_STEP ** ov["n"])
+    return new
+
+def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_round=0):
     """full_rings: indices (in skeleton order) of tubes meshed with every ring in the lod1_subset LOD1 (set by the
-    floating-bark retry below; empty on the first pass)."""
+    floating-bark retry below; empty on the first pass). base_over / base_round: the base fix's mesh-only overrides
+    (skeleton index -> base_axis dict) and pass number (see base_fix; empty / 0 on the first pass)."""
+    base_over = base_over or {}
     MERGE_SKIPPED[0] = 0
     branches = build_skeleton(seed)
     sub = CFG.get("lod1_subset") if lod1 else None  # LOD1 = the LOD0 tree thinned in place (no pop at the switch)
@@ -1222,7 +1275,8 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
     deep = max(b.depth for b in branches)
     S0, S1 = CFG.get("sides", (7, 5, 4)), CFG.get("lod1_sides", (5, 4, 3))
     spans = []  # (skeleton index, first bark face, end) per meshed tube
-    meshed = {}  # skeleton index -> (pts, radii) of the axis actually meshed (LOD1: thinned)
+    vspans = []  # (skeleton index, first vertex, end) per meshed tube (base fix)
+    meshed = {}  # skeleton index -> (pts, radii) of the axis actually meshed (LOD1: thinned; base fix: base_axis)
     cut = low_cut(branches)  # low_tips: bare ground limbs are not meshed
     for bi, b in enumerate(branches):
         if getattr(b, "merged_into", None) is not None or bi in cut: continue  # merged: its axis is the tail of its parent's tube
@@ -1235,9 +1289,11 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
         if sub and len(b.pts) > 2 and bi not in full_rings:  # every other ring on the tube only; the cards stay rooted on the full axis
             ks = list(range(0, len(b.pts) - 1, 2)) + [len(b.pts) - 1]
             b.pts = [b.pts[k] for k in ks]; b.radii = [b.radii[k] for k in ks]
-        f0 = len(bm.faces)
+        if bi in base_over: b.pts, b.radii = base_axis(b.pts, b.radii, base_over[bi])  # base fix (mesh only)
+        f0 = len(bm.faces); v0 = len(bm.verts)
         tube(bm, b, sides, CFG.get("lobe", 0.16), CFG.get("caps", False))  # lobe: trunk cross-section wobble (lumpy base)
         spans.append((bi, f0, len(bm.faces))); meshed[bi] = (list(b.pts), list(b.radii))
+        vspans.append((bi, v0, len(bm.verts)))
         b.pts, b.radii = full
     if sub and len(full_rings) < len(spans):
         # dropping every other ring cuts curved axes into chords; a child whose base sat on the curve can end up beside
@@ -1249,9 +1305,19 @@ def make_lod(name, seed, lod1, full_rings=frozenset()):
             if others: add.add(min(others)[1])
         if add - full_rings:
             bm.free(); bpy.data.meshes.remove(me)
-            return make_lod(name, seed, lod1, full_rings | add)
+            return make_lod(name, seed, lod1, full_rings | add, base_over, base_round)
     if CFG.get("base_clamp", True):
         nclamp = base_cones.clamp(bm)
+        if CFG.get("base_fix", True):  # limbs floating off their branch / flat-capped bases: fix the axis, mesh again
+            bad = [c for c in base_cones.contacts(bm, k=1.0 / base_cones.SHIP_SCALE) if c["floating"] or c["flat_cap"]]
+            new = base_fix(branches, meshed, vspans, bad, base_over) if bad and base_round < BASE_ROUNDS else base_over
+            if new != base_over:
+                bm.free(); bpy.data.meshes.remove(me)
+                return make_lod(name, seed, lod1, full_rings, new, base_round + 1)
+            if base_over or bad:
+                print("STAT", name, "base fix moved", sum(1 for v in base_over.values() if v.get("P") is not None),
+                      "narrowed", sum(1 for v in base_over.values() if v.get("rb") is not None), "passes", base_round,
+                      "left", [(c["child"], "float" if c["floating"] else "cap", c["gap_mm"] if c["floating"] else c["cap_out_mm"]) for c in bad])
         if nclamp: print("STAT", name, "base cones clamped", nclamp)
     FULL_RINGS[name] = len(full_rings); SKIPS[name] = MERGE_SKIPPED[0]; MESHED[name] = meshed
     C = CFG["crown"]

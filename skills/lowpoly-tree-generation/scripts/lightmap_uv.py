@@ -80,7 +80,9 @@ def _chart(faces, lay, bark):
             det = du1 * dv2 - du2 * dv1
             area = e1.cross(e2).length * 0.5
             a3 += area
-            if abs(det) < 1e-14 or area < 1e-14: continue
+            # degenerate in UV (collinear corners, e.g. a flush base cone whose three loops share v): the sine of its UV
+            # corner angle, not the raw det, decides; a 1e-9 det on a sliver blew dP/dv up to a 12 km chart (Hinoki)
+            if area < 1e-14 or abs(det) < 1e-3 * math.hypot(du1, dv1) * math.hypot(du2, dv2) or abs(det) < 1e-14: continue
             dpdu = (e1 * dv2 - e2 * dv1) / det; dpdv = (e2 * du1 - e1 * du2) / det
             su += dpdu.length * area; sv += dpdv.length * area; wsum += area
     su = su / wsum if wsum else 1.0; sv = sv / wsum if wsum else 1.0

@@ -22,6 +22,8 @@ triangle (10 points each; edge samples alone miss a face that crosses a crease b
      depth at which the apex is TARGET inside and every edge sample is within EDGE_OK.
 TOL, TRIGGER, TARGET, EDGE_OK are metres at the SHIPPED scale (the pack scales every mesh by SHIP_SCALE 0.7). `k` = mesh
 units per shipped metre: 1.0 on a packed mesh, 1 / SHIP_SCALE on the builder's mesh (`clamp` default).
+`contacts(bm, k=1.0)` (read only) reports per child whether its base floats clear of every tube (FLOAT_TOL) and whether
+its cone was closed flush with >= CAP_MIN of the disc outside (a flat cap); the builder's `base_fix` acts on it.
 """
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
@@ -30,6 +32,8 @@ TOL = 0.003      # checker: flagged when any cone sample lies more than this out
 TRIGGER = 0.002  # fix: a child is touched when a sample is more than this outside
 TARGET = 0.001   # fix: pulled vertices / apex end this far inside
 EDGE_OK = 0.0015  # fix: edge samples must be within this of the surface after the apex slide
+FLOAT_TOL = 0.001  # contacts: a child base more than this clear of every other tube floats (m, shipped scale)
+CAP_MIN = 1e-5    # contacts: a flat cap counts when at least this much of it (m2, shipped: 0.1 cm2) shows outside
 SHIP_SCALE = 0.7  # the pack scales every mesh by this: builder-size tolerances are the shipped ones / SHIP_SCALE
 
 _RAYS = [Vector(v).normalized() for v in ((1, 0.31, 0.17), (-0.23, 1, 0.41), (0.19, -0.37, 1))]
@@ -76,23 +80,28 @@ def _centroid(vs): return sum((v.co for v in vs), Vector()) / len(vs)
 class _Tubes:
     def __init__(self, bm):
         bm.verts.index_update(); bm.verts.ensure_lookup_table(); bm.faces.ensure_lookup_table()
-        self.bm = bm; self.tubes = []; self.bad = []
+        self.bm = bm; self.tubes = []; self.bad = []; self.others = []   # others: tubes without a base cone (surfaces only)
         for comp in _components(bm):
-            if not any(len(f.verts) == 3 for v in comp for f in v.link_faces): continue
+            if not any(len(f.verts) == 3 for v in comp for f in v.link_faces):
+                fs = {f for v in comp for f in v.link_faces}   # no cone at all (open ends, caps off): a tube if it has few
+                nb = len({e for v in comp for e in v.link_edges if e.is_boundary})   # open edges (cards and card strips: many)
+                if len(fs) >= 3 and nb <= len(fs): self.others.append(dict(comp=comp, faces=list(fs), bvh=None))
+                continue
             apexes = [v for v in comp if v.link_faces and all(len(f.verts) == 3 for f in v.link_faces)
                       and any(len(f.verts) == 4 for e in v.link_edges for f in e.other_vert(v).link_faces)]
             ids = set(v.index for v in apexes)
-            if len(apexes) != 2: self.bad.append(len(apexes)); continue   # open-based ground stem (no base cone): not a child
-            chains = [_ring_chain(a, ids) for a in apexes]
-            if None in chains: self.bad.append(-1); continue
+            if len(apexes) != 2 or None in (chains := [_ring_chain(a, ids) for a in apexes]):
+                self.bad.append(len(apexes) if len(apexes) != 2 else -1)   # open-based ground stem (no base cone): not a child
+                self.others.append(dict(comp=comp, faces=list({f for v in comp for f in v.link_faces}), bvh=None)); continue
             rad = lambda rg: sum((v.co - _centroid(rg)).length for v in rg) / len(rg)
             k = 0 if rad(chains[0][0]) >= rad(chains[1][0]) else 1
             rings = chains[k]
             t = dict(comp=comp, apex=apexes[k], rings=rings, axis=[(_centroid(rg), rad(rg)) for rg in rings],
                      tri=[f for f in {f for v in comp for f in v.link_faces} if len(f.verts) == 3],
-                     faces=list({f for v in comp for f in v.link_faces}), bvh=None, id=len(self.tubes))
+                     faces=list({f for v in comp for f in v.link_faces}), bvh=None, id=len(self.tubes),
+                     alt=(apexes[1 - k], chains[1 - k], rad(chains[1 - k][0])))
             self.tubes.append(t)
-        for t in self.tubes: self.refresh_box(t)
+        for t in self.tubes + self.others: self.refresh_box(t)
 
     def refresh_box(self, t):
         cs = [v.co for v in t["comp"]]
@@ -137,10 +146,11 @@ class _Tubes:
             best = max(best, -d if ins >= 2 else d)
         return best
 
-    def usd(self, excl, q):
-        """signed distance to the union of every tube but `excl` (negative = hidden inside another tube)"""
+    def usd(self, excl, q, every=False):
+        """signed distance to the union of every tube but `excl` (negative = hidden inside another tube); every=True also
+        counts the tubes without a base cone (open-based ground stems: bamboo culms, round-1 bush stems), as contacts does"""
         best = 1e9
-        for o in self.tubes:
+        for o in (self.tubes + self.others if every else self.tubes):
             if o is excl or self._bbdist(o, q) >= best: continue
             best = min(best, self.sd(o, q))
         return best
@@ -284,3 +294,39 @@ def clamp(bm, k=1.0 / SHIP_SCALE):
     """Builder hook: pull every offending base cone inside its parent tube (or close it flush); returns the number of
     cone moves (0 = mesh untouched). k converts the shipped-scale tolerances to the builder's mesh units."""
     return settle(bm, k)[0]
+
+
+def contacts(bm, k=1.0):
+    """Per child tube (ground stems skipped): how its base meets the other tubes. gap_mm = the smallest signed distance
+    of any base sample (apex, ring corners, ring->apex edges, cone face grid) to the union of the other tubes: > 0 = the
+    whole base is clear of every other tube; `floating` when > FLOAT_TOL. `flat_cap` = the cone was closed flush (apex
+    within TOL of the ring centre) and part of that disc lies more than TOL outside the other tubes (a visible stepped
+    stub); cap_out_mm / cap_cm2 = how far and how much of it. Lengths in mm / cm2 at the shipped scale (k as in scan).
+    A twig no thicker than the 3 mm tip radius (or a little thicker) has first rings of about the same size at both ends,
+    where scan's "wider ring = base" rule can pick the tip; here, when the two rings are within 2 x, the base is the end
+    whose ring centre lies deeper in the other tubes. Every tube counts as a surface here, also those without a base cone."""
+    T = _Tubes(bm); tol = TOL * k; out = []
+    for t0 in T.tubes:
+        t = t0; a2, ch2, r2 = t0["alt"]
+        if min(t0["apex"].co.z, a2.co.z) < -0.01: continue   # ground stem (skirt below ground): no parent
+        if t0["axis"][0][1] < 2.0 * r2 and T.usd(t0, _centroid(ch2[0]), True) < T.usd(t0, _centroid(t0["rings"][0]), True):
+            t = dict(t0, apex=a2, rings=ch2, axis=[(_centroid(rg), r2 if i == 0 else 0.0) for i, rg in enumerate(ch2)])
+        ap = t["apex"].co
+        if ap.z < -0.01: continue
+        ring0 = t["rings"][0]; c = _centroid(ring0); r0 = t["axis"][0][1]
+        ss = [(kind, T.usd(t0, q, True)) for kind, q in _samples(t)]
+        gap = min(d for _, d in ss); worst = max(d for _, d in ss); flat = (ap - c).length <= tol
+        area = 0.0
+        if flat and worst > tol:
+            for f in t["tri"]:
+                if t["apex"] not in f.verts: continue
+                a, b, cc = [v.co for v in f.verts]
+                sm = [a + (b - a) * (i + 0.33) / 4 + (cc - a) * (j + 0.33) / 4 for i in range(4) for j in range(4 - i)]
+                area += f.calc_area() * sum(1 for q in sm if T.usd(t0, q, True) > tol) / len(sm)
+        par = _pick_parent(T, t0, c, r0)
+        out.append(dict(child=t["id"], vert=min(v.index for v in t["comp"]), parent=par[1]["id"] if par else None,
+                        r0_mm=round(r0 * 1000 / k, 1),
+                        base=[round(x / k, 4) for x in c], gap_mm=round(gap * 1000 / k, 1),
+                        floating=gap > FLOAT_TOL * k, flat_cap=flat and worst > tol and area >= CAP_MIN * k * k,
+                        cap_out_mm=round(worst * 1000 / k, 1) if flat else 0.0, cap_cm2=round(area * 1e4 / (k * k), 1)))
+    return out
