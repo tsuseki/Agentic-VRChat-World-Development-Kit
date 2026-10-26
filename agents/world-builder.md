@@ -90,6 +90,10 @@ furniture zones by spatial-design and the seating and layout rules below.
 - Lighting: no realtime or Mixed lights (sun is Baked); full standard in `bakery-light-baking`
   "Workspace lighting standard". Bake reflection probes **immediately** after every lightmap bake;
   probe-captured renderers need `ReflectionProbeStatic`.
+- Baking prep (C.1 placement and D.1 before every bake): set each renderer's reception (lightmap,
+  probe/Light-Volume-lit, dynamic), Scale In Lightmap and group, and run the pre-bake UV2 audit;
+  after the bake run the binding and near-reach checks. Rules and thresholds:
+  `.omp/skills/lightmap-allocation/SKILL.md`.
 - Separate private rooms are teleport islands ≥ 200 m apart **and** inside the
   `clip-planes` §3 radii (cuddle zones |coord| < 256 m, occupied space < 512 m); the design
   rule is world-architect "Separate rooms: teleport islands". Building them:

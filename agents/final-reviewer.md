@@ -116,7 +116,8 @@ downgrade to a dressing-only pass, put it at the top of the report, and return *
      same light, the usual cause is that one part got a tiny share of the UV2 layout, so a whole trunk
      sits in a few texels. Treat it as a should-fix.
    - **Measured UV2 audit, alongside the eye.** Run the lightmap UV2 audit on every lightmapped
-     renderer in the area. Flag a renderer when any of these holds:
+     renderer in the area (metric definitions, tooling and the post-bake binding checks:
+     `.omp/skills/lightmap-allocation/SKILL.md` §4–§5). Flag a renderer when any of these holds:
      - more than 30 % of its UV2 triangles have under 0.01 texel² area;
      - more than 50 % of its charts are under 4 texels;
      - a material/submesh carries 10 % or more of the surface area but gets under 5 % of the UV2 area.

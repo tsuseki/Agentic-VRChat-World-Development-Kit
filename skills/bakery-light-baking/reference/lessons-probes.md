@@ -25,8 +25,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 
 ## Probe-lit vs lightmapped renderers
 
-- **Query `receiveGI` on objects reported as black silhouettes before aiming lights or rebaking; move anything larger than ~0.12 m that has a clean UV2 to `receiveGI = Lightmaps` + `ContributeGI`** — a Baked light never lights a probe-lit renderer directly, so extra lights in a probe dead zone change nothing and each attempt costs a bake. Read `lightmapIndex` only right after a bake.
-- **Give furniture with no UV2 `ContributeGI` + `receiveGI = LightProbes` + shadows On, per renderer (enum is `UnityEngine.ReceiveGI`), and assert no lightmapped renderer lacks UV2 before baking** — it then casts contact shadows and occludes GI with no lightmap UVs or atlas space, instead of reading as a sticker; anything that has UV2 belongs on the lightmap instead.
+- **Choosing lightmap vs probes per renderer (black probe-lit silhouettes, UV2-less furniture) is in the lightmap-allocation checklist** — `.omp/skills/lightmap-allocation/references/lessons-lightmap-allocation.md`.
 - **On probe-lit scenery, drop `_OcclusionStrength` to ~0.25–0.3, measure decal-vs-ground compensation per site, and dim blown-out glowing props by albedo, not emission; first ask whether it should be lightmap-static at all** — probe-lit objects receive all light as indirect, so AO crushes everything and their albedo-to-render ratio differs from lightmapped neighbours in a site-specific way; rebaking fixes neither. On Bakery maps `ContributeGI` alone gives no lightmap without a group.
 
 ## Runtime lighting states

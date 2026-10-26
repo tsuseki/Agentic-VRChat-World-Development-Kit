@@ -48,6 +48,8 @@ change and the user's words go in that world's `WORLD.md` Decisions log, and the
   `Light Volume PBR` (LV-aware) material and Receive GI Light Probes, keep ContributeGI so they still
   cast into the bake, and are lit by the volumes. A many-island chart on a small object never bakes
   clean without giant atlases; the volume lights it smoothly (user, 2026-10-22).
+- **Who gets texels and how many** (the per-class reception table, these exceptions included, density
+  targets, groups, UV2 quality and the pre-/post-bake allocation audit): `.omp/skills/lightmap-allocation/SKILL.md`.
 - **Cozy/night interiors go darker than instinct.** Deep shadow with small warm pools; when it seems
   done, cut another ~15% before asking, and never raise a level the user approved. "Lamp too bright"
   usually means the spill (emitter intensity), not the shade's own emission; they are separate knobs.

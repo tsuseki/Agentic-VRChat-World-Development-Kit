@@ -43,9 +43,9 @@ Set on the `ModelImporter`, `SaveAndReimport()`, read back in the next call.
   `Animator` that costs CPU every frame with nothing playing. Remove controller-less Animators and
   unused armatures from instances already placed.
 - **Lightmap UVs:** pack FBXs often ship with *Generate Lightmap UVs* off; turn `generateSecondaryUV`
-  on before the prop goes lightmap-static. Don't pair `secondaryUVMarginMethod = Calculate` with a low
-  `secondaryUVMinLightmapResolution` (16 texels/unit): the gutters collapsed the islands into a
-  corner. See §5.
+  on before the prop goes lightmap-static, with margin method **Manual** (pack margin ~6). Never pair
+  `secondaryUVMarginMethod = Calculate` with a low `secondaryUVMinLightmapResolution` (16
+  texels/unit): the gutters collapsed the islands into a corner. See §5.
 - **Normals:** `Import` when the source carries custom normals (leaf cards with crown-proxy normals),
   never `Calculate`; also disable the foliage shader's back-face normal flip.
 - **Materials:** `materialImportMode = ImportStandard`, `materialLocation = InPrefab`, then `AddRemap`
@@ -98,9 +98,9 @@ Set on the `ModelImporter`, `SaveAndReimport()`, read back in the next call.
   and permute the instance array: `newMats[j] = oldMats[oldOrder.IndexOf(newOrder[j])]`.
 
 ## 5. Lightmap UV2 and static flags
-- **Lightmap or probe-light?** Small props and thin glass are better as `receiveGI = LightProbes`
-  (glass claims huge atlas area and bleeds at gutters); a UV2-less prop can still be `ContributeGI`
-  with probe lighting and cast baked shadows.
+- **Lightmap or probe-light?** Decide per renderer class with `.omp/skills/lightmap-allocation/SKILL.md`
+  §1 (glass and small soft decor go to probes or Light Volumes and keep casting; furniture stays
+  lightmapped with a UV2 that passes its audit).
 - **Every lightmapped mesh has UV2 in range.** "Has UV2" is not the test: scan UV2 for values outside
   0..1 or NaN. One bad mesh fails Bakery's packer for its whole group (infinite
   `lightmapScaleOffset` on hundreds of renderers). The importer unwrap can silently fail on one LOD;

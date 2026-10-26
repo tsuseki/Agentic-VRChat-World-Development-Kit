@@ -33,7 +33,7 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   [Manual](https://geom.io/bakery/wiki/index.php?title=Manual),
   [wiki index](https://geom.io/bakery/wiki/index.php?title=Main_Page). Bakery itself is a paid,
   separately licensed product. Used by `.omp/skills/bakery-light-baking/` (SKILL.md and
-  `reference/silent-lighting-guides.md`),
+  `reference/silent-lighting-guides.md`), `.omp/skills/lightmap-allocation/`,
   `.omp/skills/unity-vrc-world-sdk-3/references/community-world-tooling.md`.
 - **Haï~ (hai-vr)** — Knowledge Index Notion guides *(Just_Rocs pick)*:
   [World Lighting](https://hai-vr.notion.site/World-Lighting-abc870d06dd647ac9fcd60fe60af05d9),
@@ -87,7 +87,10 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   `.omp/skills/bakery-light-baking/reference/silent-lighting-guides.md`,
   `.omp/skills/unity-vrc-udon-sharp/references/assembly-definitions.md`,
   `.omp/skills/vrc-udon-workflow/references/texture-decisions.md`,
-  `.omp/skills/vrchat-world-optimization/references/`, `.omp/skills/vrchat-android-worlds/`.
+  `.omp/skills/vrchat-world-optimization/references/`, `.omp/skills/vrchat-android-worlds/`,
+  `.omp/skills/lightmap-allocation/` (Generating lightmap UVs, `ModelImporter.secondaryUVPackMargin`).
+- **Microsoft** — [BC6H format](https://learn.microsoft.com/en-us/windows/win32/direct3d11/bc6h-format)
+  (16-byte 4×4 blocks: 1 byte per texel). Used by `.omp/skills/lightmap-allocation/`.
 - **NVIDIA Developer Forums** — [OptiX 6 broken on driver 591.44](https://forums.developer.nvidia.com/t/optix-6-0-0-is-broken-on-driver-591-44/353738).
   Used by `.omp/skills/bakery-light-baking/SKILL.md`.
 - **Creative Commons** — [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/),
@@ -132,7 +135,7 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   Qwen-Image-2512 / Qwen-Image-Edit-2511 (Apache-2.0) or [Qwen-Image 2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1) (Qwen Research License, non-commercial; the shipped `scripts/comfyui/` workflows follow its Comfy-Org reference graph), [Tripo API](https://developers.tripo3d.com),
   [Meshy API](https://docs.meshy.ai), [TRELLIS.2](https://github.com/microsoft/TRELLIS.2) (MIT).
 - **z3y** — [GLIM](https://github.com/z3y/glim) Vulkan GPU lightmapper. Used by
-  `.omp/knowledge/notes/glim-vendor-portable-gpu-lightmapper.md`.
+  `.omp/knowledge/notes/glim-vendor-portable-gpu-lightmapper.md`, `.omp/skills/lightmap-allocation/`.
 - **MerlinVR** — [VRC-Bakery-Adapter](https://github.com/MerlinVR/VRC-Bakery-Adapter); **zulubo** —
   [SpecularProbes](https://github.com/zulubo/SpecularProbes). Linked from Silent's guide; mentioned in
   `.omp/skills/bakery-light-baking/reference/silent-lighting-guides.md`.
@@ -152,7 +155,8 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   `.omp/knowledge/notes/saccflight-ground-vehicles-install-and-seating.md`.
 - **REDSIM** — [VRC Light Volumes](https://github.com/REDSIM/VRCLightVolumes) (`red.sim.lightvolumes`),
   MIT (README, docs, releases, issue #95). Used by `.omp/knowledge/notes/vrc-light-volumes-traps.md`,
-  `.omp/knowledge/notes/lightvolume-component-repushes-intensity.md`, `.omp/skills/fumo-plushie/SKILL.md`.
+  `.omp/knowledge/notes/lightvolume-component-repushes-intensity.md`, `.omp/skills/fumo-plushie/SKILL.md`,
+  `.omp/skills/lightmap-allocation/`.
 - **mworchel** — [xatlas-python](https://github.com/mworchel/xatlas-python), MIT, Python bindings of
   [xatlas](https://github.com/jpcy/xatlas) (Jonathan Young, MIT); installed by the user, not bundled. Used by
   `.omp/skills/fumo-plushie/scripts/` (`retopo_prep.py`, `fumo_remesh_bake.py`).
