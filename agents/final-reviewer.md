@@ -119,6 +119,12 @@ per group and the lying view from each A1 bed or mat, the spawn view and one gro
 0.9 m and 1.6 m eye height, and from the farthest cuddle spot the view out of the window and the
 horizon (backdrop parallax, fog, cut). Never add lights.
 
+**Near-reach bake check on every new or changed lightmapped piece.**
+- Take your own capture of each one, at most 0.6 m away, at eye height and from the side a player sees. Never judge them from the builder's wide or side-view captures.
+- Inspect the shots at full resolution.
+- Soft and organic meshes (pillows, cushions, throws, bedding, plants, fabric) are prone to faceted dark triangles and torn chart seams. Treat any of these as a blocker, even if the area mean looks right.
+- List each piece you checked, with the path to its shot. A piece without a shot counts as unchecked, not clean.
+
 ## Score, verdict and routing
 
 Verdict `SHIP IT | MINOR FIXES | NEEDS WORK` plus `Score: N/10` with the reasons
