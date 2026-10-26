@@ -34,8 +34,8 @@ in that world's `WORLD.md` Decisions log, and then `WORLD.md` wins.
 |---|---|---|
 | Walls, floors, ceilings, shell, built-ins | L | hero area group; hidden backs and exterior envelopes demoted (§2) |
 | Large furniture (> ~0.4 m): sofas, beds, tables, cabinets, lamp bodies, rugs, big plants and pots, statues | L | UV2 must pass the audit; otherwise re-unwrap, never move to probes to dodge it |
-| Small hard decor (≤ ~0.4 m): taps, bottles, fruit, souvenirs, small figurines, books on shelves | P with LV in LV worlds; else L if its UV2 passes and its short side gets ≥ 8 texels, else P | user: "only small props can go with lightvolumes" |
-| Soft or organic small pieces: pillows, cushions, throws, loose bedding, small sculptures | P (LV in LV worlds) | auto UV2 fragments them (incident: ~800 of 2,379 small renderers) |
+| Small hard decor (≤ ~0.4 m): taps, bottles, fruit, souvenirs, small figurines, books on shelves | L if its UV2 passes the audit and its short side gets ≥ 8 texels; otherwise P (LV in LV worlds) | user: "only small props can go with lightvolumes", "small objects should move to light volumes if [the lightmap is] broken" |
+| Soft or organic small pieces: pillows, cushions, throws (≤ ~0.6 m), small sculptures | same rule; their auto UV2 almost always fails the audit, so expect P (LV) | incident: about 800 of 2,379 small renderers had fragmented auto UV2 |
 | Anything under ~0.12 m in its middle dimension | P | no margin rescues a 1–2 texel chart |
 | Flush wall fittings < ~20 cm (switches, outlets, vents) | P | 4 × 3 texel charts bake half-black smears |
 | Glass, transparent, glazing | P, `ReflectionProbeStatic` off | thin panes demand huge charts and gutter-bleed onto the view |

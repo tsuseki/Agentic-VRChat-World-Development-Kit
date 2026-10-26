@@ -15,7 +15,8 @@ summary: Pillows, cushions, throws, bedding and sculptures with auto-unwrapped U
 Automatic unwraps cut noisy, curved surfaces into many tiny charts; each chart then holds one or two irradiance samples and a gutter, so neighbouring triangles land on unrelated samples. An A/B with the post-bake mesh merge on and off showed identical faceting: the merge was not the cause.
 
 **Fix / rule:**
-- Small soft and organic decor (about ≤ 0.4 m, plus loose soft pieces such as pillows, cushions and throws): keep `ContributeGI` and set `receiveGI = LightProbes` (a Light Volume aware material in worlds with VRC Light Volumes). It still casts its shadow into the bake.
+- Small soft and organic decor that fails the audit (pillows, cushions and throws up to about 0.6 m; small sculptures and figurines up to about 0.4 m): keep `ContributeGI` and set `receiveGI = LightProbes`, using a Light Volume aware material in worlds with VRC Light Volumes. The piece still casts its shadow into the bake.
+- Pieces that pass the audit stay lightmapped. So do furniture, lamps, rugs, big plants and pots, and statues at any audit result. User rules: "only small props can go with lightvolumes", and small objects move to light volumes when their lightmap is broken.
 - Large furniture: regenerate or author the UV2 (importer margin method Manual, or a flat-chart unwrap in Blender with few large charts), set Scale In Lightmap so the main face gets at least 8 texels across its short side, and re-bake.
 - Never raise Scale In Lightmap to rescue a fragmented UV2: the chart count stays, the atlas cost grows with the square of the scale.
 
