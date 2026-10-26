@@ -60,7 +60,7 @@ resolve from the file that contains them.
 | `blender-modeler` | Models custom props and architecture pieces | C.1 | Blender + exports |
 | `layout-reviewer` | Ranks A.3 shell layouts (structure, massing, scale vs the reference eye height, world extent, divergence), B.1 zoning plans and B.2 greybox variants with their furniture zones in 3D from eye height, plus world size limits; signs off the refined greybox | A.3, B.1, B.2 | No |
 | `dressing-reviewer` | Each Build-out pass and the placed interaction objects: the furniture as placed, judged in 3D, build quality and board match, with separate **style** and **build** scores; decides lock gaps; never lighting | C.1, C.2 | No |
-| `final-reviewer` | Lighting incl. mood against the boards, final render; the only upload gate; visual regressions after perf fixes | D.1, D.2 | No |
+| `final-reviewer` | Modes DRAFT MOOD (mood vs the boards), FINAL (lighting, final polish, textures and sky, world extent; the only upload gate) and PERF REGRESSION (perf-driven visual losses); never re-judges composition | D.1, D.2, D.3 | No |
 | `perf-optimizer` | Play-mode measurement, per-system cost attribution, reversible fixes with proof | D.2 | Scene (reversible fixes) |
 
 A.3 style rounds and text-route images have no reviewer: the user is the style judge. There is no separate style reviewer;
@@ -95,7 +95,7 @@ Decision table:
 | C.1 | each finished area | agent | checkpoint | dressing-reviewer SHIP IT |
 | C.2 | interactions and playability | agent | checkpoint | dressing-reviewer SHIP IT + play-mode test |
 | D.1 | lighting mood and final bake | agent | checkpoint | final-reviewer SHIP IT |
-| D.2 | perf fixes | agent | checkpoint | budgets met + final-reviewer regression check |
+| D.2 | perf fixes | agent | checkpoint | budgets met + final-reviewer PERF REGRESSION SHIP IT |
 | D.3 | upload | user | user | never an agent decision |
 
 A.3 stays `user` in every preset: the concept and style are the user's taste. If the user says "you

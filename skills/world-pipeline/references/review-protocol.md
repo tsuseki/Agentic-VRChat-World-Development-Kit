@@ -13,8 +13,8 @@ adds only its own scope, criteria and verdict rules.
 | B.2 Greybox | `layout-reviewer` | rank the variants in 3D from eye height (massing + rough furniture zones, world size limits), then judge the refined pick | every option /10, then `Score` |
 | C.1 Build-out (per pass) | `dressing-reviewer` | judge the area as placed, in 3D: furniture placement (seating and layout rules), build quality and board match; decides lock gaps; never lighting | `Style N/10 · Build N/10` |
 | C.2 Interactions & playability | `dressing-reviewer` | judge the placed interaction objects | `Style N/10 · Build N/10` |
-| D.1 Lighting | `final-reviewer` | draft-bake mood vs the boards, then the final render after bake + probe re-bake; the only upload gate | `Score` |
-| D.2 Performance | `final-reviewer` | visual regressions from perf fixes (same-camera before/after) | `Score` |
+| D.1 Lighting | `final-reviewer` | DRAFT MOOD on the draft bake (mood vs the boards), then FINAL after bake + probe re-bake (lighting, polish, textures and sky, world extent); FINAL is the only upload gate (D.3) | `Score` |
+| D.2 Performance | `final-reviewer` | PERF REGRESSION: what perf changes did to textures, the sky, merges, LODs and mirrors (same-camera before/after) | `Score` |
 
 There is no separate style reviewer: world-architect pitches every A.3 option, the user judges
 style at A.3, dressing-reviewer checks board match in C, final-reviewer checks mood in D.1.
