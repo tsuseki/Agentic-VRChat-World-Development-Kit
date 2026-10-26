@@ -77,10 +77,40 @@ downgrade to a dressing-only pass, put it at the top of the report, and return *
    - **A5** (§3.5): half shade with a view at the edge seats and refuges.
    - **Thresholds** (§4): the light level is one of the changes that mark a threshold between
      archetypes, and each A1 refuge's light differs from the room next door (§3.1).
-2. **Bake quality**: blotches, splotchy GI, seams between lightmap charts, light leaks at wall/ceiling
-   joints, shadow acne, black or unlit objects (missing UV2 or not static), overexposed emissives.
-   A "lamp too bright" read usually means its spill (light intensity), not the shade's emission. Name
-   which one.
+2. **Bake quality: lightmaps and shadows, object by object.** This is the criterion most often
+   missed, and the reason it exists.
+   - **Defects to look for:**
+     - torn or jagged sawtooth shading;
+     - faceted dark triangles;
+     - stair-stepped shadow edges;
+     - blotches and splotchy GI;
+     - seams between lightmap charts;
+     - light leaks at wall, ceiling and floor joints;
+     - shadow acne and peter-panning (shadows detached from the object);
+     - missing contact shadows under objects resting on surfaces;
+     - shadows that don't match their light (direction, softness, a shadow from an object that isn't there);
+     - black or unlit objects (missing UV2 or not static);
+     - overexposed emissives.
+   - "Lamp too bright" usually means its spill (light intensity), not the shade's emission. Name which one.
+   - **Scope: every renderer in the reviewed area, not an area mean.** Room luminance, pose ratios and
+     "matches FULL n" numbers never clear this criterion.
+   - **Method:**
+     - **Rig.** Walk each room with your own camera at 1.3 m eye height and 1.0–1.5 m from surfaces,
+       one view per wall and furniture group. Add a near-reach shot (≤ 0.6 m) of every soft or organic
+       piece: pillows, cushions, throws, bedding, sculptures, vases, plants, fabric furniture.
+     - **Lightmap-only pass.** Render each room once more with the Scene view **Baked Lightmap** draw
+       mode, or an unlit material showing only the lightmap, so texture detail can't hide a torn chart.
+     - **Inspection.** Inspect every shot at full resolution.
+     - **Merged meshes.** Where the scene uses post-bake merges, also render the unmerged originals of
+       the same views. A defect that appears only merged means the merge broke UV2 or scaleOffset.
+       That is a blocker against the whole merge chain.
+   - **Report.** Give a table: room → views shot → defects found (object path, defect, shot path).
+     A room without its shots counts as unreviewed. Any visible lightmap or shadow defect on a piece a
+     player can walk up to is at least a should-fix. Defects across several pieces in one room are a
+     blocker.
+   - **Look into open objects** (lamp shades, vases, bowls, cups, open pots, hollow sculptures) from
+     above at eye height and 0.5 m. A missing inner face shows the floor through the object. That is
+     at least a should-fix (→ C).
 3. **Reflections**: blue skybox sheen indoors (null or stale probe), mismatched probe boxes, glossy
    surfaces reflecting the wrong room.
 4. **Composition under final light**: focal points actually lit, spawn view composes, landmarks

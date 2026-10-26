@@ -107,9 +107,16 @@ yaw), never from pixels, and quote the measured value in each finding.
    built-ins, props, decor and pickups alike; a full-size adult piece reads oversized (an imported
    prop pack came in "super huge" and had to be scaled down). Only the collision minimums (doors,
    clear heights, stair and path widths, §5.11 Min column) never go below their fixed values.
-4. **Geometry defects**: intersections with walls/floor/each other, floating or sunken props, gaps at
-   joints, see-through faces, stray blockout or helper objects, **z-fighting** (separation rule:
-   clip-planes §6).
+4. **Geometry defects**:
+   - intersections with walls, the floor or each other;
+   - floating or sunken props;
+   - gaps at joints;
+   - see-through faces;
+   - stray blockout or helper objects;
+   - **z-fighting** (separation rule: clip-planes §6).
+   - **One-sided open objects.** Look into every lamp shade, vase, bowl, cup, open pot and hollow
+     sculpture from above, at eye height and 0.5 m away. A missing inner face shows the floor through
+     it.
    - The orchestrator must hand you a fresh z-fight scan result (`ZFightScan.Status()` report) for the area. **Any reported pair
      larger than 4 cm² on a player-visible surface is a blocker** unless the brief documents it as
      accepted. No scan supplied → run `ZFightScan.Start(rootPath)` then poll `ZFightScan.Status()` (agenttools package)
