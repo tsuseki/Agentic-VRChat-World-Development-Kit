@@ -10,6 +10,7 @@ characters, four test pipelines).
 - **Name asymmetric features by image side, not the character's side** — "her left eye" gets mirrored; "the eye on the LEFT side of the image" doesn't.
 - **Make side and back views as edits of the approved front (reference 1), the character view as reference 2** — independent generations depict a different doll per view, and the 3D model averages them.
 - **Fix one detail of an approved front with a "reproduce EXACTLY … change ONLY" edit** — a fresh generation loses everything the user already approved.
+- **Legs stay stubby (≤ head height) even when the avatar wears thigh-highs** — the user rejected long legs twice.
 
 ## Generation (if the image-to-3d backend is Tripo)
 - **Use the newest models only: Smart Mesh P2.0, Topology Quad** — H3.1 multiview meshes (11.5–12k tris) took 73 % of a study's triangles and baked blotchy; a P1.0 retopo was still blotchy and paler.
@@ -38,7 +39,8 @@ characters, four test pipelines).
 - **Seat by mesh vertices or a downward ray, not a rotated renderer AABB** — AABB-seated props hovered 5–13 mm.
 - **After any play session, re-check every pickup against its support before saving the scene** — pickups that had fallen to the floor in play mode were saved and committed that way.
 - **One copy of each character per world: move a plush, never duplicate it; never place clay placeholders** — user rule.
-- **Scatter plushies to natural surfaces (sofa seat, sideboard, shelf, window ledge, bed), not walkways or a bare display** — user: "plushies are just floating there, scatter them around the world".
+- **Plushies are decoration on shelves, at the side of the room** (a shelf first; a sideboard or window ledge where there is no shelf). Never put them on sofas, chairs, beds, walkways or a bare display. The user said: "plushies are just floating there, scatter them around the world", and later: "don't put fumos on the sofas or beds… they are decoration, put them on the shelves".
+- **Never move a plush the user placed himself; check git history before moving one.** The user put a fumo on the gym mirror shelves himself, and an agent moved it back to the bench.
 
 ## Fire screams
 - **Fire zones cover only the flames, on layer Walkthrough, and never reach a resting plush or its support** — a zone that touched the fireplace ledge would scream at a plush placed there.
