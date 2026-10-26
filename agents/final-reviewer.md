@@ -111,6 +111,18 @@ downgrade to a dressing-only pass, put it at the top of the report, and return *
    - **Look into open objects** (lamp shades, vases, bowls, cups, open pots, hollow sculptures) from
      above at eye height and 0.5 m. A missing inner face shows the floor through the object. That is
      at least a should-fix (→ C).
+   - **Parts of one object lit differently**: trunk vs branches, legs vs top, frame vs cushion,
+     pot vs plant. If connected parts of one model read in a different colour or brightness under the
+     same light, the usual cause is that one part got a tiny share of the UV2 layout, so a whole trunk
+     sits in a few texels. Treat it as a should-fix.
+   - **Measured UV2 audit, alongside the eye.** Run the lightmap UV2 audit on every lightmapped
+     renderer in the area. Flag a renderer when any of these holds:
+     - more than 30 % of its UV2 triangles have under 0.01 texel² area;
+     - more than 50 % of its charts are under 4 texels;
+     - a material/submesh carries 10 % or more of the surface area but gets under 5 % of the UV2 area.
+     
+     Shoot each flagged renderer at near reach. Listing the flagged count with its shots is required;
+     an audit nobody ran counts as a failed criterion.
 3. **Reflections**: blue skybox sheen indoors (null or stale probe), mismatched probe boxes, glossy
    surfaces reflecting the wrong room.
 4. **Composition under final light**: focal points actually lit, spawn view composes, landmarks
