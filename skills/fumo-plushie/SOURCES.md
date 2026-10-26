@@ -4,6 +4,10 @@ Not needed to use the skill. Grouped by citing file.
 
 ## `SKILL.md`, `references/lessons-fumo.md`
 
+- Kutsu-way recipe (P2.0 Quad at polycount 2000, no decimation, 1024 texture) — the same world's experiment
+  11a and the 2026-10-26 rebuild of four plushies after the 2,500-tris minimum-quad builds were judged worse
+  by the user; AO A/B result from the same session.
+
 - Budgets, generator settings, Blender prep, lightmap density, AgX bug, lighting choice — in-house
   bakeable-plush experiment log of a penthouse world (2026-10-22): 11 experiments on four characters
   (H3.1 multiview, P1.0 retopo, P2.0 quad at 2,000–8,000 faces, xatlas UV2, Bakery/Progressive test
@@ -34,8 +38,12 @@ Not needed to use the skill. Grouped by citing file.
 ## `scripts/`
 
 - `glb_to_fbx.py`, `render_glb.py`, `fbx_sheet.py`, `mesh_stats.py`, `retopo_prep.py`,
-  `fumo_remesh_bake.py`, `fumo_lv_prep.py`, `unity/unity_fumo_pickup.cs.txt`, `unity/Udon/*.cs`,
+  `unity/unity_fumo_pickup.cs.txt`, `unity/Udon/*.cs`,
   `unity/Editor/FumoScreamBuilder.cs` — generalised from the experiment and build scripts above.
+- `tripo_studio.py`, `grade_texture.py`, `uvpos.py`, `bake_ao.py`, `combine_ao.py`, `lv_ab_render.py`,
+  `protected_decimate.py`, `clean_flat_regions.py`, `closeup.py`, `lineup_flat.py`, `lineup_shaded.py`,
+  `lineup_compose.py` — written for the 2026-10-26 Kutsu-way rebuild of four plushies (Studio recipe of
+  experiment 11a, grading, Light Volumes + AO A/B test, review lineups).
 - `texture_check.py`, `lineup_sheet.py`, `unity/unity_fumo_import.cs.txt`,
   `unity/unity_rest_support.cs.txt` — written for this skill from the same runs' manual checks.
 - xatlas Python bindings (mworchel, MIT) — <https://github.com/mworchel/xatlas-python>; xatlas

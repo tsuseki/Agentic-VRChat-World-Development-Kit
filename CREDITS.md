@@ -160,7 +160,7 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   standard), `.omp/docs/new-world.md` (install).
 - **mworchel** — [xatlas-python](https://github.com/mworchel/xatlas-python), MIT, Python bindings of
   [xatlas](https://github.com/jpcy/xatlas) (Jonathan Young, MIT); installed by the user, not bundled. Used by
-  `.omp/skills/fumo-plushie/scripts/` (`retopo_prep.py`, `fumo_remesh_bake.py`).
+  `.omp/skills/fumo-plushie/scripts/` (`retopo_prep.py`).
 - **PiMaker** — [LTCGI](https://github.com/PiMaker/ltcgi) ([docs](https://ltcgi.dev/)), MIT plus required
   attribution. **llealloo** — [AudioLink](https://github.com/llealloo/audiolink), MIT. **oneVR** —
   [VRWorld Toolkit](https://github.com/oneVR/VRWorldToolkit), MIT. Used by
