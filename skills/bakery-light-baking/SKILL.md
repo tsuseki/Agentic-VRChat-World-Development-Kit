@@ -36,18 +36,27 @@ change and the user's words go in that world's `WORLD.md` Decisions log, and the
 
 - **No realtime or Mixed directional light**, even outdoors; lighting is fully baked (no realtime or
   Mixed lights at all). The sun stays in the scene as **Baked** so Bakery can cast from it; aim for
-  large-scale shadows only. Bakery if licensed, else GLIM (free), else Unity Progressive GPU. Anything that moves needs
-  `LightProbeGroup` coverage.
-- **Nothing that doesn't move is lit by light probes** (user, 2026-10-22: "no lighting by probes on
-  objects that don't move"). Every static opaque renderer is ContributeGI + Receive GI Lightmaps with
-  UV2, however small; give small pieces a higher Scale In Lightmap (≥ ~8 texels across the short side
-  of their main face) instead of making them probe-lit. Light probes are only for moving things
-  (pickups, players, animated or Udon-moved objects). Exceptions: transparent surfaces, runtime
-  screens, objects carrying a `BakeryLightMesh` (which Bakery can't lightmap), and, in a world with
-  VRC Light Volumes, **small props with complicated UVs** (fruit, figurines, small statues): they get a
-  `Light Volume PBR` (LV-aware) material and Receive GI Light Probes, keep ContributeGI so they still
-  cast into the bake, and are lit by the volumes. A many-island chart on a small object never bakes
-  clean without giant atlases; the volume lights it smoothly (user, 2026-10-22).
+  large-scale shadows only. Bakery if licensed, else GLIM (free), else Unity Progressive GPU.
+- **VRC Light Volumes in every world** (`red.sim.lightvolumes` 3.x, user 2026-10-26): volumes cover
+  every playable area and are baked by the full Bakery Render, or by GLIM when Bakery isn't
+  available (LV also bakes with Progressive). Everything that isn't lightmapped is lit by them:
+  dynamic and non-static props, pickups, Udon-moved and animated parts, plushies, and the static
+  exceptions below. Each uses an LV-compatible shader (`Light Volume Samples/Light Volume PBR`, or
+  lilToon, Poiyomi and similar listed shaders for stylised assets) through a `<name>_LV.mat` copy;
+  a Standard-shader dynamic prop is a finding. Setup traps: lessons-probes "VRC Light Volumes".
+- **Light probes are a fallback only**: legacy avatars on non-LV shaders and pixels outside every
+  volume (Light Probes Blending on). A simple coverage grid is enough; don't tune probe placement or
+  brightness for world objects, and never judge world props by probe light.
+- **Nothing that doesn't move goes unlightmapped by default** (user, 2026-10-22: "no lighting by
+  probes on objects that don't move"). Every static opaque renderer is ContributeGI + Receive GI
+  Lightmaps with UV2, however small; give small pieces a higher Scale In Lightmap (≥ ~8 texels
+  across the short side of their main face). Exceptions: transparent surfaces, runtime screens,
+  objects carrying a `BakeryLightMesh` (which Bakery can't lightmap), and **small props whose UV2
+  fails the audit** (fruit, figurines, small statues, pillows): they get Receive GI Light Probes and
+  an LV shader, keep ContributeGI so they still cast into the bake, and are lit by the volumes. A
+  many-island chart on a small object never bakes clean without giant atlases; the volume lights it
+  smoothly (user, 2026-10-22). Furniture, lamps, rugs, big plants and pots and statues stay
+  lightmapped.
 - **Who gets texels and how many** (the per-class reception table, these exceptions included, density
   targets, groups, UV2 quality and the pre-/post-bake allocation audit): `.omp/skills/lightmap-allocation/SKILL.md`.
 - **Cozy/night interiors go darker than instinct.** Deep shadow with small warm pools; when it seems

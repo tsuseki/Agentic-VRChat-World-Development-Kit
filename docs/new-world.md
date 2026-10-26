@@ -11,7 +11,10 @@ Assumes [bootstrap.md](bootstrap.md) is done on this machine.
    `"com.awdk.agenttools": "file:<workspace>/.omp/unity-package/com.awdk.agenttools"`
    to `Packages/manifest.json`, let Unity compile, confirm the console has no `error CS`.
 4. **Lightmapper**: Bakery if the user owns it; otherwise GLIM (free); Progressive GPU only when neither
-   works ([bootstrap.md §3](bootstrap.md#3-wire-it)).
+   works ([bootstrap.md §3](bootstrap.md#3-wire-it)). **VRC Light Volumes** (`red.sim.lightvolumes`
+   3.x) in every world: add the VPM listing `https://redsim.github.io/vpmlisting/index.json` in
+   VCC/ALCOM and add the package to the project. The volumes are laid out over every playable area
+   in D.1 and bake with the full render; they light everything that isn't lightmapped.
 5. **Brief**: copy [.omp/templates/WORLD.template.md](../templates/WORLD.template.md) to the project root
    as `WORLD.md` (the code block inside it is the file body). Create the project's own `AGENTS.md`
    with machine facts (local asset library path, Unity instance name, owned paid packages).

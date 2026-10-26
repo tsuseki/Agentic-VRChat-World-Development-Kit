@@ -29,9 +29,9 @@ characters, four test pipelines).
 - **Line every new plush up with the existing ones and a 1.4 m figure before Unity** — on a shared shelf a plush of a different height or style reads as a different product.
 
 ## Lighting
-- **Pickups are never lightmapped: probe-lit, and with VRC Light Volumes an LV-aware material** — a moved object keeps the lightmap of where it was; Unity Standard ignores the volumes.
+- **Pickups are never lightmapped: Light-Volume lit on an LV-aware material** — a moved object keeps the lightmap of where it was; Unity Standard ignores the volumes.
 - **For a plush that stays static, Scale In Lightmap 8** — props 15–40 cm got a median of 6 texels (flat colour); SIL 8 (~56² texels) looked nearly as good as SIL 16; SIL 1 was flat and muddy.
-- **Bake AO into the base colour of a probe-lit plush by ray-casting against a watertight voxel proxy** — Cycles AO on layered hair and cloth shells self-occludes into per-chart blotches.
+- **Bake AO into the base colour of a Light-Volume-lit plush by ray-casting against a watertight voxel proxy** — Cycles AO on layered hair and cloth shells self-occludes into per-chart blotches.
 
 ## Pickup and placement
 - **Gravity on, VRCObjectSync, proximity 0.1, AutoHold No, one tight BoxCollider, layer Pickup, not static** — kit pickup rules; a plush that stays where it is dropped needs a support, not kinematic.

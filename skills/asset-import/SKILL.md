@@ -98,9 +98,10 @@ Set on the `ModelImporter`, `SaveAndReimport()`, read back in the next call.
   and permute the instance array: `newMats[j] = oldMats[oldOrder.IndexOf(newOrder[j])]`.
 
 ## 5. Lightmap UV2 and static flags
-- **Lightmap or probe-light?** Decide per renderer class with `.omp/skills/lightmap-allocation/SKILL.md`
-  §1 (glass and small soft decor go to probes or Light Volumes and keep casting; furniture stays
-  lightmapped with a UV2 that passes its audit).
+- **Lightmap or Light Volumes?** Decide per renderer class with `.omp/skills/lightmap-allocation/SKILL.md`
+  §1 (glass and small decor whose UV2 fails the audit go to Light Volumes and keep casting; furniture
+  stays lightmapped with a UV2 that passes its audit). Anything not lightmapped, and every dynamic
+  prop or pickup, needs an LV-compatible material (`<name>_LV.mat` copy); Standard is a finding.
 - **Every lightmapped mesh has UV2 in range.** "Has UV2" is not the test: scan UV2 for values outside
   0..1 or NaN. One bad mesh fails Bakery's packer for its whole group (infinite
   `lightmapScaleOffset` on hundreds of renderers). The importer unwrap can silently fail on one LOD;

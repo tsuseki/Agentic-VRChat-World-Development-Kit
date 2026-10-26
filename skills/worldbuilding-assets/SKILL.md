@@ -122,7 +122,10 @@ Most Booth/coquelicotz packs are **raw ZIPs of FBX + textures**, not `.unitypack
 1. Extract into `Assets/<PackName>/` inside the target world project.
 2. Build materials yourself if none are included. **Use lilToon by default for prop materials**
    (the kit default; a world's brief or `.omp/local/AGENTS.local.md` may name another shader);
-   use a different shader only when the user explicitly requests it.
+   use a different shader only when the user explicitly requests it. Anything that won't be
+   lightmapped (dynamic props, pickups, small props whose UV2 fails the audit) is lit by Light
+   Volumes and needs an LV-compatible shader: lilToon qualifies, Standard doesn't (give those a
+   `<name>_LV.mat` copy on `Light Volume Samples/Light Volume PBR`; lightmap-allocation §1).
 3. Set only appropriate static flags; Batching Static is not a guaranteed performance win,
    and is distinct from ContributeGI and ReflectionProbeStatic.
 4. Preserve suitable lightmap UV2 or generate/repack it when baking; material UVs are not UV2.

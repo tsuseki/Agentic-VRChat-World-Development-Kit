@@ -84,7 +84,8 @@ python .omp/skills/worldbuilding-assets/scripts/blendkit.py download <id>
   `.unitypackage`/prefab exports. `cc_zero` is unrestricted. Report the licence per candidate.
 - Blendkit models are authored for Cycles renders: 4K–8K textures, several materials, no
   lightmap UV2. Flag texture downsizing and, when faces or materials are high, a pass through
-  `blender-optimizer`. Materials import as Standard; the world's prop shader default still applies.
+  `blender-optimizer`. Materials import as Standard; the world's prop shader default still applies,
+  and anything that won't be lightmapped needs an LV-compatible shader.
 - `faces` in search results counts mostly quads: real triangles ≈ 2× faces. Measure every pick
   with `blendkit.py inspect <file.glb>` (real tris, materials, UV sets, texture sizes) and report
   those numbers, not the search `faces`. Example: Coffee Mug, 464 faces → 928 tris, 1 material,

@@ -56,6 +56,7 @@ control.
 | GUTTER | `minGapTexels < padding + 1` at the final resolution | widen margin, then trim scale |
 | UNGROUPED | L with no selector (Bakery scenes with explicit groups) | add a selector |
 | SELECTOR_ON_P | P renderer carrying a selector | remove (it can bake an empty atlas) |
+| NON_LV_SHADER | P or D renderer whose material shader is not LV-compatible (`Light Volume Samples/*`, lilToon, Poiyomi or another listed one), e.g. Standard | assign an LV copy of the material (`<name>_LV.mat`) |
 | LOD_GROUP | renderer in a `LODGroup` whose group has `sceneLodLevel = -1` | one group per LOD level |
 | GI_SCREEN | mirror or video/runtime screen with `ContributeGI` | clear the flag |
 
@@ -75,14 +76,14 @@ Run them after save, close and reopen, so you check what will ship:
 - **Map counts:** the storage `maps` count equals `LightmapSettings.lightmaps.Length`. An empty storage
   saved after a failed or selected bake is what makes the whole world render flat in Play.
 - **Index meaning:** `lightmapIndex` is only meaningful right after a bake: −1 means not baked, 65534
-  means probe-lit.
+  means not lightmapped (P or D).
   - Renderers placed or cloned since the last bake are unbaked, whatever their copied index says. A
     clone keeps its source's serialized index and offset; Bakery's storage has no row for it.
   - Renderers moved to P need their storage row removed, or Bakery restores the old binding at load.
 - **Never hard-code lightmap ids.** Adding a group adds a map and shifts the ids after it; an emptied
   group drops out. Check by renderer path ("bound to some valid map"), never "bound to id 5".
 - **Expected atlases:** compare the count with the plan. One extra map is the first sign of an orphan
-  terrain tile or a probe-lit group.
+  terrain tile or a group of only P renderers.
 - **Density spot-check:** recompute `texelsPerM` from the baked offsets for the hero surfaces and
   every flagged renderer you kept.
 

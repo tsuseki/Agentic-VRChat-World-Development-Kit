@@ -24,7 +24,7 @@ Keep each run in `<project>/SourceAssets/Fumos<date>_<Name>/` (`refs/`, `work/`,
 |---|---|
 | Triangles | ≈ 2,500 (≤ 3,000); generate at 1,000–1,500 quads |
 | Materials / textures | 1 material; BaseColor only, 512² crunched (~170 KB); no normal map |
-| Lightmap | none for pickups (probe / Light Volume lit); a static display plush: authored UV2, Scale In Lightmap 8 |
+| Lightmap | none for pickups (Light Volume lit, LV shader); a static display plush: authored UV2, Scale In Lightmap 8 |
 | Seated height | the world's existing plushies (default 0.25 m incl. ears); spread ≤ ±5 % |
 | Audio | one shared scream clip, mono Vorbis, 3D 0.5–8 m |
 | Copies | one per character per world |
@@ -71,7 +71,7 @@ $B/fbx_sheet.py    -- unity/Fumo_<Name>.fbx sheets Fumo_<Name>       # textured 
 
 - Over budget: regenerate at a lower quad count (preferred), or decimate with
   `fumo_lv_prep.py -- <fbx> <out> Fumo_<Name> <target_tris> 512` (keeps UV0 and the texture).
-- Probe-lit plush that looks flat: `fumo_lv_prep.py` with `target_tris` = current tris bakes
+- Light-Volume-lit (pickup) plush that looks flat: `fumo_lv_prep.py` with `target_tris` = current tris bakes
   AO into the BaseColor (no decimation); its FBX drops UV2.
 - Noisy surface (hundreds of lightmap charts, blotchy test bake) on a static plush, or an approved
   older mesh that must keep its shape: `fumo_remesh_bake.py -- <fbx> <out> Fumo_<Name> 1400`.
@@ -84,8 +84,9 @@ heights and `SPREAD`. Show it to the user with the concept front. Fix height in 
 Copy `Fumo_<Name>.fbx` + `_BaseColor.png` into the world's plush folder, then run
 `scripts/unity/unity_fumo_import.cs.txt` (SessionState `FumoImport`): scale 1 with file scale, **no
 generated lightmap UVs**, no imported materials, texture 512 crunched, one material
-`M_Fumo_<Name>` (`Light Volume Samples/Light Volume PBR` when the project has VRC Light Volumes, else
-Standard; metallic 0, smoothness 0.1). Read the console for errors; measure in a later call.
+`M_Fumo_<Name>` (`Light Volume Samples/Light Volume PBR` by default, since worlds ship VRC Light
+Volumes; the script warns when it falls back to Standard in a legacy world without them; metallic 0,
+smoothness 0.1). Read the console for errors; measure in a later call.
 
 **8. Pickup + placement.** Choose the spot (rules below), then run
 `scripts/unity/unity_fumo_pickup.cs.txt` (SessionState `FumoPickup`): replaces `Fumo_<Name>` in place if
@@ -138,5 +139,5 @@ local backup commit of the project.
 
 Related: [asset-import](../asset-import/SKILL.md) (importer and placement details),
 [image-to-3d-props](../image-to-3d-props/SKILL.md) (non-character props),
-[bakery-light-baking](../bakery-light-baking/SKILL.md) (Light Volumes, probe-lit props),
+[bakery-light-baking](../bakery-light-baking/SKILL.md) (Light Volumes),
 [unity-vrc-udon-sharp](../unity-vrc-udon-sharp/SKILL.md) (sync modes, network events).

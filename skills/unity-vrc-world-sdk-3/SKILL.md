@@ -35,6 +35,7 @@ Read the workspace `.omp/AGENTS.md` and `.omp/RULES.md`, then the target project
 - Every requested pickup uses `VRC_Pickup.proximity = 0.1f` and `VRC_Pickup.AutoHoldMode.No`, including scene instances and authored/exported prefabs. Audit existing pickups when modifying their scene; preserve gravity and networking. Desktop use-event limitations are not permission to enable AutoHold.
 - No colliders on ordinary furniture, props, decoration or clutter; remove primitive auto-colliders. Necessary movement barriers prefer one BoxCollider. Stairs get one smooth rotated ramp box, never per-tread collision; never use MeshColliders on walkable/brushed surfaces. Requested pickups get one tight primitive collider, no oversized reach proxies.
 - Immediately bake reflection probes after every lighting bake. Capture renderers need `ReflectionProbeStatic`, separate from `ContributeGI`.
+- Every world ships VRC Light Volumes (`red.sim.lightvolumes` 3.x) over every playable area; everything not lightmapped (pickups, moving and animated parts, small props whose UV2 fails the audit) uses an LV-compatible shader. Light probes are only a simple coarse fallback grid for legacy avatars and outside the volumes (`.omp/skills/bakery-light-baking/SKILL.md` "Workspace lighting standard").
 - Built/generated/placed/textured/lit work is not complete without the stage reviewer (`dressing-reviewer` before the bake, `final-reviewer` after it) returning SHIP IT. Use `dressing-reviewer` for pre-bake placement/materials; `final-reviewer` after baking and probes. Fix and re-review NEEDS WORK / MINOR FIXES.
 - Templates are opt-in source references, not automatic scene setup. Do not install scripts, add components, change global configuration or run setup tools merely because a template lists them.
 
@@ -82,7 +83,7 @@ These cause silent world failures, performance disasters, or Quest incompatibili
 | # | NEVER do this | Why it hurts | Use instead |
 |---|---------------|-------------|-------------|
 | 1 | Enable Mirror by default (active on world join) | A mirror adds another costly scene render; the impact depends on view, scene, resolution, and device | In this workspace: no world mirror at all (VRChat has personal mirrors) except a diegetic one in a bathroom/gym/dance room, default OFF; profile each target device |
-| 2 | Use realtime directional lights with real-time shadows without profiling | Realtime shadow cost varies with scene geometry, view, and target device and can dominate frame time on Android | Prefer baked lightmaps + light probes; profile the target device before keeping any realtime shadows |
+| 2 | Use realtime directional lights with real-time shadows without profiling | Realtime shadow cost varies with scene geometry, view, and target device and can dominate frame time on Android | Prefer baked lightmaps + VRC Light Volumes (light probes as fallback); profile the target device before keeping any realtime shadows |
 | 3 | Set Respawn Height at or above the world floor | Player respawns → falls → respawns again → infinite loop; players cannot recover | Set to an unreachable depth (e.g., floor at Y=0 → Respawn at Y=-100) |
 | 4 | Skip "Setup Layers for VRChat" on a new project | Layer collision matrix is wrong by default — players walk through walls, Pickups clip floors | Run VRChat SDK > Builder > "Setup Layers for VRChat" before placing any colliders |
 | 5 | Enable Post-Processing without an Android build profile | Post-processing is disabled at runtime on Android, so the authored effect will not appear and unnecessary resources can still enlarge the build | Use a separate Android build profile with post-processing removed |
@@ -338,7 +339,8 @@ Define the performance target from the supported devices, representative scenes,
 ├── Lightmapper: Bakery when licensed, else GLIM (free), else Progressive GPU (`.omp/skills/bakery-light-baking/SKILL.md`)
 ├── Lightmap Resolution: 10-20 texels/unit (PC) / 5-10 (Quest)
 ├── Light Mode: Baked only; 0 Realtime/Mixed lights (workspace rule)
-└── Light Probes: Place along player paths
+├── VRC Light Volumes over every playable area (lights everything not lightmapped)
+└── Light Probes: a simple coarse fallback grid along player paths
 
 ❌ Avoid:
 ├── Realtime lights (dynamic shadows)

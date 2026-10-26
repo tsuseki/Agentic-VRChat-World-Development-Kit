@@ -90,9 +90,13 @@ furniture zones by spatial-design and the seating and layout rules below.
 - Lighting: no realtime or Mixed lights (sun is Baked); full standard in `bakery-light-baking`
   "Workspace lighting standard". Bake reflection probes **immediately** after every lightmap bake;
   probe-captured renderers need `ReflectionProbeStatic`.
+- **Light Volumes light everything that isn't lightmapped**: pickups, Udon-moved and animated parts,
+  dynamic props and the static exceptions get an LV-compatible shader (`<name>_LV.mat` copy of
+  their material, never Standard). Light probes are only a simple coarse grid for legacy avatars and
+  outside the volumes; don't tune them for world objects.
 - Baking prep (C.1 placement and D.1 before every bake): set each renderer's reception (lightmap,
-  probe/Light-Volume-lit, dynamic), Scale In Lightmap and group, and run the pre-bake UV2 audit;
-  after the bake run the binding and near-reach checks. Rules and thresholds:
+  Light-Volume-lit, dynamic on an LV shader), Scale In Lightmap and group, and run the pre-bake UV2
+  audit; after the bake run the binding and near-reach checks. Rules and thresholds:
   `.omp/skills/lightmap-allocation/SKILL.md`.
 - Separate private rooms are teleport islands ≥ 200 m apart **and** inside the
   `clip-planes` §3 radii (cuddle zones |coord| < 256 m, occupied space < 512 m); the design
@@ -200,9 +204,11 @@ Once the real objects exist:
 
 ## Lighting (D.1)
 
-Draft bake → final-reviewer's mood check against the lighting board → final bake → reflection
-probes **immediately** (renderers flagged `ReflectionProbeStatic`). Light to the boards' lighting
-character and the archetypes' light rows; never raise a level the user approved.
+Lay out VRC Light Volumes over every playable area (overlapping neighbours, ≤ 32 active) and a
+simple coarse light-probe grid → draft bake → final-reviewer's mood check against the lighting
+board → final bake (the full render bakes the volumes) → reflection probes **immediately**
+(renderers flagged `ReflectionProbeStatic`). Light to the boards' lighting character and the
+archetypes' light rows; never raise a level the user approved.
 
 ## D → C loop-back
 

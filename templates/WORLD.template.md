@@ -158,8 +158,8 @@ become the next plan. An area is done on SHIP IT with nothing left on its plan.
 <!-- ===================== D · Finish ===================== -->
 
 ## Lighting (D.1)
-| Area | Draft bake mood vs boards | Final bake | Probes rebaked | final-reviewer |
-|---|---|---|---|---|
+| Area | Draft bake mood vs boards | Final bake | Light Volumes baked | Probes rebaked | final-reviewer |
+|---|---|---|---|---|---|
 
 ## Approved levels (never raise without asking)
 - e.g. lounge lamp intensity 0.35 approved YYYY-MM-DD

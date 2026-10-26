@@ -195,7 +195,10 @@ yaw), never from pixels, and quote the measured value in each finding.
     enabled-by-default or misfitted lie-down collider, a collider on a small prop (chair, stool,
     couch, armchair, coffee/side/bedside table, decor), or a solid box sticking out past the piece is
     a blocker. No `VRCStation` anywhere unless WORLD.md records the user requesting it; pickups use
-    proximity 0.1 and AutoHold No. Each violation is a blocker.
+    proximity 0.1 and AutoHold No. Each violation is a blocker. Pickups, Udon-moved and animated
+    parts and other dynamic props use an LV-compatible shader (`<name>_LV.mat`;
+    `.omp/skills/lightmap-allocation/SKILL.md` §1); a Standard-shader dynamic prop is a should-fix.
+    Check the shader assignment only; never judge their lighting, and never by probe light.
 11. **In-world UI** (C.2): show, don't tell. Text that explains how to
     operate the UI, or ON/OFF words beside a toggle that already shows its state, is a finding
     (rule: `.omp/agents/world-builder.md` "In-world UI").

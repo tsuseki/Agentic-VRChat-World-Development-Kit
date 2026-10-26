@@ -2,9 +2,9 @@
 // e.g. "Assets/World/Plush/Fumo_Name.fbx|Assets/World/Plush/Fumo_Name_BaseColor.png|Assets/World/Plush/M_Fumo_Name.mat|"
 // Model: metres as exported (scale 1, file scale), no generated lightmap UVs (UV2 is authored in Blender or not needed),
 // no imported materials/cameras/lights, not readable. Texture: 512 max, crunched, sRGB, mipmaps.
-// Material: the given shader; empty = "Light Volume Samples/Light Volume PBR" when the project has VRC Light Volumes,
-// else Standard. Matte felt: metallic 0, smoothness 0.1. Run, then measure in a LATER call (import is not visible
-// to the call that triggered it).
+// Material: the given shader; empty = "Light Volume Samples/Light Volume PBR" (the default; worlds ship VRC Light
+// Volumes), else Standard with a WARNING (legacy world without LV). Matte felt: metallic 0, smoothness 0.1.
+// Run, then measure in a LATER call (import is not visible to the call that triggered it).
 var a = SessionState.GetString("FumoImport", "").Split('|'); if (a.Length < 3) return "set SessionState FumoImport";
 var mi = AssetImporter.GetAtPath(a[0]) as ModelImporter; if (mi == null) return "no model at " + a[0];
 mi.globalScale = 1f; mi.useFileScale = true;
@@ -30,4 +30,5 @@ if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
 if (mat.HasProperty("_Glossiness")) mat.SetFloat("_Glossiness", 0.1f);
 mat.enableInstancing = true;
 EditorUtility.SetDirty(mat); AssetDatabase.SaveAssets();
-return "imported " + a[0] + " | tex 512 crunched | mat " + a[2] + " shader=" + sh.name + " mainTexBound=" + (mat.mainTexture != null);
+return "imported " + a[0] + " | tex 512 crunched | mat " + a[2] + " shader=" + sh.name + " mainTexBound=" + (mat.mainTexture != null)
+    + (sh.name == "Standard" ? " | WARNING: Standard, no VRC Light Volumes in this project; install red.sim.lightvolumes unless this is a legacy world" : "");

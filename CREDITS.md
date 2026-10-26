@@ -156,7 +156,8 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
 - **REDSIM** — [VRC Light Volumes](https://github.com/REDSIM/VRCLightVolumes) (`red.sim.lightvolumes`),
   MIT (README, docs, releases, issue #95). Used by `.omp/knowledge/notes/vrc-light-volumes-traps.md`,
   `.omp/knowledge/notes/lightvolume-component-repushes-intensity.md`, `.omp/skills/fumo-plushie/SKILL.md`,
-  `.omp/skills/lightmap-allocation/`.
+  `.omp/skills/lightmap-allocation/`, `.omp/skills/bakery-light-baking/` (workspace lighting
+  standard), `.omp/docs/new-world.md` (install).
 - **mworchel** — [xatlas-python](https://github.com/mworchel/xatlas-python), MIT, Python bindings of
   [xatlas](https://github.com/jpcy/xatlas) (Jonathan Young, MIT); installed by the user, not bundled. Used by
   `.omp/skills/fumo-plushie/scripts/` (`retopo_prep.py`, `fumo_remesh_bake.py`).

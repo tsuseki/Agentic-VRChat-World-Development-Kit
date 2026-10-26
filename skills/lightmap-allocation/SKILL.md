@@ -1,6 +1,6 @@
 ---
 name: lightmap-allocation
-description: "Decide which renderers get lightmap texels and how many, and catch broken allocation before and after a bake, for VRChat worlds (Unity 2022.3 Built-in RP; Bakery first, GLIM or Progressive as fallbacks; VRC Light Volumes). Covers the per-class reception table (lightmapped / probe- or Light-Volume-lit but still casting / dynamic), texel-density targets, Scale In Lightmap and chart-share maths, lightmap groups, UV2 quality (import margin, Blender-authored UV2, per-material share, overlap, organic meshes), the measured pre-bake audit with thresholds and the post-bake binding and visual checks. Use when: preparing any lightmap bake or a C.1 piece for baking, setting receiveGI / ContributeGI / Scale In Lightmap / lightmap groups, importing or unwrapping models for lightmapping, glass or transparent meshes take atlas space, pillows, cushions, bedding or sculptures bake faceted or torn, parts of one object (trunk vs branches) bake different colours, one object eats an atlas, too many lightmaps, overlapping-UV warnings, or reviewing bake quality object by object."
+description: "Decide which renderers get lightmap texels and how many, and catch broken allocation before and after a bake, for VRChat worlds (Unity 2022.3 Built-in RP; Bakery first, GLIM or Progressive as fallbacks; VRC Light Volumes light everything that isn't lightmapped). Covers the per-class reception table (lightmapped / Light-Volume-lit but still casting / dynamic on an LV shader), texel-density targets, Scale In Lightmap and chart-share maths, lightmap groups, UV2 quality (import margin, Blender-authored UV2, per-material share, overlap, organic meshes), the measured pre-bake audit with thresholds and the post-bake binding and visual checks. Use when: preparing any lightmap bake or a C.1 piece for baking, setting receiveGI / ContributeGI / Scale In Lightmap / lightmap groups, importing or unwrapping models for lightmapping, glass or transparent meshes take atlas space, pillows, cushions, bedding or sculptures bake faceted or torn, parts of one object (trunk vs branches) bake different colours, one object eats an atlas, too many lightmaps, overlapping-UV warnings, or reviewing bake quality object by object."
 ---
 
 # Lightmap allocation
@@ -24,8 +24,15 @@ Three modes per renderer:
 | Mode | Settings | Gets |
 |---|---|---|
 | **L** lightmapped | static `ContributeGI`, `receiveGI = Lightmaps`, valid UV2, a lightmap group | baked direct + GI, contact shadows, its own chart |
-| **P** probe/LV-lit, still casting | `ContributeGI`, `receiveGI = LightProbes`, `BlendProbes`; LV-aware material in Light Volume worlds; no group selector, no storage row | casts and occludes in the bake, lit by probes/volumes, no atlas space |
-| **D** dynamic | not static, `BlendProbes` (LV material in LV worlds) | nothing baked; moves |
+| **P** Light-Volume lit (`receiveGI = LightProbes`, LV shader), still casting | `ContributeGI`, `receiveGI = LightProbes`, `BlendProbes`, LV-compatible shader (`<name>_LV.mat` copy); no group selector, no storage row | casts and occludes in the bake, lit by Light Volumes, no atlas space |
+| **D** dynamic, LV shader | not static, `BlendProbes`, LV-compatible shader (`<name>_LV.mat` copy) | nothing baked; moves; lit by Light Volumes |
+
+Every world ships VRC Light Volumes, so everything that isn't L is lit by them: `Light Volume
+Samples/Light Volume PBR`, or a listed LV-compatible shader (lilToon, Poiyomi and similar) for
+stylised assets. A Standard-shader P or D renderer is a finding. Light probes stay only as a coarse
+fallback grid (legacy avatars, outside the volumes); `receiveGI = LightProbes` is just the Unity
+setting that makes a static renderer non-lightmapped. Legacy world without Light Volumes: P and D
+are probe-lit on their own materials.
 
 Workspace default (the user's rules). A world may change any row; record it with the user's words
 in that world's `WORLD.md` Decisions log, and then `WORLD.md` wins.
@@ -33,17 +40,17 @@ in that world's `WORLD.md` Decisions log, and then `WORLD.md` wins.
 | Class | Mode | Key rule |
 |---|---|---|
 | Walls, floors, ceilings, shell, built-ins | L | hero area group; hidden backs and exterior envelopes demoted (§2) |
-| Large furniture (> ~0.4 m): sofas, beds, tables, cabinets, lamp bodies, rugs, big plants and pots, statues | L | UV2 must pass the audit; otherwise re-unwrap, never move to probes to dodge it |
-| Small hard decor (≤ ~0.4 m): taps, bottles, fruit, souvenirs, small figurines, books on shelves | L if its UV2 passes the audit and its short side gets ≥ 8 texels; otherwise P (LV in LV worlds) | user: "only small props can go with lightvolumes", "small objects should move to light volumes if [the lightmap is] broken" |
-| Soft or organic small pieces: pillows, cushions, throws (≤ ~0.6 m), small sculptures | same rule; their auto UV2 almost always fails the audit, so expect P (LV) | incident: about 800 of 2,379 small renderers had fragmented auto UV2 |
+| Large furniture (> ~0.4 m): sofas, beds, tables, cabinets, lamp bodies, rugs, big plants and pots, statues | L | UV2 must pass the audit; otherwise re-unwrap, never move to Light Volumes to dodge it |
+| Small hard decor (≤ ~0.4 m): taps, bottles, fruit, souvenirs, small figurines, books on shelves | L if its UV2 passes the audit and its short side gets ≥ 8 texels; otherwise P | user: "only small props can go with lightvolumes", "small objects should move to light volumes if [the lightmap is] broken" |
+| Soft or organic small pieces: pillows, cushions, throws (≤ ~0.6 m), small sculptures | same rule; their auto UV2 almost always fails the audit, so expect P | incident: about 800 of 2,379 small renderers had fragmented auto UV2 |
 | Anything under ~0.12 m in its middle dimension | P | no margin rescues a 1–2 texel chart |
 | Flush wall fittings < ~20 cm (switches, outlets, vents) | P | 4 × 3 texel charts bake half-black smears |
-| Glass, transparent, glazing | P, `ReflectionProbeStatic` off | thin panes demand huge charts and gutter-bleed onto the view |
+| Glass, transparent, glazing | P, `ReflectionProbeStatic` off; where it is lit, an LV-compatible shader | thin panes demand huge charts and gutter-bleed onto the view |
 | Cutout foliage: hero trees | L with hand-built Lightmap UV (bark budget) | auto unwrap gives bark ~3 % of the UV2 |
 | Cutout foliage: scatter, small plants | P | grass under baked tree shadows: L or ground-lightmap sampling |
 | Light meshes and emitters (`BakeryLightMesh`) | never L (Bakery skips them); no selector | split emitter child from a lightmapped body when the body must be lit |
 | SSS shades | L in their own `computeSSS` group, generous scale (~6) | closed volume, shadows On |
-| Pickups, Udon-moved and animated parts | D | ambient sway: keep L and move vertices in the shader |
+| Pickups (plushies included), Udon-moved and animated parts | D, LV shader | ambient sway: keep L and move vertices in the shader |
 | Mirrors, video screens | not `ContributeGI`, not L | they bake as coloured area lights or hang Progressive |
 | Far scenery, skyline, backdrops | L in one small shared group, or P/off outside the probe hull | never in a hero group |
 | LOD levels | L per LOD level group (Bakery `sceneLodLevel`), LOD1/2 discounted; or P | GLIM bakes hand-authored LOD0 only |
@@ -73,7 +80,7 @@ Full table with reasons and settings: [references/reception-and-density.md](refe
   - one small shared fixed group (e.g. 512) for background and terrain;
   - SSS in its own group;
   - one group per LOD level;
-  - probe-lit renderers carry no selector.
+  - P renderers carry no selector.
 - **Padding:** gutters measured in texels at the final resolution ≥ padding + 1. Bakery texel
   padding 8 on hero groups.
 
@@ -106,7 +113,7 @@ Run it on every lightmapped renderer of the baked area. Flag a renderer when:
 | 6 | Too small to lightmap | largest bounds < 0.12 m, or middle < 0.12 m with fewer than 12 texels across it |
 | 7 | Short side | < 8 texels across the main face's short side |
 | 8 | UV2 validity | missing, outside 0–1, NaN; charts ÷ triangles ≥ 0.9 |
-| 9 | Groups | ungrouped lightmapped renderers; probe-lit renderers with a selector; LOD renderers without a per-level group |
+| 9 | Groups | ungrouped lightmapped renderers; P renderers with a selector; LOD renderers without a per-level group |
 | 10 | Gutters | < padding + 1 texels at final resolution |
 
 Each flag gets a fix:

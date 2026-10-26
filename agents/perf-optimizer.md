@@ -42,6 +42,9 @@ follow `WORLD.md`.
   estimate ≤ 400 MB; upload size ≤ 200 MB.
 - Compressed textures; mirrors start off. Attribute cost before optimizing (Rule 0,
   `.omp/skills/vrchat-world-optimization/SKILL.md`).
+- **The world still has to look nice**, and that outranks the texture VRAM and upload budgets: when
+  one of them can only be met by a visible loss, report it to the user as a tradeoff instead of
+  applying it.
 - Android/iOS build (when WORLD.md plans one): use the Android budgets table in
   `.omp/skills/vrchat-android-worlds/SKILL.md` §4; these PC defaults still govern the PC build.
 
@@ -117,7 +120,16 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
      overrides them; list the top 20 renderers by tris.
    - Textures: size vs on-screen size, compression format (uncompressed RGB24/RGBA32 is a finding;
      GLB-embedded textures bypass compression), mip maps, aniso; total VRAM estimate (grade it with
-     `--static textureVramMB=<n>`).
+     `--static textureVramMB=<n>`). Reduction (size cap, crunch, compression format) is selective,
+     texture by texture: reduce only where the same-camera before/after shows no visible loss at
+     the distance players actually see the surface from. Things seen only from afar, hidden backs,
+     small props, tiling detail maps and roughness/metal maps that show no difference usually can
+     go down; hero surfaces, compared at near reach (≤ 1 m) and at normal viewing distance, usually
+     can't: wood grain on tables, fabric on sofas and beds, art and paintings, signage and text,
+     faces and fumos, floors at your feet, close-up decor. A skybox visible from anywhere in the
+     world stays at full resolution and is never reduced or lossy-compressed (user 2026-10-26: it
+     is a big part of the world); only a fully enclosed world with no sky visible may reduce it.
+     Procedure: skill references/texture-caps.md.
    - Materials and draw calls per area; missing static flags; LODGroups with stale `size`;
      realtime lights (must be 0); mirrors on by default (should start off).
    - **Animators on static props**: count `Animator` components under static roots (rigged or
@@ -129,10 +141,11 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
      diff before/after builds with its Build Report Comparison (skill references/texture-caps.md
      "Upload size"). Size and frame cost are separate findings; never quote one for the other.
 5. **Fix**, cheapest wins first, only after showing the attribution table, aimed at the top rows.
-   Allowed without asking (reversible): texture max size / compression / mip settings, LODGroup
-   add/tune, cull distances and layer cull distances, static flags, occlusion bake, disabling
-   per-instance terrain paths when replaced, merged static cells (keep the source data). **Ask the
-   orchestrator first** for: deleting objects, decimating meshes, changing materials' look.
+   Allowed without asking (reversible): texture max size / compression / mip settings within the
+   selective rule in step 4, LODGroup add/tune, cull distances and layer cull distances, static
+   flags, occlusion bake, disabling per-instance terrain paths when replaced, merged static cells
+   (keep the source data). **Ask the orchestrator first** for: deleting objects, decimating meshes,
+   changing materials' look.
 6. **Prove each fix**:
    - Performance: re-run the same viewpoint sample on the same content; quote before/after values
      and both bands from `perf_grade.py`.
@@ -168,9 +181,9 @@ to, reason) per → C item to `<project>/Trial/log.jsonl` with
 `.omp/skills/pipeline-trial/scripts/trial_report.py --append`; schema in
 `.omp/skills/pipeline-trial/SKILL.md` "Event log".
 
-## Lessons that cost a session (Penthouse, 2026-10)
+## Lessons that cost a session (2026-10)
 
-Details and evidence: the skill's `references/merging.md`.
+Details and evidence for the culling and merging lessons: the skill's `references/merging.md`.
 
 - **Runtime hiding uses `renderer.forceRenderingOff`.** Toggling `enabled` or `SetActive` in play
   splits static batches for the rest of the session (library 253 → 375 draws after one garden visit).
@@ -186,6 +199,9 @@ Details and evidence: the skill's `references/merging.md`.
 - **Test views use a 110° FOV** (user directive 2026-10-13): it matches the headset's real field of
   view best and shows edge-of-view culling that a 60–90° desktop camera hides. Culling tests, capture
   sweeps and before/after renders all default to 110°; quote any other FOV explicitly.
+- **A visible skybox is excluded from every texture pass.** A perf round compressed it to BC6H 4096
+  in spite of a standing project directive, and the user rejected it; check `WORLD.md` and the
+  project `AGENTS.md` for protected textures before any texture change.
 
 ## Safety
 

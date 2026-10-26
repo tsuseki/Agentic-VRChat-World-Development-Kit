@@ -21,7 +21,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 
 ## Lights and particles
 
-- **Keep the sun a Baked light, never realtime or Mixed (shadowmask included), and cover everything that moves with light probes** — realtime cascades over a big world are a top avoidable cost on low-end PCs; aim for big-scale shadows only.
+- **Keep the sun a Baked light, never realtime or Mixed (shadowmask included), and light everything that moves with VRC Light Volumes (light probes as the fallback)** — realtime cascades over a big world are a top avoidable cost on low-end PCs; aim for big-scale shadows only.
 - **Turn off ParticleSystem world collision; keep rain off covered areas with a ring emission shape (`radiusThickness` < 1, `arcMode` Random)** — High-quality collision ignores the raycast budget (7 FPS vs 85 FPS for the same 130k particles); see SKILL.md §Where the cost actually hides. Size the ring to what is visible.
 
 ## Textures and VRAM

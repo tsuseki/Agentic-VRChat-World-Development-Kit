@@ -103,7 +103,9 @@ a duplicate, not static lightmapping (`.omp/agents/blender-modeler.md` "Avatar w
    it as a `.asset`, and assign it to the MeshFilter. Verify a long unwrap actually
    completed before retrying.
 3. Confirm materials match the project's render pipeline and installed shaders; PBR maps
-   may need manual material setup. Magenta = shader/pipeline mismatch.
+   may need manual material setup. Magenta = shader/pipeline mismatch. A prop that won't be
+   lightmapped (moving, a pickup, or small with a UV2 that fails the audit) gets an
+   LV-compatible material (`<name>_LV.mat`; `.omp/skills/lightmap-allocation/SKILL.md` §1).
 4. GLB sub-asset textures can ship uncompressed — re-encode them as compressed Unity
    texture assets before shipping (see
    [vrchat-world-optimization](../vrchat-world-optimization/SKILL.md)).

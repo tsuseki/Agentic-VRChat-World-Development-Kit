@@ -55,7 +55,9 @@ downgrade to a dressing-only pass, put it at the top of the report, and return *
 - Reflection probes re-baked after the lightmaps: compare probe texture timestamps with the lightmap
   timestamps. Identical `.exr` checksums across probes (`md5sum`) mean skybox-only captures
   (renderers missing `ReflectionProbeStatic`), which is a blocker.
-- Moving/dynamic objects sit inside `LightProbeGroup` coverage.
+- VRC Light Volumes were baked with this bake and cover every playable area; a `LightProbeGroup`
+  exists as the coarse fallback for legacy avatars and outside the volumes (check it exists, never
+  grade its placement, and never judge world props by probe light).
 
 ## Criteria
 
@@ -124,6 +126,11 @@ downgrade to a dressing-only pass, put it at the top of the report, and return *
      
      Shoot each flagged renderer at near reach. Listing the flagged count with its shots is required;
      an audit nobody ran counts as a failed criterion.
+   - **Light-Volume-lit renderers** (everything not lightmapped: dynamic and non-static props,
+     pickups, animated parts, P renderers per `.omp/skills/lightmap-allocation/SKILL.md` §1): list
+     any on a non-LV shader. A Standard-shader dynamic prop is a should-fix (→ C, material: an
+     LV-compatible `<name>_LV.mat` copy). Judge these props in play mode (edit mode pushes no volume
+     data) next to their lightmapped neighbours, never by probe light.
 3. **Reflections**: blue skybox sheen indoors (null or stale probe), mismatched probe boxes, glossy
    surfaces reflecting the wrong room.
 4. **Composition under final light**: focal points actually lit, spawn view composes, landmarks

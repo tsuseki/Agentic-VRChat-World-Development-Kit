@@ -1,18 +1,24 @@
 # Reception and density
 
 How each renderer class receives light, how many texels it gets, and how the atlas is split.
-Modes: **L** lightmapped, **P** probe/Light-Volume-lit but still casting, **D** dynamic (see SKILL.md §1).
+Modes: **L** lightmapped, **P** Light-Volume lit (`receiveGI = LightProbes`, LV shader) but still
+casting, **D** dynamic on an LV shader (see SKILL.md §1).
 
 ## 1. Reception per class
 
 ### Defaults and how a world changes them
 
-- **Nothing that never moves is probe-lit, except the classes below** (user rule; the lighting
-  standard lives in the bakery-light-baking skill). Each P row is a named exception, not a shortcut.
-- **Light Volumes light small props only:** about ≤ 0.4 m bounds, plus loose soft decor. Furniture,
-  fixture bodies, lamps, rugs, large plants and pots and statues stay L on their original material.
+- **Nothing that never moves is P, except the classes below** (user rule; the lighting standard
+  lives in the bakery-light-baking skill). Each P row is a named exception, not a shortcut.
+- **Every P and D renderer is lit by VRC Light Volumes** on an LV-compatible shader (`<name>_LV.mat`
+  copy of its material); a Standard-shader P or D renderer is a finding. Light probes are only a
+  coarse fallback grid for legacy avatars and outside the volumes.
+- **Among static props, only small ones go to Light Volumes:** about ≤ 0.4 m bounds, plus loose
+  soft decor, and only when their UV2 fails the audit. Furniture, fixture bodies, lamps, rugs, large
+  plants and pots and statues stay L on their original material.
 - A world overrides a row in its `WORLD.md` Decisions log with the user's words, e.g. "LV threshold
-  0.6 m in this world" or "no Light Volumes: small decor lightmapped with Blender UV2".
+  0.6 m in this world". Legacy world without Light Volumes: P and D are probe-lit on their own
+  materials.
 
 ### Class table
 
@@ -22,18 +28,18 @@ Modes: **L** lightmapped, **P** probe/Light-Volume-lit but still casting, **D** 
 | Hidden exterior envelope, wall backs, roof undersides nobody sees | L at Scale In Lightmap 0.1, or 0, or `ShadowsOnly` | 0 = occluder only: still renders, still casts, gets no chart and needs probes; `ShadowsOnly` for geometry that must not render | one hidden envelope took 68 % of an atlas and starved a door to ~9 texels |
 | Large furniture > ~0.4 m (sofas, beds, tables, cabinets, wardrobes, lamp bodies, rugs, big plants and pots, statues, toilets, tubs, vanities) | L | valid UV2 passing the audit; Scale In Lightmap so the main face's short side ≥ 8 texels (cushion-heavy sofas 3–4, toilets up to 16) | fragmented auto UV2 on these gets re-unwrapped (uv2-quality.md §2); probes are not the fix for a big piece |
 | Bedding that is part of a bed mesh | L with the bed | re-unwrap the bed: one bed had 7,600 of 8,254 UV2 triangles degenerate | loose throws and pillows on it are the next row |
-| Soft or organic small pieces: pillows, cushions, throws, folded linen (≤ ~0.6 m), small sculptures and figurines (≤ ~0.4 m) | L if the UV2 passes the audit; P if it fails (expected for auto-unwrapped soft pieces) | P: `ContributeGI` on, `receiveGI = LightProbes`, `BlendProbes`, LV-aware material copy in LV worlds, no group selector, storage row removed | they keep their contact shadow in the bake. One pillow had 104 charts, 94 of them under 4 texels. The user's rule: small props go to light volumes only when their lightmap is broken |
-| Small hard decor ≤ ~0.4 m: bottles, taps, levers, soap, fruit, souvenirs, books on shelves, small towels | L if the UV2 passes and the short side reaches 8 texels; else P (LV in LV worlds) | as above | thin hose and holder charts of ~37 texels baked striped. The user's 2026-10-22 rule: small props with complicated UVs go to light volumes |
+| Soft or organic small pieces: pillows, cushions, throws, folded linen (≤ ~0.6 m), small sculptures and figurines (≤ ~0.4 m) | L if the UV2 passes the audit; P if it fails (expected for auto-unwrapped soft pieces) | P: `ContributeGI` on, `receiveGI = LightProbes`, `BlendProbes`, LV material copy (`<name>_LV.mat`), no group selector, storage row removed | they keep their contact shadow in the bake. One pillow had 104 charts, 94 of them under 4 texels. The user's rule: small props go to light volumes only when their lightmap is broken |
+| Small hard decor ≤ ~0.4 m: bottles, taps, levers, soap, fruit, souvenirs, books on shelves, small towels | L if the UV2 passes and the short side reaches 8 texels; else P | as above | thin hose and holder charts of ~37 texels baked striped. The user's 2026-10-22 rule: small props with complicated UVs go to light volumes |
 | Tiny parts (middle bounds < ~0.12 m) | P | as above | no margin or scale rescues a 1–2 texel chart |
-| Flush wall fittings < ~20 cm | P, seated 0.5 mm proud | probe-lit plates can read 0.6–2.7× the wall; tint by measurement | a lightmapped switch plate got 4 × 3 texels; a removed one leaves its baked shadow |
-| Glass, glazing, transparent panes, shower screens | P | `receiveGI = LightProbes` only; leave `ContributeGI` as the world has it; `ReflectionProbeStatic` off | 0.02–0.03 m panes: a 60 m rail panel claimed ~1000 texels of a 2048 atlas; edge charts sit a hair from face charts and gutter-bleed onto what players look through. 129 panes moved freed ~32,000 m² of atlas demand |
+| Flush wall fittings < ~20 cm | P, seated 0.5 mm proud | P plates can read 0.6–2.7× the wall; tint by measurement | a lightmapped switch plate got 4 × 3 texels; a removed one leaves its baked shadow |
+| Glass, glazing, transparent panes, shower screens | P | `receiveGI = LightProbes` only; leave `ContributeGI` as the world has it; `ReflectionProbeStatic` off; where it is lit, an LV-compatible shader | 0.02–0.03 m panes: a 60 m rail panel claimed ~1000 texels of a 2048 atlas; edge charts sit a hair from face charts and gutter-bleed onto what players look through. 129 panes moved freed ~32,000 m² of atlas demand |
 | Hero trees (cutout leaf cards + bark) | L | hand-built Lightmap UV in the FBX (lowpoly-tree-generation skill), bark weighted well above leaves, leaf shader tagged `RenderType = TransparentCutout` | area-weighted unwraps give bark ~3 % of the UV2, so limbs bake one flat colour unlike the trunk |
 | Scatter plants, shrubs, small potted plants | P | no selector | scatter and LOD props on probes took one 2,626-renderer scene to 3 atlases |
 | Grass and ground cards | L, or a shader that samples the ground lightmap at the blade root | — | probe-lit cards stay sunlit inside baked tree shadows |
 | `BakeryLightMesh` emitters | never L | no selector, no storage row; `lightmapIndex -1` is correct | Bakery hard-skips them; split a small emitter child from a lightmapped body |
 | Emissive glow strips, LED nosings | as their emitter design; id −1 rows are expected | — | count them as "unbound by design" in checks |
 | SSS shades and translucent fabric | L | own `computeSSS` group, closed volume with thickness, shadows On, Scale In Lightmap ~6, emission ~0 | SSS is per group and needs a casting volume |
-| Pickups, Udon-moved objects, doors that swing, animated parts | D | `BlendProbes`, probe coverage where they go; LV material in LV worlds | nothing that moves gets a baked shadow; a never-moving one can get a ShadowsOnly proxy |
+| Pickups (plushies included), Udon-moved objects, doors that swing, animated parts | D | LV material copy (`<name>_LV.mat`; Standard is a finding), `BlendProbes`, inside Light Volume coverage where they go | nothing that moves gets a baked shadow; a never-moving one can get a ShadowsOnly proxy |
 | Ambient-motion decor (curtains, hanging lanterns) | L | sway by vertex offset in the shader, phase from vertex colour or a spare UV (not UV2), padded bounds | moving the Transform makes it D and it stops matching its neighbours |
 | Mirrors, video and runtime screens | not `ContributeGI`, not L | — | a screen bakes its placeholder as a coloured area light; a mirror loops Progressive forever |
 | Far scenery, skyline, backdrop cards | L in one small shared group at 1–5 texels/m, or P; outside the probe hull probe usage Off | — | never let far content share a hero group |
@@ -52,7 +58,7 @@ usual final preset; Scale In Lightmap and group resolution move each class to it
 | Hero interior shell near seats and beds | 20–40 | 20 is not proof of starvation; measure and render first |
 | Other interior shell, corridors | 12–25 | |
 | Furniture players sit or lie on | 30–60 | garden sofas went from 2.4 (black pillows) to 24.5–27.8 at Scale In Lightmap 4 |
-| Small lightmapped decor (no-LV worlds) | ≥ 8 texels across the short side | usually 60–160 texels/m; a static plush at Scale In Lightmap 8 got ~56² texels |
+| Small lightmapped decor | ≥ 8 texels across the short side | usually 60–160 texels/m; a static plush at Scale In Lightmap 8 got ~56² texels |
 | Tree bark | thinnest visible limb ≥ 2 texels around, trunk ≥ 8 | set in the tree's UV, Scale In Lightmap 1 |
 | Exterior play area, garden ground | 10–30 | ~4 texels/m average (p10 1.6) read as blurry shadows |
 | Ground where contact shadows matter | ≥ 10 | at ~1 texel/m nothing casts a readable ground shadow |
@@ -95,8 +101,8 @@ gapTexels    = minGapBetweenChartsInUV × T
   headroom before piling more area into it; a fixed group just thins everyone.
 - **Background:** terrain, far scenery and the exterior shell go into one small shared fixed group
   (512–1024).
-- **Probe-lit renderers carry no selector.** A group whose members are all probe-lit still bakes and
-  binds a full empty atlas.
+- **P renderers carry no selector.** A group whose members are all P still bakes and binds a full
+  empty atlas.
 - **Selectors live on rebuild-stable roots.** A builder that destroys and recreates its root deletes
   them. A blunt "assign all" script wipes hand-made hero, LOD and SSS groups unless it rebuilds those
   refinements last.

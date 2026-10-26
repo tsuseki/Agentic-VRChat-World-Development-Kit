@@ -29,7 +29,11 @@ texture-memory changes follow texture-decisions.md and still need §4.
    foliage, a floor pattern on a tread, gloss painted into the albedo, emitters facing into a shade,
    softness baked into an HDRI. Run §2 A first; tune only an asset whose texture is right.
 3. **Shader.** Built-in RP only: URP/HDRP and Shader Graph materials import magenta. Use the project's
-   default prop shader (`.omp/skills/worldbuilding-assets/SKILL.md`). Write or vendor a custom shader
+   default prop shader (`.omp/skills/worldbuilding-assets/SKILL.md`). Anything not lightmapped
+   (dynamic props, pickups, small props whose UV2 fails the audit) is lit by VRC Light Volumes and
+   needs an LV-compatible shader: `Light Volume Samples/Light Volume PBR` through a `<name>_LV.mat`
+   copy, or lilToon/Poiyomi for stylised assets; a Standard-shader dynamic prop is a finding
+   (`.omp/skills/lightmap-allocation/SKILL.md` §1). Write or vendor a custom shader
    only for a need the default can't meet: fog that survives mirrors, fake interiors behind distant
    windows, depth-tested world text, cutout without framebuffer blend, a dither against banding (§2 F).
 4. **Texture set and import.** Convert PBR sets offline into the shader's channel packing, then set
@@ -66,7 +70,7 @@ The builder checks every row that applies to the pass; the reviewer can verify e
 | NPOT art squashed, or imported as RGB24 | Default `ToNearest` rounds each axis separately (aspect changes); NPOT + mips or `None` blocks BC compression. Use `npotScale = ToLarger`; size the quad from the source file's pixel aspect, never `Texture.width/height`; confirm the resolved platform format is compressed |
 | PBR set (e.g. ambientCG) into Standard | `_MetallicGlossMap` = metallic in R, inverted roughness (255 − v) in A; GL normal (Y+), NormalMap type; mask and AO `sRGB` off, mask `alphaSource = FromInput` or the smoothness is discarded. Prefer a set whose own albedo mean sits near the target; a strong `_Color` correction erases its pattern |
 | Polished stone floor turns into a black mirror | With a gloss map bound, `_GlossMapScale` (not `_Glossiness`) rules: honed stone ≈ 0.35, plaster ≈ 0.45, wood ≈ 0.50 |
-| HDRI skybox blurry through big windows | 8192×4096 equirect → `maxTextureSize` 2048 (one 90° cube face); 1024 halves the detail, above 2048 is waste. Preview many via an ffmpeg contact sheet; hide the glass before blaming import |
+| HDRI skybox blurry through big windows | A visible skybox stays at full resolution and is never reduced or lossy-compressed (user 2026-10-26: it is a big part of the world); only a fully enclosed world with no sky visible may reduce it. Imported as a cubemap, an 8192×4096 equirect keeps its full detail at 2048 per face (one 90° face); 1024 halves it. Preview many via an ffmpeg contact sheet; hide the glass before blaming import |
 | Generated night panorama reads as dusk | Prompt for "deep night, moonless, no twilight", drop orange-cloud wording; darken the sky but protect lights by local contrast, not raw luminance; draw stars as ellipses widened by 1/cos(elevation), after any upscale, with an HDR boost to survive BC6H |
 
 ### C. Mapping and tiling
