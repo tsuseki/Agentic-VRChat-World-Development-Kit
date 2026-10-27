@@ -6,6 +6,7 @@ Writes a float32 (size, size) array, image row 0 = top, 1 = unoccluded."""
 import bpy, bmesh, sys, os, math
 import numpy as np
 from mathutils.bvhtree import BVHTree
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from cycles_gpu import use_gpu
 a = sys.argv[sys.argv.index("--") + 1:]; src, out = os.path.abspath(a[0]), os.path.abspath(a[1])
 N = int(a[2]) if len(a) > 2 else 2048; DIST = float(a[3]) if len(a) > 3 else 0.02
 bpy.ops.wm.read_factory_settings(use_empty=True); sc = bpy.context.scene
@@ -37,7 +38,7 @@ for i, v in enumerate(me.vertices):
 bpy.data.objects.remove(prox, do_unlink=True)
 ca = me.color_attributes.new("AO", "FLOAT_COLOR", "POINT")
 for i, v in enumerate(ao): ca.data[i].color = (v, v, v, 1)
-sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"; sc.cycles.samples = 4
+use_gpu(sc); sc.cycles.samples = 4
 img = bpy.data.images.new("ao", N, N, alpha=False, float_buffer=True); img.colorspace_settings.name = "Non-Color"
 m = bpy.data.materials.new("bake"); m.use_nodes = True; nt = m.node_tree
 for nd in list(nt.nodes): nt.nodes.remove(nd)

@@ -5,6 +5,7 @@ Writes <out_dir>/<name>_{A,B}_{front,q34,face}.png (RGBA, transparent background
 Material mimics the Light Volume PBR plush material: metallic 0, roughness 0.9."""
 import bpy, sys, os, math
 from mathutils import Vector
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from cycles_gpu import use_gpu
 a = sys.argv[sys.argv.index("--") + 1:]; out = os.path.abspath(a[0]); os.makedirs(out, exist_ok=True)
 PX = int(os.environ.get("LV_PX", "700")); SMP = int(os.environ.get("LV_SAMPLES", "64"))
 FZ = float(os.environ.get("LV_FACE_Z", "0.17")); FD = float(os.environ.get("LV_FACE_D", "0.34"))
@@ -42,7 +43,7 @@ for spec in a[1:]:
     cr.color_ramp.elements[1].position = 0.70; cr.color_ramp.elements[1].color = (1.0, 1.0, 1.05, 1)
     bg.inputs[1].default_value = 1.15
     cd = bpy.data.cameras.new("c"); cam = bpy.data.objects.new("c", cd); sc.collection.objects.link(cam); sc.camera = cam
-    sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"; sc.cycles.samples = SMP; sc.cycles.use_denoising = True
+    use_gpu(sc); sc.cycles.samples = SMP; sc.cycles.use_denoising = True
     sc.render.film_transparent = True; sc.render.resolution_x = sc.render.resolution_y = PX
     sc.view_settings.view_transform = "Standard"; sc.view_settings.look = "None"
     sc.render.image_settings.file_format = "PNG"; sc.render.image_settings.color_mode = "RGBA"

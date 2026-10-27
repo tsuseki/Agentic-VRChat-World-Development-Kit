@@ -2,6 +2,7 @@
 Usage: blender -b --factory-startup --python lineup_shaded.py -- <out_dir> <name>=<fbx>=<tex> ...   env: SH_YAW (deg, 22), SH_PITCH (deg down, 10), SH_PX (600), SH_SAMPLES (64)"""
 import bpy, sys, os, math
 from mathutils import Vector
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from cycles_gpu import use_gpu
 a = sys.argv[sys.argv.index("--") + 1:]; out = os.path.abspath(a[0]); os.makedirs(out, exist_ok=True)
 YAW = float(os.environ.get("SH_YAW", "22")); PITCH = float(os.environ.get("SH_PITCH", "10")); PX = int(os.environ.get("SH_PX", "600")); SMP = int(os.environ.get("SH_SAMPLES", "64"))
 def area(name, loc, target, size, energy, color=(1, 1, 1), shadow=True):
@@ -39,7 +40,7 @@ for spec in a[1:]:
     c = Vector((0, 0, 0.115)); r = math.radians(YAW); p = math.radians(PITCH); d = 0.95
     cam.location = c + Vector((math.sin(r) * math.cos(p) * d, -math.cos(r) * math.cos(p) * d, math.sin(p) * d))
     cam.rotation_euler = (c - cam.location).to_track_quat("-Z", "Y").to_euler()
-    sc.render.engine = "CYCLES"; sc.cycles.device = "CPU"; sc.cycles.samples = SMP; sc.cycles.use_denoising = True
+    use_gpu(sc); sc.cycles.samples = SMP; sc.cycles.use_denoising = True
     sc.render.film_transparent = True; sc.render.resolution_x = sc.render.resolution_y = PX
     sc.view_settings.view_transform = "Standard"; sc.view_settings.look = "None"
     sc.render.image_settings.file_format = "PNG"; sc.render.image_settings.color_mode = "RGBA"
