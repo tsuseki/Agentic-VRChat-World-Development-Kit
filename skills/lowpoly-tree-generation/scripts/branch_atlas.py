@@ -21,6 +21,14 @@ pixels in the bottom STEM_ROWS rows. The fan is scaled (uniformly, no warp) and 
 lands exactly on its cell's bottom-centre: u = cell centre, v = cell bottom. The other three sides keep
 MARGIN px of transparency. JSON (UV, v up): {"cells": [{"rect": [u0, v0, u1, v1], "attach": [u, v]}]}
 where attach is the cell's bottom-centre, i.e. the card's attach vertex.
+
+Open-spray check (always on; rule: every leaf cell is a spray, never a leaf mat/patch/carpet): after the build every
+cell is measured at the 0.45 cutout (alpha >= 115): opaque fraction of the cell, and the largest solid blob (connected
+component after a morphological opening with a disk of radius max(3, 0.008 x cell width), which strips twigs, stalks
+and thin leaf contacts, so separate leaves on twigs stay small blobs and a closed leaf mass stays one). A cell FAILS
+when opaque > 0.55 or blob > 0.25; the outputs are still written (for inspection) and the run exits 1.
+  python branch_atlas.py --check <Leaves_RGBA.png> [--layout <layout.json> | --cards <Leaves_Cards.json>]
+measures an existing sheet the same way (exit 1 on any FAIL).
 """
 import json, os, sys, tempfile
 import numpy as np
@@ -35,7 +43,7 @@ def _opt(k):
 KEY = _opt("--key") or "magenta"
 LAYOUT_FILE = _opt("--layout")
 ARGS = [a for i, a in enumerate(sys.argv[1:], 1)
-        if not a.startswith("--") and sys.argv[i - 1] not in ("--key", "--layout")]
+        if not a.startswith("--") and sys.argv[i - 1] not in ("--key", "--layout", "--check", "--cards")]
 EDGE = EDGE_DESPILL if "--edge-despill" in sys.argv else 0
 DEFRINGE = "--defringe" in sys.argv
 MARGIN, STEM_ROWS = 16, 3
@@ -45,6 +53,33 @@ if LAYOUT_FILE:
 else:
     LAYOUT = None; SIZE = 2048; CELLS = [(c * 1024, r * 1024, 1024, 1024) for r in range(2) for c in range(2)]
 SOURCES = ARGS[2:2 + len(CELLS)]
+SPRAY_MAX_OPAQUE, SPRAY_MAX_BLOB = 0.55, 0.25
+
+
+def spray_check(alpha, cells):
+    """Open-spray rule per cell (image-space [x, y, w, h]): (opaque, blob, ok) at the 0.45 cutout."""
+    out = []
+    for (x, y, w, h) in cells:
+        a = alpha[y:y + h, x:x + w] >= 115
+        r = max(3, round(0.008 * w))
+        core = ndimage.distance_transform_edt(a) > r                  # erosion by a disk of radius r
+        opened = (ndimage.distance_transform_edt(~core) <= r) & a      # dilation back = opening
+        lab, n = ndimage.label(opened)
+        blob = float(np.bincount(lab.ravel())[1:].max()) / a.size if n else 0.0
+        opq = float(a.mean())
+        out.append((round(opq, 3), round(blob, 3), opq <= SPRAY_MAX_OPAQUE and blob <= SPRAY_MAX_BLOB))
+    return out
+
+
+def report_spray(alpha, cells):
+    res = spray_check(alpha, cells)
+    for i, (o, b, ok) in enumerate(res):
+        print(f"SPRAYCHECK cell {i} opaque {o} blob {b} {'PASS' if ok else 'FAIL'} "
+              f"(max opaque {SPRAY_MAX_OPAQUE}, blob {SPRAY_MAX_BLOB})")
+    bad = [i for i, r in enumerate(res) if not r[2]]
+    print(f"SPRAYCHECK {'FAIL cells ' + str(bad) if bad else 'PASS'}: every leaf cell must be an open spray (individual "
+          "leaves on visible twigs, gaps, ragged outline), never a solid leaf mat / patch")
+    return not bad
 
 
 def stem_end(alpha):
@@ -97,7 +132,28 @@ def main(out_png, out_json):
     out = {"cells": cells}
     if LAYOUT: out["layout"] = LAYOUT
     json.dump(out, open(out_json, "w"), indent=1)
+    if not report_spray(alpha, CELLS[:len(cells)]):
+        raise SystemExit("SPRAYCHECK FAILED: replace the failing cell with an open spray (outputs written for inspection)")
+
+
+def check_sheet(png):
+    cells = CELLS
+    if _opt("--cards"):
+        d = json.load(open(_opt("--cards")))
+        if "layout" in d:
+            cells = [tuple(c) for c in d["layout"]["cells"]]
+        else:  # UV rects (v up) -> image-space px
+            S = Image.open(png).height
+            cells = [(round(u0 * S), round((1 - v1) * S), round((u1 - u0) * S), round((v1 - v0) * S))
+                     for u0, v0, u1, v1 in (c["rect"] for c in d["cells"])]
+    alpha = np.asarray(Image.open(png).convert("RGBA"))[..., 3]
+    print("SPRAYCHECK sheet", png)
+    if not report_spray(alpha, cells):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":
-    main(ARGS[0], ARGS[1])
+    if _opt("--check"):
+        check_sheet(_opt("--check"))
+    else:
+        main(ARGS[0], ARGS[1])

@@ -47,9 +47,12 @@
 #       (+ lift m up), one small dome per twig cluster (cloud-pruned pads). skin=k (opt-in, < 1): the root moves k x the
 #       twig radius out along that surface normal, so the card lies on the outer side of a twig running along the face
 #       instead of halving it (still inside the attach tolerance). No extra random draws: off = identical builds.
-#   crown cells=[i, ...] (sprig/bamboo, opt-in): cards draw only these cells of <tex>_Leaves_Cards.json (one atlas, a
-#       dense twig-free clipped-surface cell for the topiary variants and open sprays for the free ones). Same single
-#       rng.choice per card: off = identical builds.
+#   crown cells=[i, ...] (sprig/bamboo, opt-in): cards draw only these cells of <tex>_Leaves_Cards.json (one atlas;
+#       e.g. a subset of sprays per variant). Every leaf cell is an open spray, never a dense leaf patch (user
+#       2026-10-27). Same single rng.choice per card: off = identical builds.
+#   crown cell_scale=True (sprig, opt-in): each card's length x its drawn cell's Cards.json "scale" (default 1), so a
+#       cell painted with bigger leaves builds the same leaf size in metres as the others (Masaki cell 1, 2026-10-27).
+#       No extra random draws: off = identical builds.
 #   crown roles=dict(frac=0.2, low=True) (sprig, opt-in; needs Cards.json cells with "role": "full" | "lateral" |
 #       "shoot" | "sprig", optional "scale" = card length multiplier, default 1): a dry first pass on a copy of the
 #       random state finds every card's far end; the cards that stick out of the crown (the `frac` share of tip and
@@ -879,6 +882,8 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         else:
             d = ((-UP + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * UB)).normalized()
         roll, cell = nrm if nrm is not None else rand_unit(rng), rng.choice(cards_cells)
+        if C.get("cell_scale"):  # opt-in (sprig): the drawn cell's Cards.json "scale" (card length multiplier, default 1)
+            sz *= cell.get("scale", 1.0)  # so a cell drawn with bigger leaves builds the same leaf size in metres; no draws
         fl = C.get("flat", 0.0) if C["mode"] == "sprig" and not hang else 0.0
         if fl:  # flat (sprig): cards lie toward horizontal with their face toward the sky (layered flat crowns)
             if Vector((d.x, d.y, 0.0)).length > 1e-6: d = Vector((d.x, d.y, d.z * (1.0 - fl))).normalized()
