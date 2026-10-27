@@ -19,6 +19,7 @@ setup, fire screams and placement of fumo-style plush pickups. Distilled from th
 - **Texture from the sidebar Texture panel with Remove Lighting on and 2K, not the viewer-bar button** — painted-in shading doubles up with the world's light.
 - **Run Smart UV on every plush; unwrap before texturing, or bake the existing texture across with `transfer_bake.py`** — Smart UV removes the texture, but it keeps the mesh bit-identical and cuts Tripo's 1,300–2,500 tiny-island seams down to a few large islands (Kutsu 2,119 → 618).
 - **Render and bake with Cycles on the GPU (`cycles_gpu.use_gpu`)** — the same texture transfer took 533 s on the CPU and 19 s on OptiX.
+- **When an FBX replaces a Unity asset in place, keep the old node name (`MESH_NAME`)** — Unity names a single-mesh FBX's mesh after the node, so 4 of 11 swapped plushies whose mesh was still called `Fumo_CharN_P2` lost their MeshFilter reference until the node was renamed back.
 - **A few non-manifold edges on a P2.0 mesh are fine** — 6 pieces, 25 non-manifold edges and 247 charts still baked evenly; 40–270 non-manifold edges on the 4.5k meshes shipped fine.
 - **The API cannot choose these options; Studio credits are separate from API credits** — about 100 credits for four takes plus 10 for the texture, per character.
 - **Studio automation needs the logged-in profile and a clean Chrome** — kill only the Chrome whose command line contains the profile directory before each step; positions assume a 1440×900 viewport.
