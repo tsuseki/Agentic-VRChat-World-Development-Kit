@@ -25,15 +25,18 @@ with sync_playwright() as p:
         pg.get_by_text("Confirm", exact=True).last.click()
         pg.get_by_text("Unwrap UV", exact=False).last.wait_for(timeout=120000); pg.wait_for_timeout(8000); shot(pg, "loaded")
         pg.get_by_text("Unwrap UV", exact=False).last.click(); pg.wait_for_timeout(4000); shot(pg, "unwrap_clicked")
-        t0 = time.time()
-        while time.time() - t0 < 300:                       # done when the Save button appears
+        t0 = time.time(); done = False
+        while time.time() - t0 < 600:                       # done when the Save button appears (one unwrap took > 5 min)
             pg.wait_for_timeout(10000)
-            if pg.get_by_text("Save", exact=True).count() and pg.get_by_text("Save", exact=True).last.is_visible(): break
+            if pg.get_by_text("Save", exact=True).count() and pg.get_by_text("Save", exact=True).last.is_visible(): done = True; break
         shot(pg, "unwrapped")
+        if not done:
+            raise SystemExit("UNWRAP_PENDING: the unwrap is paid and keeps running server-side; finish later with "
+                             "studio_smartuv_finish.py <tile x> <tile y> <out_dir> (do not upload again)")
         body = pg.inner_text("body"); util = body.split("Utilization")[1].split("%")[0].strip() if "Utilization" in body else "?"
         pg.get_by_text("Save", exact=True).last.click(); pg.wait_for_timeout(15000); shot(pg, "saved")
         print("utilization", util, "credits after", credits(pg), flush=True)
-        pg.get_by_text("Export", exact=True).last.click(); pg.wait_for_timeout(4000); shot(pg, "export_dialog")
+        pg.mouse.click(945, 864); pg.wait_for_timeout(4000); shot(pg, "export_dialog")   # bottom-bar Export (a toast can cover the text locator)
         with pg.expect_download(timeout=180000) as d:
             pg.mouse.click(997, 796)
         dl = d.value; path = os.path.join(out, dl.suggested_filename); dl.save_as(path)
