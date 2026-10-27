@@ -38,7 +38,8 @@ vs = [v.co for v in ob.data.vertices]
 mn = Vector([min(v[i] for v in vs) for i in range(3)]); mx = Vector([max(v[i] for v in vs) for i in range(3)])
 k = height / (mx.z - mn.z); off = Vector(((mn.x + mx.x) / 2, (mn.y + mx.y) / 2, mn.z))
 for v in ob.data.vertices: v.co = (v.co - off) * k
-ob.name = ob.data.name = name
+ob.name = name
+ob.data.name = os.environ.get("MESH_NAME") or name  # keep an existing Unity asset's mesh name so scene references survive a swap
 
 # --- textures out (service FBX references images in <fbx>.fbm/; load them directly)
 if ob.material_slots and ob.material_slots[0].material: ob.material_slots[0].material.name = "M_" + name

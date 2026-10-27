@@ -21,9 +21,9 @@ Keep each run in `<project>/SourceAssets/Fumos<date>_<Name>/`: `refs/`, `work/`,
 ## The recipe in one paragraph (the "Kutsu way")
 
 Approved four-view concept → Tripo Studio, **Smart Mesh P2.0, Topology Quad, polycount 2000, four takes**
-(about 2,600–2,900 faces, 4.4–4.5k tris) → pick the take from all sides → sidebar texture,
-**Remove Lighting on, 2K** → export FBX → `retopo_prep.py` (scale, bottom-centre pivot, xatlas UV2,
-**no decimation**, UV0 and the generated texture untouched) → grade colour casts → 1024 texture, crunch
+(about 2,600–2,900 faces, 4.4–4.5k tris) → pick the take from all sides → **Smart UV** (clean UV layout)
+→ sidebar texture, **Remove Lighting on, 2K** → export FBX → `retopo_prep.py` (scale, bottom-centre pivot,
+xatlas UV2, **no decimation**, UV0 and the generated texture untouched) → grade colour casts → 1024 texture, crunch
 off → self-review gate → lineup → Unity. The earlier "minimum quad count, 2,500 tris, 512² crunched,
 decimate and rebake" rule is removed: it produced meshes and faces the user judged worse than Kutsu.
 
@@ -67,15 +67,31 @@ Credits: about 100 for the four takes, 10 for the texture. Pick the take from al
 clean, no hair over the eyes, legs short, tail/wings/ears intact, asymmetric features not mirrored. If no
 take passes, generate again with more takes before you touch anything else.
 
-**4. Texture and export.**
+**4. Smart UV, texture and export.** Every plush gets Studio Smart UV (user rule, 2026-10-27): Tripo's
+texture UVs are hundreds of tiny islands (1,300–2,500 seam edges per fumo); Smart UV gives a few large
+ones (Kutsu 2,119 → 618) and leaves the mesh untouched. Smart UV **removes the texture**, so unwrap
+before texturing: select the take in Studio's Smart UV workspace → Unwrap UV → check utilization (about
+70–76 %), Retry if poor → Save → then texture and export:
 
 ```
 python scripts/tripo_studio.py texture <run> <take>   # sidebar panel, Remove Lighting ON, 2K
 python scripts/tripo_studio.py export  <run> <take>   # FBX zip -> <run>/gen/export/
 ```
 
-Never run the service's Smart UV (it deletes the texture) and never use the viewer-bar texture button.
-Before each Studio step kill only the stale Chrome whose command line contains the profile directory.
+A plush that is already textured, graded or approved keeps its texture: Smart UV the exported quad FBX,
+then bake the texture across:
+
+```
+python scripts/studio_smartuv_run.py <run>/gen/export/<model>.fbx <run>/suv    # 20 Studio credits
+python .omp/scripts/tool.py blender --script .omp/skills/fumo-plushie/scripts/transfer_bake.py -- \
+  <old.fbx> <graded_2k.png> <run>/suv/<model>.fbx.fbx <run>/k/suv Fumo_<Name> 4096
+```
+
+`transfer_bake.py` fits the new mesh onto the old one (the export comes back turned 90°); its REPORT
+must show `meanSurfaceGap=0.000mm` and the same face count. Then run step 5 on its FBX (with
+`MESH_NAME=<old mesh name>` when it replaces a Unity asset) and downsample the 4096 bake for shipping.
+Never use the viewer-bar texture button. Before each Studio step kill only the stale Chrome whose
+command line contains the profile directory.
 
 **5. Prep without decimation.**
 

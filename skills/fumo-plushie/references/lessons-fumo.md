@@ -17,7 +17,8 @@ setup, fire screams and placement of fumo-style plush pickups. Distilled from th
 - **Use Smart Mesh P2.0, Topology Quad, polycount 2000, four takes at the same count; no decimation afterwards** — this is Kutsu's recipe (experiment 11a): about 2,700 faces and 4.4–4.5k tris, the user's favourite plush. Plushes built at the minimum quad count, decimated to 2,500 tris and rebaked came out worse ("new ones are kinda crappy"): fringes shredded, eyes smeared.
 - **Pick the take from clay views of all sides, not the first take** — eyes and fringe clean, legs short, tail and wings intact; the take that looks best from the front is not always the one that is good from the side (picks were takes 3 or 4 of 4).
 - **Texture from the sidebar Texture panel with Remove Lighting on and 2K, not the viewer-bar button** — painted-in shading doubles up with the world's light.
-- **Never run the service's Smart UV on a textured model** — it deleted the texture.
+- **Run Smart UV on every plush; unwrap before texturing, or bake the existing texture across with `transfer_bake.py`** — Smart UV removes the texture, but it keeps the mesh bit-identical and cuts Tripo's 1,300–2,500 tiny-island seams down to a few large islands (Kutsu 2,119 → 618).
+- **Render and bake with Cycles on the GPU (`cycles_gpu.use_gpu`)** — the same texture transfer took 533 s on the CPU and 19 s on OptiX.
 - **A few non-manifold edges on a P2.0 mesh are fine** — 6 pieces, 25 non-manifold edges and 247 charts still baked evenly; 40–270 non-manifold edges on the 4.5k meshes shipped fine.
 - **The API cannot choose these options; Studio credits are separate from API credits** — about 100 credits for four takes plus 10 for the texture, per character.
 - **Studio automation needs the logged-in profile and a clean Chrome** — kill only the Chrome whose command line contains the profile directory before each step; positions assume a 1440×900 viewport.
