@@ -84,12 +84,14 @@ then bake the texture across:
 ```
 python scripts/studio_smartuv_run.py <run>/gen/export/<model>.fbx <run>/suv    # 20 Studio credits
 python .omp/scripts/tool.py blender --script .omp/skills/fumo-plushie/scripts/transfer_bake.py -- \
-  <old.fbx> <graded_2k.png> <run>/suv/<model>.fbx.fbx <run>/k/suv Fumo_<Name> 4096
+  <old.fbx> <graded_2k.png> <run>/suv/<model>.fbx.fbx <run>/k/suv Fumo_<Name> 2048
 ```
 
-`transfer_bake.py` fits the new mesh onto the old one (the export comes back turned 90°); its REPORT
-must show `meanSurfaceGap=0.000mm` and the same face count. Then run step 5 on its FBX (with
-`MESH_NAME=<old mesh name>` when it replaces a Unity asset) and downsample the 4096 bake for shipping.
+`transfer_bake.py` fits the new mesh onto the old one (the export comes back turned 90°) and copies the
+texture texel by texel through the surface (no ray casting), then pads every texel outside the islands.
+Its REPORT must show `meanSurfaceGap=0.000mm` and the same face count, and its TRANSFER line `farFrac=0`.
+Check the result has no pure-black texels the original didn't have. Then run step 5 on its FBX (with
+`MESH_NAME=<old mesh name>` when it replaces a Unity asset) and downsample to the shipping size.
 Never use the viewer-bar texture button. Before each Studio step kill only the stale Chrome whose
 command line contains the profile directory.
 
