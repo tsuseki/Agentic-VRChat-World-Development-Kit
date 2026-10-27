@@ -34,12 +34,19 @@
 #       whip above the crown. crown tip_upbias_all=True (opt-in): every terminal tip's card uses it (weeping mound:
 #       low drooping twig ends get a level tip card that clears the ground instead of being skipped, tips_uncovered).
 #       No extra random draws. Off = identical builds.
-#   crown surface=dict(c=(x, y, z), rad=(rx, ry, rz), chord=1.0, max_up=None) (sprig, opt-in; clipped topiary): each
+#   hug=dict(c=(x, y, z), rad=(rx, ry, rz), at=0.92, depth=(0, 0)) (opt-in; clipped hedges / balls): branches of these
+#       depths slide along the ellipsoid level surface `at` of (c, rad) instead of growing through it: once a branch
+#       reaches that surface each next segment keeps only its tangential direction and its end is put back on the
+#       surface, so ground canes run up and over the inside of a clipped shell and every sprig card rooted on them sits
+#       just under the face (cheap leaf carriers for a dense clipped surface). No extra random draws: off = identical.
+#   crown surface=dict(c=(x, y, z), rad=(rx, ry, rz), chord=1.0, max_up=None, skin=0) (sprig, opt-in; clipped topiary): each
 #       card keeps its root on the twig but lies along the level surface through that root of the ellipsoid (c, rad),
 #       facing out, dipped by `chord` x the angle that brings its far end back onto that surface (osculating circle, <= 40 deg);
 #       max_up (deg) rolls it about its axis just enough that its face stays >= max_up off horizontal. Use without
 #       roll_tilt (it would override the roll). c="root": the ellipsoid is centred on the root of each card's own twig
-#       (+ lift m up), one small dome per twig cluster (cloud-pruned pads). No extra random draws: off = identical builds.
+#       (+ lift m up), one small dome per twig cluster (cloud-pruned pads). skin=k (opt-in, < 1): the root moves k x the
+#       twig radius out along that surface normal, so the card lies on the outer side of a twig running along the face
+#       instead of halving it (still inside the attach tolerance). No extra random draws: off = identical builds.
 #   crown cells=[i, ...] (sprig/bamboo, opt-in): cards draw only these cells of <tex>_Leaves_Cards.json (one atlas, a
 #       dense twig-free clipped-surface cell for the topiary variants and open sprays for the free ones). Same single
 #       rng.choice per card: off = identical builds.
@@ -316,6 +323,17 @@ def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, ke
             d = Vector((d.x, d.y, d.z * (1.0 - flat))).normalized()
         p = p + d * (length / segs)
         if depth > 0: p.z = max(p.z, 0.25)  # drooping twigs never reach the ground
+        HG = CFG.get("hug")
+        if HG and HG.get("depth", (0, 0))[0] <= depth <= HG.get("depth", (0, 0))[1]:  # opt-in: slide along the shell
+            c, R, at = Vector(HG["c"]), HG["rad"], HG.get("at", 0.92)
+            rho = lambda x: Vector(((x.x - c.x) / R[0], (x.y - c.y) / R[1], (x.z - c.z) / R[2])).length
+            q = pts[-1] - c
+            g = Vector((q.x / R[0] ** 2, q.y / R[1] ** 2, q.z / R[2] ** 2))
+            if rho(pts[-1]) >= at * 0.98 and g.length > 1e-9 and d.dot(g) > 0:  # on the shell: tangential step only
+                n = g.normalized(); t = d - n * d.dot(n)
+                if t.length > 1e-6: d = t.normalized(); p = pts[-1] + d * (length / segs)
+            if rho(p) > at:  # back onto the level surface (radially from c)
+                p = c + (p - c) * (at / rho(p)); d = (p - pts[-1]).normalized()
         ri = r0 + (r1 - r0) * i / segs
         if keep_out and depth > 0 and CFG.get("clear") and (in_clear(p) or in_clear((p + pts[-1]) * 0.5) or in_clear(p + UP * ri)
                                                or in_clear(p - UP * ri) or in_clear(p + d * CFG.get("clear_pad", 0.0))):
@@ -881,6 +899,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             g = Vector((q.x / R2[0], q.y / R2[1], q.z / R2[2]))
             if g.length > 1e-9:
                 n = g.normalized(); tv = d - n * d.dot(n)  # (tv/bv: place() keeps its own b and t)
+                if SF.get("skin"): A = A + n * r * SF["skin"]  # opt-in: root on the outer side of its twig (covers it)
                 tv = (tv if tv.length > 1e-4 else n.orthogonal()).normalized()
                 k = (tv.x * tv.x / R2[0] + tv.y * tv.y / R2[1] + tv.z * tv.z / R2[2]) / g.length  # normal curvature along tv
                 dip = math.asin(min(0.64, sz * k * 0.5)) * SF.get("chord", 1.0)  # chord: far end back on the surface (<= 40 deg)
