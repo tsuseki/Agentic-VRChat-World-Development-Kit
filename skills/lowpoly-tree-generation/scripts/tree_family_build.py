@@ -63,6 +63,15 @@
 #       card's root (the whole cluster on a protruding tip, low limb chains) turns "out" too, and the out cards of each
 #       branch take the lateral/shoot/sprig cells in turn along the branch (no two neighbours alike) instead of the
 #       per-card draw. Off = identical builds.
+#       roles top=<k> / above=<m> (opt-in, varied cells on the rim and underside only): a card may turn "out" (seed,
+#       low_tips or group member) only if its far end lies at or below zc + k x rz of the crown ellipsoid (k 0 = the
+#       lower half: a flat umbrella's top keeps full cells) and its root at or above `above` m (low limbs keep full
+#       cells). `frac` still counts over all tip and main cards. Off = identical builds (StonePine 2026-10-27).
+#   crown floor_base=True (sprig, opt-in): no card hangs below the base of its limb (where its merged chain leaves
+#       its parent) towards the trunk: a card whose lowest corner is under that base and nearer the trunk axis than its
+#       root is levelled (heading kept, tip not below its root) and laid face up, then shrunk (x0.75, up to 5 times) or
+#       skipped until no corner is below min(base, root). No random draws, but a skipped card is redrawn (later cards
+#       move). Prints STAT floor_base. Off = identical builds (StonePineYoung pendant cards by the trunk, 2026-10-27).
 #   crown mirror=True (sprig, opt-in): about half the cards (per-card own sequence) show their cell U-mirrored; the
 #       mirrored attach point stays on the branch axis. Off (both) = identical builds.
 #   crown max_rise=<deg> (sprig, opt-in; weeping mounds): a card whose axis rises more than max_rise deg above
@@ -860,6 +869,8 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     cards = []  # every placed card (counts drive the loops below); dropped subset cards have first = None
     krng = random.Random(7919)  # own sequence: the subset choice never shifts the placement draws
     trng = random.Random(6007)  # own sequence for roll_tilt: card positions/directions stay those of the plain build
+    CHAIN_UP = {id(x.cont): x for x in branches if getattr(x, "cont", None) is not None}  # floor_base: merged chain heads
+    FBN = [0]  # floor_base: cards levelled
     KIND = ["tip"]  # which loop places the card (crown roles: tip / main / fill / low / hang)
     def place(b, t, d0, hang=False, nrm=None, exact=True, ub=None, aim=None):
         UB = C["upbias"] if ub is None else ub  # ub: per-card upbias (tip_upbias on ground-stem tips)
@@ -923,6 +934,19 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             if u.length > 1e-3:
                 u.normalize(); a = math.radians(trng.uniform(*RT)) * (1.0 if trng.random() < 0.5 else -1.0)
                 roll = (u * math.cos(a) + d.cross(u) * math.sin(a)).normalized()
+        FB = None
+        if C.get("floor_base") and C["mode"] == "sprig" and not hang:
+            # opt-in floor_base: no card hangs below the base of its limb (where its merged chain leaves its parent)
+            # towards the trunk: a card whose lowest corner is under that base and nearer the trunk axis than its root
+            # is levelled (heading kept, tip no lower than its root) and laid face up, then fits() shrinks it (x0.75, up
+            # to 5 times) or skips it until no corner is below min(base, root). No random draws; off = identical builds.
+            h = b
+            while id(h) in CHAIN_UP: h = CHAIN_UP[id(h)]
+            lo = min(sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True), key=lambda x: x.z)
+            if lo.z < h.pts[0].z and math.hypot(lo.x, lo.y) < math.hypot(A.x, A.y):
+                if d.z < 0.0 and Vector((d.x, d.y, 0.0)).length > 1e-6: d = Vector((d.x, d.y, 0.0)).normalized()
+                roll = (UP - d * UP.dot(d)).normalized() if (UP - d * UP.dot(d)).length > 1e-3 else roll
+                FB = min(h.pts[0].z, A.z - 0.01); FBN[0] += 1
         def fits(cl, s, m=False):  # the card's real surface must stay out of keep-out volumes and above `ground` (shrunk)
             if exact and CFG.get("clear"):  # the real card surface (its back overhang and corners too) must stay out of the volumes
                 q = sprig_card(bm, uvl, A, d, roll, s, fold, cl, dry=True, mirror=m)
@@ -931,6 +955,12 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             if C.get("ground") is not None:  # hanging cards stay above this height: shrink, then skip
                 for _ in range(5):
                     if min(x.z for x in sprig_card(bm, uvl, A, d, roll, s, fold, cl, dry=True, mirror=m)) >= C["ground"]: break
+                    s *= 0.75
+                else:
+                    return None
+            if FB is not None:  # opt-in floor_base (above)
+                for _ in range(5):
+                    if min(x.z for x in sprig_card(bm, uvl, A, d, roll, s, fold, cl, dry=True, mirror=m)) >= FB: break
                     s *= 0.75
                 else:
                     return None
@@ -1077,6 +1107,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         C["ground"] = g0
         if g0 is None: del C["ground"]
         size = base
+    if C.get("floor_base") and probe is None: print(f"STAT floor_base {'lod1' if lod1 else 'lod0'} levelled {FBN[0]}")
     return [c for c in cards if c[0] is not None]
 
 def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C):
@@ -1164,7 +1195,7 @@ def rosette_crown(bm, uvl, branches, rng, fold):
             if r: cards.append(r + (b, 1.0))
     return cards
 
-def card_roles(probe, frac=0.2, low=True, group=None):
+def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None):
     """crown roles: "out" for the cards that stick out of the crown, "full" for the rest. The crown is the ellipsoid
     through the far card ends (A + d x size) of the tip and main cards: horizontal centre = their mean, horizontal
     radius = 90th percentile distance, vertical centre/radius from z10..z90. Out = the `frac` share of tip and main
@@ -1172,25 +1203,33 @@ def card_roles(probe, frac=0.2, low=True, group=None):
     Fill and hanging cards stay "full".
     group (opt-in): every non-hanging card on the same branch whose root lies within group x the median card length of
     an out card's root turns out too (the whole cluster on that tip), and the out cards of each branch get "out:<k>",
-    k counting along the branch (by t) from a per-branch offset: the cells are taken in turn, neighbours differ."""
+    k counting along the branch (by t) from a per-branch offset: the cells are taken in turn, neighbours differ.
+    top / above (opt-in, rim and underside only): a card may turn out (as a seed, a low_tips card or a group member)
+    only if its far end lies at or below zc + top x rz (the dome top keeps full cells) and its root at or above
+    `above` m (low limbs by the trunk keep full cells); the `frac` share is still counted over all tip and main cards
+    and taken from the furthest-out eligible ones. Off = identical builds."""
     far = [(p[0] + p[1] * p[2]) for p in probe]
     ids = [i for i, p in enumerate(probe) if p[3] in ("tip", "main")]
-    roles = ["out" if low and p[3] == "low" else "full" for p in probe]
+    tz = [p[0].z for p in probe]
+    zc, rz = 0.0, 1.0
     if ids:
         pct = lambda xs, q: sorted(xs)[min(len(xs) - 1, int(q * len(xs)))]
-        cx = sum(far[i].x for i in ids) / len(ids); cy = sum(far[i].y for i in ids) / len(ids)
-        rh = max(1e-3, pct([math.hypot(far[i].x - cx, far[i].y - cy) for i in ids], 0.9))
         z10, z90 = pct([far[i].z for i in ids], 0.1), pct([far[i].z for i in ids], 0.9)
         zc, rz = (z10 + z90) / 2, max(1e-3, (z90 - z10) / 2)
+    ok = lambda i: (top is None or (far[i].z - zc) / rz <= top) and (above is None or tz[i] >= above)
+    roles = ["out" if low and p[3] == "low" and ok(i) else "full" for i, p in enumerate(probe)]
+    if ids:
+        cx = sum(far[i].x for i in ids) / len(ids); cy = sum(far[i].y for i in ids) / len(ids)
+        rh = max(1e-3, pct([math.hypot(far[i].x - cx, far[i].y - cy) for i in ids], 0.9))
         sc = {i: math.hypot(math.hypot(far[i].x - cx, far[i].y - cy) / rh, (far[i].z - zc) / rz) for i in ids}
-        for i in sorted(ids, key=lambda i: -sc[i])[:int(round(frac * len(ids)))]: roles[i] = "out"
+        for i in sorted((i for i in ids if ok(i)), key=lambda i: -sc[i])[:int(round(frac * len(ids)))]: roles[i] = "out"
     if not group: return roles
     reach = group * sorted(p[2] for p in probe)[len(probe) // 2]
     byb = {}
     for i, p in enumerate(probe): byb.setdefault(p[4], []).append(i)
     for s in [i for i, r in enumerate(roles) if r == "out"]:
         for j in byb[probe[s][4]]:
-            if probe[j][3] != "hang" and (probe[j][0] - probe[s][0]).length <= reach: roles[j] = "out"
+            if probe[j][3] != "hang" and (probe[j][0] - probe[s][0]).length <= reach and ok(j): roles[j] = "out"
     for b, js in byb.items():
         outs = sorted((j for j in js if roles[j] == "out"), key=lambda j: probe[j][5])
         k0 = random.Random(7951 + js[0]).randrange(3)
@@ -1206,11 +1245,12 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
         # card lands, the real pass places the very same cards and only swaps their cells by role (card count/tris kept)
         r1 = random.Random(); r1.setstate(rng.getstate()); probe = []
         sprig_crown(bm, uvl, branches, r1, count, size, fold, lod1, keep, probe=probe)
-        roles = card_roles(probe, R.get("frac", 0.2), R.get("low", True), R.get("group"))
+        roles = card_roles(probe, R.get("frac", 0.2), R.get("low", True), R.get("group"), R.get("top"), R.get("above"))
         n_out = sum(r.startswith("out") for r in roles)
         print(f"STAT crown roles {'lod1' if lod1 else 'lod0'} cards {len(probe)} out {n_out} "
               f"(low {sum(p[3] == 'low' for p in probe)}) full {len(roles) - n_out} mirror {'Y' if C.get('mirror') else 'N'}"
-              + (f" group {R['group']}" if R.get("group") else ""))
+              + (f" group {R['group']}" if R.get("group") else "")
+              + (f" top {R['top']}" if R.get("top") is not None else "") + (f" above {R['above']}" if R.get("above") is not None else ""))
         return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep, roles=roles)
     if mode == "rosette":  # lod1_subset (keep): fronds identical to LOD0 (unfolding moves the edges by fold x width)
         return rosette_crown(bm, uvl, branches, rng, C.get("fold", 0.0) if keep is not None else fold)
