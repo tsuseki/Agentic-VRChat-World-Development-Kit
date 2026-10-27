@@ -67,6 +67,9 @@
 #       low_tips or group member) only if its far end lies at or below zc + k x rz of the crown ellipsoid (k 0 = the
 #       lower half: a flat umbrella's top keeps full cells) and its root at or above `above` m (low limbs keep full
 #       cells). `frac` still counts over all tip and main cards. Off = identical builds (StonePine 2026-10-27).
+#       roles bare=<m> (opt-in): a card with more than m metres of bare limb behind its root (bare_behind: back along
+#       its limb chain into the parent limbs to the nearest other card root or leafy side branch; trunks not counted)
+#       keeps a full cell; frac takes the next eligible card. Off = identical builds (AleppoPineLean 2026-10-27).
 #   crown floor_base=True (sprig, opt-in): no card hangs below the base of its limb (where its merged chain leaves
 #       its parent) towards the trunk: a card whose lowest corner is under that base and nearer the trunk axis than its
 #       root is levelled (heading kept, tip not below its root) and laid face up, then shrunk (x0.75, up to 5 times) or
@@ -1195,7 +1198,57 @@ def rosette_crown(bm, uvl, branches, rng, fold):
             if r: cards.append(r + (b, 1.0))
     return cards
 
-def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None):
+def bare_behind(probe, branches):
+    """crown roles `bare` helper: per probe card, the bare limb length (m) between the card's root and the nearest
+    foliage behind it, walking back along its merged limb chain and on into the parent limb chains: foliage = another
+    card's root or the root of a side branch whose subtree carries cards. A walk that reaches a stem (a chain with no
+    parent) ends there: trunks are not counted as bare limb."""
+    seg = lambda b: [(b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)]
+    def arc(b, f):  # arc length at point_at parameter f (by point index)
+        s = seg(b); x = f * len(s); i = min(int(x), len(s) - 1)
+        return sum(s[:i]) + s[i] * (x - i) if s else 0.0
+    head, off = {}, {}  # branch id -> chain head id, arc of the branch start along the chain
+    for b in branches:
+        if getattr(b, "merged_into", None) is not None: continue
+        h, a = b, 0.0
+        while h is not None:
+            head[id(h)] = id(b); off[id(h)] = a; a += sum(seg(h)); h = getattr(h, "cont", None)
+    byid = {id(b): b for b in branches}
+    marks = {}  # chain head id -> [(arc, owner)]: owner = ("card", i) or ("child", child chain head id)
+    for i, p in enumerate(probe):
+        marks.setdefault(head.get(p[4]), []).append((off.get(p[4], 0.0) + arc(byid[p[4]], p[5]), ("card", i)))
+    parent, kids = {}, {}  # chain head -> (parent chain head, arc of its root on that chain); chain head -> child heads
+    for c in branches:
+        par = getattr(c, "par", None)
+        if par is None or getattr(c, "merged_into", None) is not None or id(par) not in head: continue
+        s = seg(par); q = c.pts[0]; best = (1e9, 0.0); a0 = 0.0
+        for k in range(len(s)):
+            u = par.pts[k + 1] - par.pts[k]; L = max(1e-9, s[k]); w = max(0.0, min(1.0, (q - par.pts[k]).dot(u) / (L * L)))
+            dd = (par.pts[k] + u * w - q).length
+            if dd < best[0]: best = (dd, a0 + w * L)
+            a0 += L
+        parent[id(c)] = (head[id(par)], off[id(par)] + best[1]); kids.setdefault(head[id(par)], []).append(id(c))
+    leafy = {}
+    def has_cards(h):  # the chain or any chain in its subtree carries a card
+        if h not in leafy:
+            leafy[h] = False
+            leafy[h] = any(o[0] == "card" for _, o in marks.get(h, [])) or any(has_cards(k) for k in kids.get(h, []))
+        return leafy[h]
+    for h, (ph, a) in parent.items():
+        if has_cards(h): marks.setdefault(ph, []).append((a, ("child", h)))
+    def walk(h, a, excl):
+        if h not in parent: return 0.0  # a stem (chain with no parent): the trunk is not bare limb
+        ms = [x for x, o in marks.get(h, []) if o != excl and x < a - 1e-6]
+        if ms: return a - max(ms)
+        ph, pa = parent[h]
+        return a + walk(ph, pa, ("child", h))
+    out = [0.0] * len(probe)
+    for i, p in enumerate(probe):
+        h = head.get(p[4]); me = off.get(p[4], 0.0) + arc(byid[p[4]], p[5])
+        out[i] = walk(h, me, ("card", i))
+    return out
+
+def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None, bare=None, branches=None):
     """crown roles: "out" for the cards that stick out of the crown, "full" for the rest. The crown is the ellipsoid
     through the far card ends (A + d x size) of the tip and main cards: horizontal centre = their mean, horizontal
     radius = 90th percentile distance, vertical centre/radius from z10..z90. Out = the `frac` share of tip and main
@@ -1207,7 +1260,10 @@ def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None):
     top / above (opt-in, rim and underside only): a card may turn out (as a seed, a low_tips card or a group member)
     only if its far end lies at or below zc + top x rz (the dome top keeps full cells) and its root at or above
     `above` m (low limbs by the trunk keep full cells); the `frac` share is still counted over all tip and main cards
-    and taken from the furthest-out eligible ones. Off = identical builds."""
+    and taken from the furthest-out eligible ones.
+    bare (opt-in, m): a card with more than `bare` m of bare limb behind its root on its limb chain (bare_behind) keeps
+    a full cell: a long bare limb ending in a sparse sprig reads as a dead stick with a wisp (AleppoPineLean, review
+    C1-med-spray3 r2 nit 4). Same frac share, taken from the next eligible cards. Off = identical builds."""
     far = [(p[0] + p[1] * p[2]) for p in probe]
     ids = [i for i, p in enumerate(probe) if p[3] in ("tip", "main")]
     tz = [p[0].z for p in probe]
@@ -1216,7 +1272,9 @@ def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None):
         pct = lambda xs, q: sorted(xs)[min(len(xs) - 1, int(q * len(xs)))]
         z10, z90 = pct([far[i].z for i in ids], 0.1), pct([far[i].z for i in ids], 0.9)
         zc, rz = (z10 + z90) / 2, max(1e-3, (z90 - z10) / 2)
-    ok = lambda i: (top is None or (far[i].z - zc) / rz <= top) and (above is None or tz[i] >= above)
+    bb = bare_behind(probe, branches) if bare is not None else None
+    ok = lambda i: ((top is None or (far[i].z - zc) / rz <= top) and (above is None or tz[i] >= above)
+                    and (bb is None or bb[i] <= bare))
     roles = ["out" if low and p[3] == "low" and ok(i) else "full" for i, p in enumerate(probe)]
     if ids:
         cx = sum(far[i].x for i in ids) / len(ids); cy = sum(far[i].y for i in ids) / len(ids)
@@ -1245,12 +1303,19 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
         # card lands, the real pass places the very same cards and only swaps their cells by role (card count/tris kept)
         r1 = random.Random(); r1.setstate(rng.getstate()); probe = []
         sprig_crown(bm, uvl, branches, r1, count, size, fold, lod1, keep, probe=probe)
-        roles = card_roles(probe, R.get("frac", 0.2), R.get("low", True), R.get("group"), R.get("top"), R.get("above"))
+        roles = card_roles(probe, R.get("frac", 0.2), R.get("low", True), R.get("group"), R.get("top"), R.get("above"),
+                           R.get("bare"), branches)
         n_out = sum(r.startswith("out") for r in roles)
         print(f"STAT crown roles {'lod1' if lod1 else 'lod0'} cards {len(probe)} out {n_out} "
               f"(low {sum(p[3] == 'low' for p in probe)}) full {len(roles) - n_out} mirror {'Y' if C.get('mirror') else 'N'}"
               + (f" group {R['group']}" if R.get("group") else "")
               + (f" top {R['top']}" if R.get("top") is not None else "") + (f" above {R['above']}" if R.get("above") is not None else ""))
+        if R.get("bare") is not None:  # cards the bare-limb rule turned back to full (out without it), with their bare m
+            bb = bare_behind(probe, branches)
+            r0 = card_roles(probe, R.get("frac", 0.2), R.get("low", True), R.get("group"), R.get("top"), R.get("above"))
+            kept = sorted((round(bb[i], 2), tuple(round(v, 2) for v in probe[i][0])) for i in range(len(probe))
+                          if r0[i].startswith("out") and not roles[i].startswith("out"))
+            print(f"STAT crown roles bare {R['bare']} {'lod1' if lod1 else 'lod0'} turned full {len(kept)} (bare m, root xyz) {kept}")
         return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep, roles=roles)
     if mode == "rosette":  # lod1_subset (keep): fronds identical to LOD0 (unfolding moves the edges by fold x width)
         return rosette_crown(bm, uvl, branches, rng, C.get("fold", 0.0) if keep is not None else fold)
