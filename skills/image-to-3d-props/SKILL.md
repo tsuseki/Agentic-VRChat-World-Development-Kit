@@ -77,6 +77,12 @@ accept a charge without explicit authorization.
 - Inspect the generated mesh from all sides; a preview image alone is not quality proof.
 - Never print, paste or commit API keys, auth files, tokens or request headers. Keep any
   key in a gitignored local file read only by your wrapper script.
+- **Clean UVs on every generated prop.** On Tripo, run Studio **Smart UV** on the chosen model before
+  texturing it. The UVs that come with a Tripo texture are hundreds of tiny islands; Smart UV cuts a
+  few large ones and leaves the mesh untouched. It removes the texture, so unwrap first, then
+  texture. A model that is already textured or approved keeps its texture: unwrap the export,
+  then bake the texture across with `.omp/skills/fumo-plushie/scripts/transfer_bake.py` (headless
+  Studio run: `studio_smartuv_run.py`; steps and costs in the fumo-plushie skill, step 4).
 
 Tripo also offers an official **DCC Bridge** that sends an already-generated Studio model to
 Unity or Blender. It transfers; it is not a generation API. It recognizes only the first
