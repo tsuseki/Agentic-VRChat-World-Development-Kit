@@ -28,8 +28,8 @@ def _new_obj(name, me):
     return o
 
 
-def make_proxy(ob, kind, inflate=1.05):
-    vids, pts = _leaf_points(ob)
+def make_proxy(ob, kind, inflate=1.05, ref=None):
+    vids, pts = _leaf_points(ref or ob)
     lo = Vector((min(p.x for p in pts), min(p.y for p in pts), min(p.z for p in pts)))
     hi = Vector((max(p.x for p in pts), max(p.y for p in pts), max(p.z for p in pts)))
     c, half = (lo + hi) / 2, (hi - lo) / 2
@@ -144,26 +144,27 @@ def _cone_fn(c, r):
     return nf
 
 
-def transfer_crown_normals(ob, kind, inflate=1.05, cluster=None, crown_mix=0.35):
+def transfer_crown_normals(ob, kind, inflate=1.05, cluster=None, crown_mix=0.35, ref=None):
     """Apply proxy normals to leaf cards of `ob`; returns the proxy dimensions for reporting.
     cluster (m, ellipsoid/capsule/cone only): cards are binned into cells of that size and each leaf vertex's
     normal points out of ITS cell's card centroid, mixed with crown_mix of the crown proxy and a little
-    up, so every leaf clump shades as its own small dome instead of the whole crown as one bubble."""
+    up, so every leaf clump shades as its own small dome instead of the whole crown as one bubble.
+    ref (object): the proxy is fitted to ref's leaves instead of ob's (lower LODs shade like the LOD they replace)."""
     if ob.data.has_custom_normals:  # re-run on a finished mesh: zero vectors = back to default normals
         ob.data.normals_split_custom_set([(0.0, 0.0, 0.0)] * len(ob.data.loops))
     if kind == "cone":  # analytic only: no proxy mesh, the card winding uses the same cone normal
-        vids, pts = _leaf_points(ob)
+        vids, pts = _leaf_points(ref or ob)
         lo = Vector((min(q.x for q in pts), min(q.y for q in pts), min(q.z for q in pts)))
         hi = Vector((max(q.x for q in pts), max(q.y for q in pts), max(q.z for q in pts)))
         c, r = (lo + hi) / 2, (hi - lo) / 2
         nf = _cone_fn(c, r)
         align_card_winding(ob, None, nf)
         return _analytic(ob, nf, cluster, crown_mix, tuple(round(2 * x, 2) for x in r))
-    proxy = make_proxy(ob, kind, inflate)
+    proxy = make_proxy(ob, kind, inflate, ref)
     for p in proxy.data.polygons:
         p.use_smooth = True
     align_card_winding(ob, proxy)
-    vids, pts = _leaf_points(ob)
+    vids = _leaf_points(ob)[0]; pts = _leaf_points(ref or ob)[1]  # ob's leaf vertices get the normals of ref's crown
     if kind in ("ellipsoid", "capsule"):
         # analytic: each leaf loop gets the ellipsoid gradient direction at its vertex,
         # (p - c) / r^2 with c / r = leaf-bounds centre / half extents; bark keeps its own normals

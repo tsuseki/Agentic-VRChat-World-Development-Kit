@@ -1,6 +1,6 @@
 # Headless low-poly tree builder: skeleton -> tube bark -> leaf cards -> UVs -> crown normals -> FBX.
 #   blender -b --factory-startup -P tree_family_build.py -- <Species> --tex <dir> --out <dir>
-#           [--blend <dir>] [--lod1] [--qa <png>] [--config <species.py>]
+#           [--blend <dir>] [--lod1 [--lods]] [--qa <png>] [--config <species.py>]
 # <Species> is a key of CFG below (or of a dict CFG in --config). Textures are read from --tex:
 #   <tex>_Bark_Albedo.png, <tex>_Bark_Normal.png, <tex>_Leaves_RGBA.png (+ <tex>_Leaves_Cards.json for
 #   crown mode "sprig", written by branch_atlas.py). Writes <out>/<Species>_Tree.fbx (mesh <Species>_Tree)
@@ -140,6 +140,9 @@
 #       a limb whose last fork is past `at` of its length continues into its best-aligned child as one tube (no
 #       spike past the fork); see merge_continuations(). Recommended for every new tree.
 #   lod1_mindepth   LOD1 drops the deepest level and roots its cards on this depth
+#   lods=[dict(rings, sides, grow, maxdepth | drop, min_r), ...] (--lods; default LOD_LEVELS)   far LODGroup levels
+#       <Species>_Tree_LOD2, _LOD3 built from the LOD1's skeleton and card draws (see make_lod lv); the hidden-card cull
+#       (BoothAssets lod1_cull_cards.py --lod N --keep-cards K) then thins their cards by visibility.
 #   clear_drop (0)   drop a branch the keep-out volumes cut to less than this share of its length
 #   limbs=[dict(root, tip, r=(r0, r1), gnarl, children, arch, epiphytes)]   explicit limbs (tree-local, root on the
 #       trunk at root.z; arch m upward bow; epiphytes = hanging cards along it)
@@ -173,7 +176,7 @@ from mathutils import Vector, Quaternion, noise
 
 argv = sys.argv[sys.argv.index("--") + 1:]
 def _opt(k, d=None): return argv[argv.index(k) + 1] if k in argv else d
-NAME = argv[0]; LOD1 = "--lod1" in argv; QA = _opt("--qa"); QA = QA and os.path.abspath(QA)  # Blender resolves relative render paths oddly
+NAME = argv[0]; LOD1 = "--lod1" in argv; LODS_ON = "--lods" in argv; QA = _opt("--qa"); QA = QA and os.path.abspath(QA)  # Blender resolves relative render paths oddly
 TEXDIR = os.path.abspath(_opt("--tex", ".")) + "/"
 OUT = os.path.abspath(_opt("--out", ".")) + "/"
 SRC = os.path.abspath(_opt("--blend", OUT)) + "/"
@@ -186,6 +189,10 @@ from tree_uv import cylinder_uvs, stretch_stats
 import lightmap_uv
 import json, statistics
 UP = Vector((0, 0, 1))
+# --lods far levels (LODGroup LOD1 / LOD2 of a pack whose LOD0 is this builder's culled LOD1): lighter bark (every
+# `rings`-th ring, `sides`), small branches dropped, every card kept `grow` x larger about its twig base, unfolded.
+LOD_LEVELS = [dict(rings=2, sides=(4, 3, 3), drop=1, grow=1.15),
+              dict(rings=3, sides=(4, 3, 3), maxdepth=1, min_r=0.3, grow=1.4)]
 # --------------------------------------------------------------------------- species
 # stems: (count, lean range, length range, r0, r1, gnarl, base spread)
 # levels: list of dicts for child levels: n children, at (fractions along parent), ang (deg from
@@ -1503,14 +1510,19 @@ def base_fix(branches, meshed, vspans, bad, over):
             ov["n"] = ov.get("n", 0) + 1; ov["rb"] = max(TIP_R, b.radii[0] * BASE_STEP ** ov["n"])
     return new
 
-def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_round=0):
+def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_round=0, lv=None):
     """full_rings: indices (in skeleton order) of tubes meshed with every ring in the lod1_subset LOD1 (set by the
     floating-bark retry below; empty on the first pass). base_over / base_round: the base fix's mesh-only overrides
-    (skeleton index -> base_axis dict) and pass number (see base_fix; empty / 0 on the first pass)."""
+    (skeleton index -> base_axis dict) and pass number (see base_fix; empty / 0 on the first pass).
+    lv (--lods): one far level of LOD_LEVELS / CFG lods, built like the lod1_subset LOD1 from the same skeleton and card
+    draws: every `rings`-th ring, `sides`, tubes deeper than `maxdepth` (or `drop` levels off the deepest, kept when the
+    tree has fewer levels than that) or thinner at the base than `min_r` x the thickest stem not meshed (nor any branch
+    on them); every card kept, `grow` x larger about its attach point, unfolded (the cull thins them by visibility)."""
     base_over = base_over or {}
     MERGE_SKIPPED[0] = 0
     branches = build_skeleton(seed)
-    sub = CFG.get("lod1_subset") if lod1 else None  # LOD1 = the LOD0 tree thinned in place (no pop at the switch)
+    if lv is not None: lod1 = True
+    sub = (dict(keep=1.0, grow=lv.get("grow", 1.0)) if lv is not None else CFG.get("lod1_subset")) if lod1 else None
     if lod1 and not sub:
         for b in branches:
             keep = list(range(0, len(b.pts) - 1, 2)) + [len(b.pts) - 1]
@@ -1561,20 +1573,30 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
     uvl = bm.loops.layers.uv.new("UVMap"); bm.loops.layers.uv.new(lightmap_uv.LAYER)
     deep = max(b.depth for b in branches)
     S0, S1 = CFG.get("sides", (7, 5, 4)), CFG.get("lod1_sides", (5, 4, 3))
+    skip = set()  # lv: tubes not meshed in this far level (too deep or too thin), and every branch rooted on one
+    if lv is not None:
+        md = lv.get("maxdepth")
+        if md is None and lv.get("drop") and deep - lv["drop"] >= 1: md = deep - lv["drop"]
+        rmin = lv.get("min_r", 0.0) * max(b.radii[0] for b in branches if b.depth == 0)
+        for bi, b in enumerate(branches):
+            p = getattr(b, "par", None)
+            if (md is not None and b.depth > md) or (b.depth > 0 and b.radii[0] < rmin) or \
+                    (p is not None and any(branches[j] is p for j in skip)):
+                skip.add(bi)
     spans = []  # (skeleton index, first bark face, end) per meshed tube
     vspans = []  # (skeleton index, first vertex, end) per meshed tube (base fix)
     meshed = {}  # skeleton index -> (pts, radii) of the axis actually meshed (LOD1: thinned; base fix: base_axis)
     cut = low_cut(branches)  # low_tips: bare ground limbs are not meshed
     for bi, b in enumerate(branches):
-        if getattr(b, "merged_into", None) is not None or bi in cut: continue  # merged: its axis is the tail of its parent's tube
-        St = S1 if lod1 else S0
+        if getattr(b, "merged_into", None) is not None or bi in cut or bi in skip: continue  # merged: its axis is the tail of its parent's tube
+        St = lv["sides"] if lv is not None else S1 if lod1 else S0
         if getattr(b, "sides", None): sides = b.sides
         elif b.depth == 0: sides = St[0]
         elif b.depth < deep or deep == 1: sides = St[1]
         else: sides = St[2]
         full = (b.pts, b.radii)
-        if sub and len(b.pts) > 2 and bi not in full_rings:  # every other ring on the tube only; the cards stay rooted on the full axis
-            ks = list(range(0, len(b.pts) - 1, 2)) + [len(b.pts) - 1]
+        if sub and len(b.pts) > 2 and bi not in full_rings:  # every other (lv: every `rings`-th) ring; the cards stay rooted on the full axis
+            ks = list(range(0, len(b.pts) - 1, lv.get("rings", 2) if lv is not None else 2)) + [len(b.pts) - 1]
             b.pts = [b.pts[k] for k in ks]; b.radii = [b.radii[k] for k in ks]
         if bi in base_over: b.pts, b.radii = base_axis(b.pts, b.radii, base_over[bi])  # base fix (mesh only)
         f0 = len(bm.faces); v0 = len(bm.verts)
@@ -1592,7 +1614,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
             if others: add.add(min(others)[1])
         if add - full_rings:
             bm.free(); bpy.data.meshes.remove(me)
-            return make_lod(name, seed, lod1, full_rings | add, base_over, base_round)
+            return make_lod(name, seed, lod1, full_rings | add, base_over, base_round, lv)
     if CFG.get("base_clamp", True):
         nclamp = base_cones.clamp(bm)
         if CFG.get("base_fix", True):  # limbs floating off their branch / flat-capped bases: fix the axis, mesh again
@@ -1600,7 +1622,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
             new = base_fix(branches, meshed, vspans, bad, base_over) if bad and base_round < BASE_ROUNDS else base_over
             if new != base_over:
                 bm.free(); bpy.data.meshes.remove(me)
-                return make_lod(name, seed, lod1, full_rings, new, base_round + 1)
+                return make_lod(name, seed, lod1, full_rings, new, base_round + 1, lv)
             if base_over or bad:
                 print("STAT", name, "base fix moved", sum(1 for v in base_over.values() if v.get("P") is not None),
                       "narrowed", sum(1 for v in base_over.values() if v.get("rb") is not None), "passes", base_round,
@@ -1686,9 +1708,13 @@ MESHED, SNAPPED = {}, {}  # per LOD name: meshed axis per tube; shifts of the ca
 SEED = CFG["seed"] or pick_seed()
 tree_uv.OFFSET_SEED = SEED if CFG.get("bark_tile_min") is not None else None
 # Default: one LOD0 mesh named <Species>_Tree. LOD1 (fewer sides, half the deepest twigs, 35 % larger
-# cards, 60 % of the count, no fold) only with --lod1, for very large worlds.
+# cards, 60 % of the count, no fold) only with --lod1, for very large worlds. --lods (with --lod1): the far levels
+# <Species>_Tree_LOD2, _LOD3 (CFG lods, default LOD_LEVELS) for a LODGroup whose LOD0 is the culled LOD1; their
+# leaf normals use the LOD1 crown proxy so all levels shade alike.
 lod0 = make_lod(f"{NAME}_Tree" + ("_LOD0" if LOD1 else ""), SEED, False)
 LODS = [lod0] + ([make_lod(f"{NAME}_Tree_LOD1", SEED, True)] if LOD1 else [])
+if LOD1 and LODS_ON:
+    LODS += [make_lod(f"{NAME}_Tree_LOD{2 + i}", SEED, True, lv=L) for i, L in enumerate(CFG.get("lods", LOD_LEVELS))]
 
 def tris(o, mi=None): return sum(len(p.vertices) - 2 for p in o.data.polygons if mi is None or p.material_index == mi)
 def bounds(o):
@@ -1758,14 +1784,15 @@ for o in LODS:
 print("STAT", lod0.name, "limbs", limb_report(lod0))
 for o in LODS:
     print("STAT", o.name, "bark stretch (min, median, max, max/min)", stretch_stats(o),
-          "attach", "LOD1" if o.name.endswith("_LOD1") else "LOD0", attach_report(o))
+          "attach", o.name.rsplit("_", 1)[-1] if "_LOD" in o.name else "LOD0", attach_report(o))
     if SNAPPED.get(o.name):
         sh = sorted(SNAPPED[o.name])
         print("STAT", o.name, "cards moved onto the meshed bark:", len(sh), "median cm", round(100 * sh[len(sh) // 2], 1),
               "max cm", round(100 * sh[-1], 1))
 for o in LODS:
     before = leaf_normal_spread(o)
-    dims = transfer_crown_normals(o, CFG["proxy"], cluster=CFG.get("leaf_cluster"), crown_mix=CFG.get("leaf_crown_mix", 0.35))
+    dims = transfer_crown_normals(o, CFG["proxy"], cluster=CFG.get("leaf_cluster"), crown_mix=CFG.get("leaf_crown_mix", 0.35),
+                                  ref=LODS[1] if o.name[-1:] in "23456789" and "_LOD" in o.name else None)
     print("STAT", o.name, "proxy", CFG["proxy"], dims, "leaf normal |dot| before", before, "after", leaf_normal_spread(o))
 for o in LODS:  # bark islands not connected to the ground-rooted bark (buried base cones count as connected)
     print("STAT", o.name, "floating_bark_components", *floating_bark_components(o))
