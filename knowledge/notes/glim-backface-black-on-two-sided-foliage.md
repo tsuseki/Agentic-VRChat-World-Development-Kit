@@ -35,7 +35,8 @@ sources: [https://github.com/z3y/glim, https://docs.unity3d.com/2022.3/Documenta
 - Plain-wall control: two stock bakes and one patched bake (denoise off) gave a byte-identical `Lightmap-0_Diffuse.exr`.
 - Positive control, the same chunk and settings: crown 0.077 → 0.093 (+22 %), shrubs and bamboo almost unchanged.
 - At 4096 with 5 bounces it reached 0.098, still about 25 % under Progressive.
-- Unresolved in that scene: a shaded plaster wall baked at about 0.53× Progressive's brightness in every GLIM variant (bounces, directional encoding and density ruled out).
+- A shaded plaster wall baked at about 0.53× Progressive's brightness in every GLIM variant, and Bakery 1.98 baked it darker still (0.36×) with the same sky cubemap. Progressive is the outlier there, so don't chase it as a GLIM bug.
+- Bakery's global Backface GI weight 0 vs 1 changed the crown by under 1 %. A likely reason, not verified: Bakery already treats these Double Sided GI leaf materials as two-sided.
 
 **Pitfalls:**
 - GLIM reads only the skybox for ambient and ignores Trilight and Color ambient. Bake every lightmapper with the same sky cubemap when comparing them.
