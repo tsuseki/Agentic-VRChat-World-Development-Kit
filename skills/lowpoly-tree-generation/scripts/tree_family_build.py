@@ -88,6 +88,18 @@
 #   low_tips out=(lo, hi) (opt-in): each low_tips card is re-aimed tip-out: heading = radial from the trunk + its own
 #       drawn heading, elevation lo..hi deg (own random sequence 7937), so no low card hangs vertically (an edge-on
 #       hanging card reads as a stippled vertical stripe). Off = identical builds.
+#   crown crest=dict(n=80, size=1.4, cells=[0, 1, 2], step=0.25, cell=0.6, band=0.3, zmin=0.5, space=0.55,
+#       rise=(-5, 20), both=True, face_up=(20, 50), out=0.15, mindepth=1, seed=7993) (sprig, opt-in; weeping crowns):
+#       every card of a hanging crown hangs below its root, so the top of each arching limb stays bare and the crown
+#       reads outlined by wire (BoothAssets SakuraWeeping, JP promo thumbnail). Crest points = limb samples (every
+#       `step` m on depth >= mindepth) within `band` m of the highest limb point of their `cell` m xy grid square and
+#       above zmin x height; highest first, at least `space` m apart, at most n. Each gets one spray card rooted on the
+#       axis, lying along the limb (either way if `both`, `rise` deg above horizontal, + `out` x the radial) in the
+#       limb's vertical plane tilted `face_up` deg to face out and up, so its blossom covers the crest from the side and
+#       from above without standing up out of the dome. Placed last with their own random sequence: every other card
+#       is unchanged. Off = identical builds.
+#       follow=True: the spray is first turned outward (away from the trunk), and `rise` (use <= 0) is measured from the
+#       limb tangent's own slope clamped to <= horizontal, so sprays drape out and down along the arch, never above it.
 #   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
 #       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
 #       ground-stem root crown below `fuse` m are allowed overlap); see BoothAssets/Tools/trees/declip.py. Off = identical builds.
@@ -1110,6 +1122,61 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         C["ground"] = g0
         if g0 is None: del C["ground"]
         size = base
+    CR = C.get("crest")
+    if CR:  # opt-in (sprig, weeping): sprays standing on the top of the arching limbs (header: crown crest)
+        KIND[0] = "crest"
+        crng = random.Random(CR.get("seed", 7993))  # own sequence, placed last: every card above is unchanged
+        step, gc, band = CR.get("step", 0.25), CR.get("cell", 0.6), CR.get("band", 0.3)
+        key = lambda p: (math.floor(p.x / gc), math.floor(p.y / gc))
+        blen_c = lambda x: sum((x.pts[i + 1] - x.pts[i]).length for i in range(len(x.pts) - 1))
+        samp, top = [], {}
+        for b in branches:
+            if b.depth < 1 or getattr(b, "sides", None): continue
+            n = max(2, int(blen_c(b) / step) + 1)
+            for i in range(n):
+                t = 0.03 + 0.94 * i / (n - 1); A = point_at(b, t)[0]; k = key(A)
+                top[k] = max(top.get(k, -1e9), A.z)
+                if b.depth >= CR.get("mindepth", 1): samp.append((A.z, b, t))
+        zmin = CR.get("zmin", 0.5) * CFG["height"]
+        cand = sorted((s for s in samp if s[0] >= zmin and s[0] >= top[key(point_at(s[1], s[2])[0])] - band),
+                      key=lambda s: -s[0])
+        chosen = []
+        for z, b, t in cand:
+            A = point_at(b, t)[0]
+            if any((A - q).length < CR.get("space", 0.55) for q, _, _ in chosen): continue
+            chosen.append((A, b, t))
+            if len(chosen) >= CR.get("n", 80): break
+        ccells = [cells[i] for i in CR.get("cells", (0, 1, 2))]
+        made = 0
+        for A, b, t in sorted(chosen, key=lambda c: (c[0].x, c[0].y, c[0].z)):  # stable order for the draws
+            _, _, dt = point_at(b, t)
+            th = Vector((dt.x, dt.y, 0.0)); rad = Vector((A.x, A.y, 0.0))
+            rad = rad.normalized() if rad.length > 1e-6 else Vector((1.0, 0.0, 0.0))
+            th = th.normalized() if th.length > 0.2 else rad
+            FL = CR.get("follow", False)  # lie along the limb's real tangent, tipped outward, never above it
+            if FL and th.dot(rad) < 0.0: th = -th
+            if CR.get("both", True) and crng.random() < 0.5: th = -th  # either way along the limb: both arch flanks
+            e = math.radians(crng.uniform(*CR.get("rise", (-5.0, 20.0))))
+            if FL:  # rise is relative to the limb tangent's slope (<= 0: the spray drapes down over the arch)
+                dtn = dt.normalized() if dt.length > 1e-6 else th
+                slope = math.asin(max(-1.0, min(1.0, dtn.z if dtn.dot(th) >= 0.0 else -dtn.z)))
+                e = min(slope, 0.0) + min(e, 0.0)
+            d = (th * math.cos(e) + UP * math.sin(e) + rad * CR.get("out", 0.15)).normalized()
+            n0 = th.cross(UP).normalized()  # card in the limb's vertical plane, then faced out and up
+            if n0.dot(rad) < 0.0: n0 = -n0
+            ph = math.radians(crng.uniform(*CR.get("face_up", (20.0, 50.0))))
+            nrm = n0 * math.cos(ph) + UP * math.sin(ph)
+            sz = CR.get("size", 1.4) * crng.uniform(0.85, 1.15); cell = crng.choice(ccells)
+            q = sprig_card(bm, uvl, A, d, nrm, sz, fold, cell, dry=True)
+            if (CFG.get("clear") and any(in_clear(x) for x in q)) or min(x.z for x in q) < C.get("ground", 0.0): continue
+            made += 1
+            if probe is not None:
+                probe.append((A.copy(), d.copy(), sz, "crest", id(b), t)); cards.append((-1, None, None, b, t)); continue
+            first, grid, att = sprig_card(bm, uvl, A, d, nrm, sz * (keep.get("grow", 1.3) if keep else 1.0), fold, cell)
+            cards.append((first, grid, att, b, t))
+        if probe is None:
+            print(f"STAT crest {'lod1' if lod1 else 'lod0'} candidates {len(cand)} cards {made} "
+                  f"z {round(min((c[0].z for c in chosen), default=0.0), 2)}-{round(max((c[0].z for c in chosen), default=0.0), 2)}")
     if C.get("floor_base") and probe is None: print(f"STAT floor_base {'lod1' if lod1 else 'lod0'} levelled {FBN[0]}")
     return [c for c in cards if c[0] is not None]
 
