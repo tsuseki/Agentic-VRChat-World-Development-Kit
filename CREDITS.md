@@ -134,8 +134,13 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   API, Google Gemini API, [ComfyUI](https://github.com/comfyanonymous/ComfyUI) (GPL-3.0) with
   Qwen-Image-2512 / Qwen-Image-Edit-2511 (Apache-2.0) or [Qwen-Image 2.1](https://huggingface.co/Comfy-Org/Qwen-Image-2.1) (Qwen Research License, non-commercial; the shipped `scripts/comfyui/` workflows follow its Comfy-Org reference graph), [Tripo API](https://developers.tripo3d.com),
   [Meshy API](https://docs.meshy.ai), [TRELLIS.2](https://github.com/microsoft/TRELLIS.2) (MIT).
-- **z3y** — [GLIM](https://github.com/z3y/glim) Vulkan GPU lightmapper. Used by
-  `.omp/knowledge/notes/glim-vendor-portable-gpu-lightmapper.md`, `.omp/skills/lightmap-allocation/`.
+- **z3y** — [GLIM](https://github.com/z3y/glim) Vulkan GPU lightmapper, MIT (bundles Apache-2.0 and
+  BSD-3-Clause parts, see its `license/`). Used by `.omp/knowledge/notes/glim-vendor-portable-gpu-lightmapper.md`,
+  `.omp/skills/bakery-light-baking/`, `.omp/skills/lightmap-allocation/`. A world project may carry a local
+  fork (`0.11.0-ds.1`) that adds double-sided GI for Double Sided GI materials. It is built from the `v0.11.0`
+  source with a two-shader patch documented in the fork's `PATCHES.md`, and it is never pushed upstream.
+  Built with [Slang](https://github.com/shader-slang/slang) (Apache-2.0 WITH LLVM-exception) and
+  [Open Image Denoise](https://github.com/RenderKit/oidn) (Apache-2.0) as GLIM's denoiser.
 - **MerlinVR** — [VRC-Bakery-Adapter](https://github.com/MerlinVR/VRC-Bakery-Adapter); **zulubo** —
   [SpecularProbes](https://github.com/zulubo/SpecularProbes). Linked from Silent's guide; mentioned in
   `.omp/skills/bakery-light-baking/reference/silent-lighting-guides.md`.

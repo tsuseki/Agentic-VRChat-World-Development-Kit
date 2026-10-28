@@ -14,6 +14,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Treat a bake as finished only when `LightingData.asset`'s mtime passes the bake start, or when re-measured hashes differ** — `isRunning == false` and the "Total bake time" line both arrive before the EXRs are written, so an early check makes a good bake look like it changed nothing.
 - **Iterate with a DRAFT preset (low texels and samples, same bounces) or the Samples Multiplier. After a preset switch, run a full Render, and run a separate probe pass after selected-group bakes** — selected-group bakes are refused after any geometry or atlas-resolution change and skip light probes. GI cost grows with the square of the sample count (see SKILL.md §Two-stage workflow).
 - **GLIM (Vulkan, free) is the lightmapper when Bakery isn't owned or the GPU isn't NVIDIA: pin its version per project and move a Bakery scene to it only off the deadline path** — Bakery needs OptiX, and its groups and light meshes do not carry over to GLIM (see SKILL.md §Without Bakery: GLIM).
+- **After every Bakery render in a test scene, `git status Assets/Bakery/ft*Storage.asset` and the shared model folders must be clean. Never enable Unwrap UVs there, and give tests their own model copies** — Bakery registers models in a project-wide registry and re-applies its UV2 on every import, so a test render can break other scenes' lightmaps (note `bakery-unwrap-registry-rewrites-shared-models`).
 
 ## Lightmap groups, atlas share and texel density
 
@@ -36,6 +37,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **When a hard black slab bakes onto a floor, compare the winding normal and shading normal of nearby ContributeGI meshes against a known ground truth, and write fixes to a new mesh asset** — face-down decal quads are invisible from above but still occlude the surface below. Inward-wound boxes bake themselves black.
 - **Add a `BakerySkyLight` (skybox cubemap, `hemispherical`, `bakeToIndirect`) to every outdoor Bakery scene** — Bakery ignores Unity's ambient settings. Open shade survives on ground bounce while roofed shade bakes black.
 - **Set the sun's `bakeToIndirect = true`, and if the bake overshoots, lower its `indirectIntensity` instead of dimming the sun** — with it off the sun produces no bounce, and with black flat ambient every exterior shade bakes to about zero.
+- **With stock GLIM, expect two-sided leaf crowns to bake about 40% darker than Progressive. Bake foliage with the double-sided GI fork, or with Progressive or Bakery (Backface GI 1)** — GLIM 0.11's bounce pass returns black for every back-face hit even when Double Sided GI is on (note `glim-backface-black-on-two-sided-foliage`).
 - **Judge sunlit exteriors on the baked daylight alone and tell the reviewer that light counts are out of scope there** — "enough fixtures" is an interior criterion. Point lights outdoors only add bake cost and noise.
 
 ## Emitters, fixtures and lamps

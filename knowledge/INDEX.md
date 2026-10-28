@@ -4,7 +4,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## Topics
 
-- [lighting-baking](#lighting-baking) (68)
+- [lighting-baking](#lighting-baking) (70)
 - [probes-reflection-and-light](#probes-reflection-and-light) (21)
 - [materials-textures-shaders](#materials-textures-shaders) (38)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (29)
@@ -23,6 +23,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 ## lighting-baking
 
 - [A Bakery bake that hangs forever is often the tracer blocked on an invisible error dialog](notes/bakery-hang-is-an-invisible-modal-error-box.md) — When a Bakery bake stalls with Unity idle, the ftrace tracer has usually raised a modal error box nobody can see, because Bakery launches it windowless and its fallback chain waits for an exit code that never comes.
+- [A Bakery test render can rewrite the lightmap UVs of shared models through its global registry](notes/bakery-unwrap-registry-rewrites-shared-models.md) — Bakery's scene export can register every model it touches in `Assets/Bakery/ftGlobalStorage.asset` and add `#BAKERY` padding properties to their `.meta` files, and its postprocessor re-applies its unwrap on every later import, so a test render quietly changes the UV2 of models shared with shipped scenes and breaks their existing lightmaps.
 - [A baked light placed inside a lamp mesh's bulb lights nothing](notes/lamp-light-sealed-inside-fixture-mesh.md) — Asset-pack lamps are often one solid mesh with a closed bulb, so a light placed "in the bulb" is sealed in a cavity and contributes nothing; find free volume with a ray sweep and use several lights there.
 - [A build area straddling a terrain-tile boundary gets two lightmap densities](notes/terrain-tile-boundaries-split-lightmap-density.md) — On large tiled terrain where only some tiles get dedicated lightmap atlases, anything straddling a tile boundary shows a straight tonal seam and blurred shadows on the low-density side; equal texels per metre on both sides makes the seam invisible.
 - [A cozy interior needs luminance contrast with the outside before it needs props](notes/interior-reads-cozy-only-if-darker-outside.md) — When the night outside measures brighter than the furniture inside, the room reads sterile; fix the contrast ordering with one uniform exposure pass before adding props.
@@ -47,6 +48,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Diff bulk lighting-flag sweeps against what the last bake actually produced](notes/diff-bulk-flag-sweeps-against-last-bake.md) — A scene-wide sweep driven by a UV2-gutter predicate silently reverted 28 just-fixed renderers; snapshot per-renderer lightmapIndex before sweeping and compare expected vs actual touch counts.
 - [Driving Bakery bakes from editor scripts / MCP](notes/bakery-scripted-bake-recipe.md) — Launch via the ftRenderLightmap window instance (LoadRenderSettings then RenderButton), poll bakeInProgress across separate calls, and re-verify scene state after every bake.
 - [Face-down ground decals and wrong-way normals bake black](notes/face-down-decals-bake-black-slabs.md) — A face-down ground quad is invisible from above yet still casts shadow, sealing the surface below into a black baked slab; diagnose by comparing winding normal and shading normal against a ground truth before flipping either.
+- [GLIM bounces black off the back of two-sided leaf cards; a two-shader patch fixes it](notes/glim-backface-black-on-two-sided-foliage.md) — GLIM 0.11.0 ignores Double Sided GI in its lightmap bounce pass, so every bounce ray that hits a leaf card from behind returns black and tree crowns bake about 40 % darker than Progressive; patching two Slang shaders to bounce the front-side value fixes part of it and leaves single-sided bakes byte-identical.
 - [GLIM: a free Vulkan GPU lightmapper that runs on AMD as well as NVIDIA](notes/glim-vendor-portable-gpu-lightmapper.md) — Bakery requires NVIDIA OptiX, but GLIM (github.com/z3y/glim) is a free, open-source drop-in replacement for Unity's built-in lightmapper using Vulkan ray queries, so the NVIDIA lock is not inescapable.
 - [Green/pink lightmap blotches: fix atlas starvation before blaming denoise or compression](notes/bakery-chroma-patches-atlas-starvation-recipe.md) — Chroma blobs and bleed gradients on hero surfaces came from one hidden mesh eating 68% of the atlas; audit chart share, demote hogs, use fixed groups, pad, and bake at GI 32 / 4 bounces.
 - [Invisible ShadowsOnly proxy boxes must float and match object height, and only for things that never move](notes/baked-shadow-proxy-boxes-float-and-match-height.md) — A ShadowsOnly proxy resting on the ground bakes a black slab, one shorter than the object hides its shadow underneath, and anything a player can move should get no baked shadow at all.

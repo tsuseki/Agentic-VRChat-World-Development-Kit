@@ -219,10 +219,27 @@ reflection probes.
   - One lightmap holds the whole scene by default. Add a `Lightmap Group Selector` with a
     *Create → Lightmap Group (Glim)* asset per area to split it.
   - Light cookies use RGB, not alpha.
-  - Not supported: double-sided GI, terrain trees, Subtractive mode, meta-pass fallback.
-    Hand-authored LOD groups lightmap only LOD0 (lower LODs fall back to probes; importer-made
-    LODs share UVs and work).
-  - One release broke against VRC Light Volumes 3.x; after updating either, re-bake a test area.
+  - Ambient comes only from the **skybox** (× `ambientIntensity`). Trilight or Color ambient is ignored, so
+    give it a skybox cubemap that matches your ambient before comparing it with another lightmapper.
+  - Not supported: terrain trees, Subtractive mode, meta-pass fallback. Renderers that are ContributeGI
+    but receive GI from light probes are left out of the bake entirely (no occlusion, no bounce): put them
+    in a lightmap group with `Discard` on instead. Hand-authored LOD groups lightmap only LOD0 (lower LODs
+    fall back to probes; importer-made LODs share UVs and work).
+  - **Double-sided GI is half done in 0.11.0:** probes honour `Material.doubleSidedGI`, but the lightmap bounce
+    pass returns black for every back-face hit. Two-sided leaf crowns bake about 40 % darker than Progressive.
+    Use the double-sided GI fork (two-shader patch, `PATCHES.md` in the fork; single-sided bakes stay
+    byte-identical) or bake foliage with Progressive or Bakery. Note: `.omp/knowledge/notes/glim-backface-black-on-two-sided-foliage.md`.
+  - Close the Bakery window first: while Bakery's `!ftraceLightmaps` object exists, GLIM stops on a modal
+    "Remove bakery script" dialog. Save the scene before every scripted bake, or GLIM's internal probe pass
+    stops on a "Scene(s) Have Been Modified" dialog. Scripted start: build `Glim.Bindings.GlimConfig` exactly
+    as `GlimLightmapperEditor`'s Generate Lighting button does, call `Glim.Bake.Start`, and poll
+    `Glim.Bake.IsBaking` and `Bake.LoadReport(scenePath)`. Turn the lightmapper's `bakeReflectionProbes` off
+    when a bake-only skybox is swapped in, and bake the probes after restoring the real sky.
+  - Texel density: one atlas per group at a fixed resolution; `scaleExponent` 1.0 makes density proportional
+    to world size × Scale In Lightmap (default 0.8 starves big pieces). Terrain gets its own group via a
+    selector on the Terrain. Measured on a 40 × 65 m garden chunk: 4096 at exponent 1.0 ≈ 7 texels/m per
+    Scale In Lightmap unit. GLIM writes uncompressed EXRs, about 5× Progressive's disk size at the same VRAM.
+    GLIM's own pass takes 40–90 s where Progressive GPU takes about 13 min on the same chunk.
   - Bakery components (`BakeryLightMesh`, `BakerySkyLight`, Bakery lightmap groups) do nothing
     here: emitters are emissive materials or Unity area lights. Moving a Bakery scene to GLIM is a
     re-setup of every group and light mesh, not a switch.
