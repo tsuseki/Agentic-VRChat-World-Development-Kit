@@ -4,7 +4,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## Topics
 
-- [lighting-baking](#lighting-baking) (70)
+- [lighting-baking](#lighting-baking) (71)
 - [probes-reflection-and-light](#probes-reflection-and-light) (21)
 - [materials-textures-shaders](#materials-textures-shaders) (38)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (29)
@@ -29,6 +29,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [A cozy interior needs luminance contrast with the outside before it needs props](notes/interior-reads-cozy-only-if-darker-outside.md) — When the night outside measures brighter than the furniture inside, the room reads sterile; fix the contrast ordering with one uniform exposure pass before adding props.
 - [A custom cutout foliage shader tagged RenderType Opaque bakes leaf cards as solid rectangles](notes/cutout-shader-needs-transparentcutout-rendertype-for-baked-shadows.md) — The Progressive lightmapper treats a shader tagged RenderType=Opaque as opaque, so every leaf card casts a rectangular baked shadow; tag the SubShader RenderType=TransparentCutout to get leaf-shaped dappled shadows.
 - [A domain reload mid-bake kills Bakery's export — and Bakery can trigger it itself](notes/bakery-bake-killed-by-domain-reload.md) — Any script compile, asset refresh or native-plugin reimport during a bake kills Bakery's export coroutine, leaves stale temp objects, and can wreck lightmap bindings; know the tells and recovery steps.
+- [A leftover __ExportTerrain object from an interrupted Bakery export makes every later export throw ArgumentOutOfRange](notes/bakery-stale-export-terrain-crashes-export.md) — When a Bakery export is interrupted after it converts terrains, it leaves `Terrain/__ExportTerrainParent/__ExportTerrain` in the scene, the next save keeps it, and every later export fails in `ftBuildGraphics.ExportScene` with "Index was out of range" because the stale object's parent is not in that run's terrain list.
 - [A prop added after the last bake reads blue - check lightmapIndex before re-tinting](notes/unbaked-props-read-blue.md) — lightmapIndex -1 means no baked data, so a new prop falls back to skybox ambient and reads cold next to an identical baked one; do not re-tint the material.
 - [A sealed-light audit needs to skip directional lights, inactive geometry, and lights on a face](notes/sealed-baked-light-audit-needs-three-filters.md) — A naive bounds.Contains test for lights sealed inside geometry double-counts; skip directional and inactive objects and require a margin so escaped lights on a face are not re-flagged.
 - [Aim spot/wash lights with LookRotation at a target, not hand-written Euler angles](notes/aim-lights-at-a-target-not-with-euler-angles.md) — A hand-typed Euler rotation can point a light 180 degrees away from its target and nothing catches it until a full bake later.
