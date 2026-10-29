@@ -24,6 +24,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Check atlas headroom before accepting ~1 texel/m on terrain, and nudge important sites off the tile grid** — at that density contact shadows disappear, and seam fixing cannot stitch separate tile renderers.
 - **Weight terrain `scaleInLightmap` by distance from the play route to each chunk's nearest edge** — inside one group the scale is a relative share, so weighting moves texels without adding VRAM.
 - **Give each material of a mesh a UV2 share near its surface-area share; flag a submesh with ≥ 10 % of the area and < 5 % of the UV2** — area-weighted unwraps gave tree bark ~3 % of the UV2, so whole limbs sat in ~1 texel and baked a different colour from the trunk.
+- **Give every small hard prop (rocks, stepping stones, kerbs, lanterns) a per-renderer Scale In Lightmap that puts its chart rect at ≥ target + 6 texels, and audit a baked `lightmapScaleOffset` by `abs(so)` with negatives flagged** — Bakery's packer takes 3 texels of padding off each side, so a 0.5–1 m prop at 3 texels/unit and scale 1–2 baked 0–3 texels or a negative (mirrored) scale-offset and read one flat grey (251 stones, 34 boulders); scales of 10–150 fixed it for ~130 k texels (note `bakery-chart-rect-narrower-than-padding-goes-negative`).
 
 ## UV2 quality
 

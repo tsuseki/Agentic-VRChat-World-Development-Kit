@@ -28,17 +28,18 @@ control.
 | group | Bakery selector `lmgroupAsset` name (searched up the parents), or none |
 | bounds | world AABB sizes sorted: small, middle, large |
 | worldArea, uv2Area | sums over triangles; world positions include the transform |
-| T | texels per UV unit: after a bake `atlasSize × sqrt(so.x × so.y)`, else `res × scaleInLightmap × sqrt(worldArea / uv2Area)` |
+| T | texels per UV unit: after a bake `atlasSize × sqrt(abs(so.x × so.y))` (a negative scale-offset still counts as baked), else `res × scaleInLightmap × sqrt(worldArea / uv2Area)` |
 | texelsPerM | `T × sqrt(uv2Area / worldArea)` |
 | tinyTriFrac | fraction of UV2 triangles with `uv2TriArea × T² < 0.01` |
 | charts, tinyChartFrac | charts are connected components of the triangle graph by shared UV2 vertex index (union-find over `mesh.triangles`); size = `sqrt(chartUv2Area) × T`; fraction under 4 |
 | chartsPerTri | charts ÷ triangles |
 | worstSubmesh | lowest `uv2Share / areaShare` with its two shares |
-| share | `so.x × so.y` after a bake, else the estimated share of the group's atlas |
+| share | `abs(so.x × so.y)` after a bake, else the estimated share of the group's atlas |
 | shortSideTexels | `T × sqrt(uv2Area / worldArea) × middle bounds dimension` (texels across the main face's short side) |
 | minGapTexels | smallest gap between chart bounding boxes × T (only for meshes ≥ ~1.3 m, sampled if large) |
 | uv2Valid | present, inside 0–1, finite |
 | transparent | any material with render queue ≥ 2500, Standard Fade/Transparent mode, or a glass/window/glazing name |
+| negSO | 1 when the baked `so.x` or `so.y` is negative: the chart rect was narrower than twice the packer padding, so the chart is tiny and mirrored (the T column then reads a few texels per UV unit, not a healthy value) |
 
 ### Flags and what each one gets
 
@@ -58,6 +59,7 @@ control.
 | SELECTOR_ON_P | P renderer carrying a selector | remove (it can bake an empty atlas) |
 | NON_LV_SHADER | P or D renderer whose material shader is not LV-compatible (`Light Volume Samples/*`, lilToon, Poiyomi or another listed one), e.g. Standard | assign an LV copy of the material (`<name>_LV.mat`) |
 | LOD_GROUP | renderer in a `LODGroup` whose group has `sceneLodLevel = -1` | one group per LOD level |
+| NEG_SO | baked `lightmapScaleOffset` with a negative x or y | raise Scale In Lightmap per renderer until the chart rect is ≥ 6 texels (2 × the default packer padding of 3) plus the wanted texels across, then re-bake (note `bakery-chart-rect-narrower-than-padding-goes-negative`) |
 | GI_SCREEN | mirror or video/runtime screen with `ContributeGI` | clear the flag |
 
 Report: flag counts per area; the top 10 hogs per atlas with their shares; every flagged renderer
