@@ -28,6 +28,21 @@
 #       points at arc share at=(lo, hi) on depth-`depth` (1) limbs spread round the crown, straight down (curve 0) to
 #       the ground drift=(lo, hi) m further out, r (0.6) x the limb radius there -> x tip (1.2, thicker at the ground);
 #       points below minz (1.5 m) are skipped. Built after the levels; avoid `smooth` (it would move the limbs).
+#       Limb-pillar extras (opt-in; any of them switches the entry to the extended build): rv=(lo, hi) radius x range;
+#       lean=(lo, hi) deg (foot moved in a random azimuth); fuse=(p2, p3) chance of a fused pair / triple (members
+#       side by side along the limb gap (0.9) x its radius apart, splayed fuse_spread (1.8) x their radius at the
+#       foot, 0.5-0.85 x as thick); collar=dict(r, h): top on the limb axis, swelling to r x the limb radius (<= 0.62)
+#       inside it and easing to the pillar radius h m under the limb (no butt joint; the pillar tapers up to <= 0.5 x
+#       the limb radius); foot=dict(r, h): ground ring x r, easing in over h m; hang=(lo, hi): an aerial root
+#       hanging that far and ending in the air (>= floor (1.2) m up; tip < 1 thins it); sides: tube sides.
+#   levels[i] wave=dict(amp, n, side) (opt-in): sinuous limbs: each step tilted up/down by amp x sin over n cycles
+#       along the limb (+ side x a sideways sway), own phases per limb; the heading itself drifts as before.
+#   levels[i] sides=(lod0, lod1) (opt-in): tube sides of that level's limbs (and their merged continuations).
+#   flute=dict(n, amt, base, base_h, twist, vary) (opt-in, use sides[0] = 2 n): depth-0 stems fluted like fused root
+#       strands: ring vertices alternate ridge (+amt, each strand x 1 +- vary) / groove (-amt), ridges deeper by
+#       base x toward the ground over base_h m (buttresses), the ring turned twist rad per m up (spiralling strands).
+#   crown fill_under=dict(frac, size, mindepth, minz, out, down) (sprig, opt-in): frac x count of the cards (within
+#       count, like fill) go on the inner limbs pointing out and down, so the crown reads as a leaf mass from under it.
 #   crown (rosette) dead start=<m>, tilt_z=True (opt-in): dead fronds hang from `start` m under the head top (not
 #       below the live zone) down over `zone` m; with tilt_z the top ones take tilt hi (splayed out) and the lowest
 #       tilt lo (hanging): a petticoat that flares toward the head and tapers down (WashingtoniaSkirt). No draws.
@@ -393,16 +408,25 @@ def in_clear(p):
             if (p - (a + ab * t)).length <= v["r"]: return True
     return False
 
-def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, keep_out=True, up_end=None, flat=0.0):
+def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, keep_out=True, up_end=None, flat=0.0, wave=None):
     pts, radii = [start.copy()], [r0]
     d = direction.normalized(); p = start.copy()
+    if wave:  # opt-in (levels[i] wave): a sinuous limb rising and dipping (+ a sideways sway), own phases per limb
+        wr = random.Random(seed * 59 + depth * 7 + 3); wph, wph2 = wr.uniform(0, 2 * math.pi), wr.uniform(0, 2 * math.pi)
+        wside = Vector((-d.y, d.x, 0.0)); wside = wside.normalized() if wside.length > 1e-6 else Vector((1.0, 0.0, 0.0))
     for i in range(1, segs + 1):
         n = det_noise_vector(p * 1.7 + Vector((depth * 3.1, seed * 0.37, 0.5)))
         u = up if up_end is None else up + (up_end - up) * (i - 1) / max(1, segs - 1)  # up_end: bias ramps along it
         d = (d + n * gnarl + UP * u).normalized()
         if flat and Vector((d.x, d.y, 0.0)).length > 1e-6:  # flat: each segment levels out toward horizontal
             d = Vector((d.x, d.y, d.z * (1.0 - flat))).normalized()
+        db = d
+        if wave:  # the wave tilts this step only; the limb's own heading (gnarl / up drift) carries on underneath
+            f = (i - 0.5) / segs
+            d = (d + UP * wave["amp"] * math.sin(2 * math.pi * wave["n"] * f + wph)
+                 + wside * wave.get("side", 0.0) * math.sin(2 * math.pi * wave["n"] * 0.7 * f + wph2)).normalized()
         p = p + d * (length / segs)
+        d = db
         if depth > 0: p.z = max(p.z, 0.25)  # drooping twigs never reach the ground
         HG = CFG.get("hug")
         if HG and HG.get("depth", (0, 0))[0] <= depth <= HG.get("depth", (0, 0))[1]:  # opt-in: slide along the shell
@@ -547,10 +571,11 @@ def merge_continuations(branches, M):
         if any(x is not c and getattr(x, "merged_into", None) is None and orphaned(x) for x in kids_of.get(id(b), [])):
             MERGE_SKIPPED[0] += 1; continue
         moved = {id(y) for y in subtree(c)} if q is not None else set()  # the swing would move these rigidly
-        if any(getattr(x, "prop", False) and (getattr(x, "par", None) is b and
+        if any(getattr(x, "prop", False) and not getattr(x, "hang", False) and (getattr(x, "par", None) is b and
                min(range(len(b.pts)), key=lambda i: (b.pts[i] - x.pts[0]).length) >= k
                or id(getattr(x, "par", None)) in moved) for x in branches):
             MERGE_SKIPPED[0] += 1; continue  # a K3 pillar hangs on the stub the merge would drop, or on a swung limb
+            # (aerial roots don't block it: they move with their re-seated top)
         if q is not None:
             for y in subtree(c):
                 y.pts = [o + q @ (p - o) for p in y.pts]
@@ -631,14 +656,31 @@ def build_skeleton(seed):
     trunk = out[0]; TL = sum((trunk.pts[i + 1] - trunk.pts[i]).length for i in range(len(trunk.pts) - 1))
     PRS = CFG.get("props") or []
     PRS = [PRS] if isinstance(PRS, dict) else list(PRS)
-    def prop_tube(st, g, h, r0, r1, PR, j, par):  # one K3 root: st (buried in par) -> g (under the ground)
+    def prop_tube(st, g, h, r0, r1, PR, j, par, top=None):  # one K3 root: st (buried in par) -> g (under the ground)
         v = g - st; L = v.length; segs = PR.get("segs", 5); arch = PR.get("curve", 0.25) * L
+        CO, FO = (PR.get("collar") if top else None), PR.get("foot")
+        ts = [i / segs for i in range(segs + 1)]
+        if CO or FO:  # extra rings for the collar (swelling into the limb) and the flared foot
+            tl = top[1] if top else 0.0  # top: (radius inside the host, axis -> host underside length)
+            ex = [tl / L, (tl + CO["h"]) / L] if CO else []
+            ex += [1 - FO["h"] / L] if FO else []
+            ts = sorted(set(ts) | {t for t in ex if 0.01 < t < 0.99})
         pts, radii = [], []
-        for i in range(segs + 1):
-            t = i / segs; q = st.lerp(g, t)
+        for i, t in enumerate(ts):
+            q = st.lerp(g, t)
             q = q + (UP * 0.75 + h * 0.25).normalized() * arch * 4 * t * (1 - t) * (1 - 0.35 * t)  # bowed out and up
-            if 0 < i < segs: q = q + det_noise_vector(q * 1.7 + Vector((j * 3.1, seed * 0.37, 0.5))) * PR.get("gnarl", 0.0) * L / segs
-            pts.append(q); radii.append(r0 + (r1 - r0) * t)
+            if 0 < i < len(ts) - 1:  # (the collar rings stay on the axis line: they sit in / under the host limb)
+                w = min(1.0, t * L / (top[1] + CO["h"])) if CO else 1.0
+                q = q + det_noise_vector(q * 1.7 + Vector((j * 3.1, seed * 0.37, 0.5))) * PR.get("gnarl", 0.0) * L / segs * w
+            rad = r0 + (r1 - r0) * t
+            if CO:  # swelling: top[0] inside the host, easing (concave) down to the plain radius CO h m under it
+                s = t * L
+                if s <= top[1] + 1e-6: rad = max(rad, top[0])
+                elif s < top[1] + CO["h"]: w = (s - top[1]) / CO["h"]; rad = max(rad, top[0] + (rad - top[0]) * (1 - (1 - w) ** 2))
+            if FO:  # flared foot: x FO r at the ground ring, easing in over FO h m
+                s = (1 - t) * L
+                if s < FO["h"]: w = 1 - s / FO["h"]; rad *= 1 + (FO["r"] - 1) * w * w
+            pts.append(q); radii.append(rad)
         pr = Br(pts, radii, 1); pr.par = par; pr.keep = True; pr.prop = True; out.append(pr); return pr
     for k, PR in enumerate(PRS):  # opt-in K3 stilt / prop roots from the trunk (own random sequence per entry)
         if PR.get("src", "trunk") != "trunk": continue
@@ -746,7 +788,8 @@ def build_skeleton(seed):
                     continue  # no branch starts in (or with its thickness / buried base cone reaching into) a volume
                 c = grow(p - d * min(0.03, r), cd, ln, rr, P["tip"] * rr if P["tip"] > 0.05 else P["tip"],
                          P.get("segs", 4 if lv == 0 else 3), lv + 1, out, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
-                         up_end=P.get("up_end"), flat=P.get("flat", 0.0))
+                         up_end=P.get("up_end"), flat=P.get("flat", 0.0), wave=P.get("wave"))
+                if c and P.get("sides"): c.lsides = P["sides"]  # opt-in per-level tube sides (LOD0, LOD1)
                 if c and P.get("root_out"):  # opt-in: the whole limb shifted rigidly root_out x parent radius out along
                     rad = cd - d * cd.dot(d)  # its own radial (same shape and noise), so a thick limb clears the parent wall sooner
                     if rad.length > 1e-6:
@@ -768,7 +811,38 @@ def build_skeleton(seed):
             h = Vector((p.x, p.y, 0.0)); h = h.normalized() if h.length > 1e-6 else Vector((1, 0, 0))
             g = Vector((p.x, p.y, -PR.get("sink", 0.06))) + h * prng.uniform(*PR.get("drift", (0.0, 0.3)))
             r0 = max(TIP_R * 2, r * PR.get("r", 0.6))
-            prop_tube(p - UP * r * 0.4, g, h, r0, r0 * PR.get("tip", 1.2), dict(PR, curve=PR.get("curve", 0.0)), j, b).pillar = True
+            if not any(x in PR for x in ("rv", "lean", "hang", "fuse", "collar", "foot")):  # the original pillar
+                prop_tube(p - UP * r * 0.4, g, h, r0, r0 * PR.get("tip", 1.2), dict(PR, curve=PR.get("curve", 0.0)), j, b).pillar = True
+                continue
+            # opt-in extras: rv radius range (x r), lean (deg, random azimuth), hang=(lo, hi) m: an aerial root hanging
+            # that far and ending in the air (>= floor m up), fuse=(p2, p3): a fused pair / triple (members side by side
+            # along the limb, gap x limb radius apart there, splayed fuse_spread x their ground radius at the foot),
+            # collar=dict(r, h): top swelling (r x limb radius, <= 0.62) easing into the pillar over h m, foot=dict(r, h)
+            r0 = max(TIP_R * 2, r0 * prng.uniform(*PR.get("rv", (1.0, 1.0))))
+            if "lean" in PR:
+                az = prng.uniform(0, 2 * math.pi); ln = math.tan(math.radians(prng.uniform(*PR["lean"]))) * p.z
+                g = g + Vector((math.cos(az), math.sin(az), 0.0)) * ln
+            if "hang" in PR:
+                g = Vector((g.x, g.y, max(PR.get("floor", 1.2), p.z - prng.uniform(*PR["hang"]))))
+            u = prng.random(); p2, p3 = PR.get("fuse", (0.0, 0.0))
+            m = 3 if u < p3 else 2 if u < p3 + p2 else 1
+            dl = Vector((d.x, d.y, 0.0)); dl = dl.normalized() if dl.length > 1e-6 else Vector((1, 0, 0))
+            sd = Vector((-dl.y, dl.x, 0.0)); CO = PR.get("collar")
+            for e in range(m):
+                o = (e + 1) // 2 * (1 if e % 2 else -1)  # 0, +1, -1 along the limb
+                re = r0 if e == 0 else r0 * prng.uniform(0.5, 0.85)
+                st = p + dl * (o * r * PR.get("gap", 0.9))
+                ge = g + dl * (o * r * PR.get("gap", 0.9)) + (sd * (re * PR.get("fuse_spread", 1.8) * prng.uniform(0.7, 1.2)
+                                                                 * (1 if prng.random() < 0.5 else -1)) if e else Vector())
+                rt = r0 * PR.get("tip", 1.2) if e == 0 else re * PR.get("tip", 1.2)
+                if CO:  # top on the limb axis, swelling to CO r x the limb radius inside it
+                    rm = min(re, 0.5 * r); tr = min(0.62 * r, max(rm, CO["r"] * r))
+                    x = prop_tube(st, ge, h, rm, rt, dict(PR, curve=PR.get("curve", 0.0)), j * 3 + e, b, top=(tr, r))
+                    x.seat = (0.0, r + CO["h"]); x.bury = 0.3  # the base cone stays inside the limb
+                else:
+                    x = prop_tube(st - UP * r * 0.4, ge, h, re, rt, dict(PR, curve=PR.get("curve", 0.0)), j * 3 + e, b)
+                x.pillar = True; x.hang = "hang" in PR
+                if PR.get("sides"): x.sides = PR["sides"]
     L = CFG.get("lianas")
     if L:  # thin climbing vine stems hugging the trunk, winding slowly up; stop before any keep-out volume
         for j in range(L["n"]):
@@ -843,16 +917,27 @@ def tube(bm, br, sides, lobe_amt, cap):
         else:
             n = (prev_n - t * prev_n.dot(t)).normalized()
         prev_n = n; b = t.cross(n); ring = []
-        lb = lobe_amt if br.depth == 0 else 0.0
+        lb = lobe_amt if br.depth == 0 else 0.0; fade = 1.0
         if CFG.get("merge") or CFG.get("smooth"):  # extra rings: phase by arc length, fade along a merged limb
             ph = 1.7 * acc / 0.45
             le = getattr(br, "lobe_end", None)
-            if le is not None: lb *= max(0.0, 1.0 - (acc - le) / 0.6) if acc > le else 1.0
+            if le is not None and acc > le: fade = max(0.0, 1.0 - (acc - le) / 0.6)
+            lb *= fade
         else:
             ph = 1.7 * i
+        FL = CFG.get("flute") if br.depth == 0 else None
+        if FL:  # opt-in: fluted stem of fused root strands: alternate ring vertices ridge / groove (sides = 2 x n
+            # strands), each strand its own size, ridges deeper toward the base (buttresses), the ring turned by twist
+            # rad/m with height so the strands spiral
+            amp = FL["amt"] * fade * (1.0 + FL.get("base", 0.0) * max(0.0, 1.0 - acc / FL.get("base_h", 1.5)))
         for s in range(sides):
-            a = 2 * math.pi * s / sides
-            lobe = 1.0 + lb * math.sin(3 * a + ph)
+            if FL:
+                a = 2 * math.pi * s / sides + FL.get("twist", 0.0) * acc
+                k = s // 2; sz = 1.0 + FL.get("vary", 0.4) * (((k * 0.618034 + 0.31) % 1.0) * 2 - 1)
+                lobe = 1.0 + amp * (sz if s % 2 == 0 else -1.0)
+            else:
+                a = 2 * math.pi * s / sides
+                lobe = 1.0 + lb * math.sin(3 * a + ph)
             q = p + (n * math.cos(a) + b * math.sin(a)) * r * lobe
             if br.depth == 0 and i == (1 if skirt is not None else 0): q.z = 0.0
             elif i == 0 and skirt is not None: q.z = -skirt
@@ -872,7 +957,7 @@ def tube(bm, br, sides, lobe_amt, cap):
         t = (br.pts[1] - br.pts[0]).normalized()
         # opt-in `bury` (default 1.5): apex depth behind the base ring x its radius. A thick limb on a thin lobed trunk
         # pokes the default cone out of the trunk's far side (a strap / faceted wedge); 0.25 keeps it inside the trunk
-        q = br.pts[0] - t * max(br.radii[0] * CFG.get("bury", 1.5), 0.02)
+        q = br.pts[0] - t * max(br.radii[0] * (getattr(br, "bury", None) or CFG.get("bury", 1.5)), 0.02)
         if q.z < 0.0: q.z = 0.0  # a low sucker's buried cone stays above ground (it sits in the flared trunk base)
         apex = bm.verts.new(q)
         for s in range(sides):
@@ -1185,6 +1270,19 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             to_axis = Vector((-A.x, -A.y, 0.0))
             if to_axis.length > 1e-3: d = (d * 0.4 + to_axis.normalized() * fill.get("inward", 0.0) + UP * fill.get("up", 0.6)).normalized()
             place(b, t, d)
+        size = base
+    UF = C.get("fill_under")  # opt-in (sprig): extra cards on the inner limbs, out and down (the crown from below)
+    if UF:
+        KIND[0] = "fill"
+        inner = [b for b in branches if b.depth >= UF.get("mindepth", 1)]
+        ilens = [sum((b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)) for b in inner]
+        target = len(cards) + int(count * UF["frac"]); base = size; size = base * UF.get("size", 1.0); tries = 0
+        while len(cards) < target and tries < count * 20:
+            tries += 1
+            b = rng.choices(inner, ilens)[0]; t = rng.uniform(0.3, 0.97); A, _, d = point_at(b, t)
+            if A.z < UF.get("minz", C["minz"]): continue
+            h = Vector((A.x, A.y, 0.0)); h = h.normalized() if h.length > 1e-3 else rand_unit(rng)
+            place(b, t, (d * 0.3 + h * UF.get("out", 0.6) - UP * UF.get("down", 0.5)).normalized(), ub=0.0)
         size = base
     KIND[0] = "main"
     ST = C.get("stem_tip")
@@ -1733,7 +1831,16 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
                 i = min(range(len(hb.pts) - 1), key=lambda i: axis_gap(x.pts[0], hb.pts[i:i + 2], hb.radii[i:i + 2]))
                 a, b2 = hb.pts[i], hb.pts[i + 1]; ab = b2 - a
                 t = max(0.0, min(1.0, (x.pts[0] - a).dot(ab) / max(ab.length_squared, 1e-9)))
-                x.pts[0] = a + ab * t - UP * (hb.radii[i] * 0.4)
+                seat = getattr(x, "seat", None)  # collar pillars: top on the axis, the collar rings follow the move
+                nw = a + ab * t - UP * (hb.radii[i] * (0.4 if seat is None else seat[0]))
+                if getattr(x, "hang", False): dv = nw - x.pts[0]; x.pts = [q + dv for q in x.pts]  # hangs plumb from there
+                elif seat is None: x.pts[0] = nw
+                else:
+                    dv = nw - x.pts[0]; acc = 0.0
+                    for k in range(len(x.pts)):
+                        if k: acc += (x.pts[k] - x.pts[k - 1]).length
+                        if acc >= seat[1]: break
+                        x.pts[k] = x.pts[k] + dv * (1.0 - acc / seat[1])
     sm = CFG.get("smooth")
     if sm and (not lod1 or sub):  # after the skeleton: child bases and card roots stay where the seed put them
         for b in branches:
@@ -1789,6 +1896,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
         if getattr(b, "merged_into", None) is not None or bi in cut or bi in skip: continue  # merged: its axis is the tail of its parent's tube
         St = lv["sides"] if lv is not None else S1 if lod1 else S0
         if getattr(b, "sides", None): sides = b.sides
+        elif lv is None and getattr(b, "lsides", None): sides = b.lsides[1 if lod1 else 0]
         elif b.depth == 0: sides = St[0]
         elif b.depth < deep or deep == 1: sides = St[1]
         else: sides = St[2]

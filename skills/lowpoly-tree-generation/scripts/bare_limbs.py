@@ -29,7 +29,8 @@
 #                 A limb or stem that ends bare is never exempt.
 #                 PROP roots (K3 stilt / pillar roots: a ground tube whose upper end lies inside another tube more
 #                 than 0.3 m past that tube's base) have no bare end, and their runs are exempt under the canopy or
-#                 below the crown base (they carry no leaves by design).
+#                 below the crown base (they carry no leaves by design). AERIAL roots (K3 hang: a tube hanging plumb
+#                 > 0.8 m from a host point past its base, not tapering to a twig tip) count as props the same way.
 #   INTERIOR    = an end/run deep inside the crown (opaque leaves within 1.5 m in >= 75 % of directions): it shows
 #                 only from under the tree, so it WARNs instead of failing. ends_covered_in_lod0 = bare ends that had
 #                 leaf cover in the unculled LOD0 (the hidden-card cull bared them).
@@ -335,11 +336,20 @@ def analyze(npz):
     zt = [float(T["P"][:, 2].max()) for T in tubes]
     def anchored(t):  # K3 prop / pillar root: a ground tube whose upper end lies inside another tube past its base
         T = tubes[t]  # (a trunk's top meets its children's bases instead: arc ~0, not a prop); hosts: non-ground
-        if not T["ground"]: return False  # tubes or ground tubes reaching > 1 m higher (trunks, not sibling props)
-        m = np.array([u != t and (not tubes[u]["ground"] or zt[u] > zt[t] + 1.0) for u in range(len(tubes))])[S["T"]]
+        if not T["ground"]:  # tubes or ground tubes reaching > 1 m higher (trunks, not sibling props)
+            # K3 aerial root: hangs plumb (> 0.9) from its base for > 0.8 m and stays thick to its end (a drooping twig
+            # tapers to its tip); its base lies inside a host > 1.5 x as thick past the host's base (not a sibling
+            # strand, not a twig forking there): no bare end; its runs are exempt under the canopy
+            v = T["P"][-1] - T["P"][0]; L = float(np.linalg.norm(v)); R = T["R"][T["R"] > 1e-4]  # (not the cap apex)
+            if L < 0.8 or v[2] / L > -0.9 or len(R) < 2 or R[-1] < 0.45 * R[0]: return False
+            m = np.array([u != t and float(tubes[u]["R"].max()) > 1.5 * R[0] for u in range(len(tubes))])[S["T"]]
+            top = T["P"][0]
+        else:
+            m = np.array([u != t and (not tubes[u]["ground"] or zt[u] > zt[t] + 1.0) for u in range(len(tubes))])[S["T"]]
+            top = T["P"][int(np.argmax(T["P"][:, 2]))]
         if not m.any(): return False
-        top = T["P"][int(np.argmax(T["P"][:, 2]))]
-        ds, ii = cKDTree(S["P"][m]).query(top, k=min(40, int(m.sum()))); ii = np.nonzero(m)[0][np.atleast_1d(ii)]
+        # (k 400: a twig forking at the same point fills the nearest 1 cm samples; the host limb lies beyond them)
+        ds, ii = cKDTree(S["P"][m]).query(top, k=min(400, int(m.sum()))); ii = np.nonzero(m)[0][np.atleast_1d(ii)]
         hb = np.array([tubes[int(u)]["P"][0] for u in S["T"][ii]])  # host tube bases: a trunk top meets child bases
         ok = (np.atleast_1d(ds) - S["R"][ii] <= 0.1) & (S["S"][ii] > 0.3) & (np.linalg.norm(hb - top, axis=1) > 0.5)
         return top[2] > RUN_Z and bool(ok.any())
