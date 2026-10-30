@@ -163,6 +163,11 @@
 #   side=[dict(..., grow=True)]   trunk limbs at absolute heights that get the next levels' children (real branches)
 #   crown per_tip (k), tip_from (0.55)   k cards on the outer part of every leaf-bearing branch: dense clusters with
 #       gaps between them (count is then the result, not a target)
+#   crown stem_tip=dict(n, len=1.0, rise=0.4, to=0.98) (opt-in)   n cards on the top `len` m (up to arc fraction `to`; the
+#       first card exactly at `to`) of every stem (depth 0) whose top is
+#       above minz, spread out round the leader (random heading, `rise` up per 1 out; the stem's own up direction would
+#       stand them edge-on as a spike): the leader ends in a leaf rosette like the limb tips (Terminalia pagoda tiers).
+#       Off = identical builds.
 #   lianas=dict(n, z=(lo, hi), r=(lo, hi), twist, segs)   thin vine stems climbing the trunk from the waterline
 #   leaf_cluster (None) m, leaf_crown_mix (0.35)   per-clump leaf normals (tree_normals cluster mode) instead
 #       of one crown dome; use with matte foliage so crowns do not shade as one bubble with a bright rim
@@ -1091,6 +1096,16 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             place(b, t, d)
         size = base
     KIND[0] = "main"
+    ST = C.get("stem_tip")
+    if ST:  # opt-in: a leaf rosette on the top of every stem (leader), drawn before the per_tip clusters
+        k = ST["n"] if not lod1 else max(2, int(ST["n"] * CFG.get("lod1_cards", 0.6)))
+        for b in branches:
+            if b.depth != 0 or b.pts[-1].z < C["minz"]: continue
+            Lb = sum((b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1))
+            for i in range(k):
+                t = rng.uniform(max(0.0, 1.0 - ST.get("len", 1.0) / Lb), ST.get("to", 0.98)); az = rng.uniform(0.0, 2 * math.pi)
+                if i == 0: t = ST.get("to", 0.98)  # one card right at the tip: the leader end never shows bare
+                place(b, t, Vector((math.cos(az), math.sin(az), ST.get("rise", 0.4))).normalized())
     if C.get("per_tip"):  # dense clusters on the outer part of every leaf-bearing branch, gaps between them
         k = C["per_tip"] if not lod1 else max(2, int(C["per_tip"] * CFG.get("lod1_cards", 0.6)))
         for b in twigs:
