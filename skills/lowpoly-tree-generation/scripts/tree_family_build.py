@@ -19,6 +19,14 @@
 #       the ground on leaning stems when the base is seen without terrain); s = the pack scale the mesh ships at
 #       (horizontal offset / s, because the pack scales x/y but keeps underground depths). Off = identical builds.
 #   side=[dict(n, z=(lo,hi), len, ang, r, tip, gnarl, up)]  extra trunk limbs/stubs at given heights (no children)
+#   props=dict(n, z=(lo, hi), out=(lo, hi), r=0.35, tip=0.75, curve=0.25, segs=5, gnarl=0.0, sink=0.06) (opt-in, K3)
+#       stilt / prop roots: n tubes, evenly around (own random sequence), each from a trunk point at arc share z
+#       (base buried inside the trunk) arching out and down to the ground `out` m from the trunk axis, `sink` m under
+#       it; radius r x the trunk radius there -> x tip at the ground; bowed up by curve x length. No cards, no taper,
+#       no merge, never a crown head (terminal_ends skips them). Off = identical builds.
+#   crown (rosette) dead start=<m>, tilt_z=True (opt-in): dead fronds hang from `start` m under the head top (not
+#       below the live zone) down over `zone` m; with tilt_z the top ones take tilt hi (splayed out) and the lowest
+#       tilt lo (hanging): a petticoat that flares toward the head and tapers down (WashingtoniaSkirt). No draws.
 #   vines=dict(count, size, z=(lo,hi)[, cells=[i,...]][, shrink=True])   hanging sprig cards under depth>=1 branches
 #       (epiphytes / draped foliage); cells (opt-in): the hanging cards draw only these atlas cells (strands under a
 #       crown of sprays); shrink (opt-in): hosts under one card length are kept, their cards shrunk to crown `ground`
@@ -604,6 +612,23 @@ def build_skeleton(seed):
                         t = (f - fa) / max(fb - fa, 1e-6); t = t * t * (3 - 2 * t); m = ma + (mb - ma) * t; break
                 st.radii[i] *= m
     trunk = out[0]; TL = sum((trunk.pts[i + 1] - trunk.pts[i]).length for i in range(len(trunk.pts) - 1))
+    PR = CFG.get("props")
+    if PR:  # opt-in K3 stilt / prop roots: tubes from a trunk point arching out and down into the ground (own sequence)
+        prng = random.Random(seed * 41 + 7); az0 = prng.uniform(0, 2 * math.pi); n = PR["n"]
+        for j in range(n):
+            az = az0 + 2 * math.pi * (j + prng.uniform(-0.3, 0.3)) / n; h = Vector((math.cos(az), math.sin(az), 0.0))
+            p, r, d = point_at(trunk, min(1.0, prng.uniform(*PR["z"])))
+            g = Vector((p.x, p.y, -PR.get("sink", 0.06))) + h * prng.uniform(*PR["out"])  # where it enters the ground
+            st = p + h * r * 0.4  # root base inside the trunk (buried base cone)
+            v = g - st; L = v.length; segs = PR.get("segs", 5); arch = PR.get("curve", 0.25) * L
+            r0 = r * PR.get("r", 0.35); r1 = r0 * PR.get("tip", 0.75)
+            pts, radii = [], []
+            for i in range(segs + 1):
+                t = i / segs; q = st.lerp(g, t)
+                q = q + (UP * 0.75 + h * 0.25).normalized() * arch * 4 * t * (1 - t) * (1 - 0.35 * t)  # bowed out and up
+                if 0 < i < segs: q = q + det_noise_vector(q * 1.7 + Vector((j * 3.1, seed * 0.37, 0.5))) * PR.get("gnarl", 0.0) * L / segs
+                pts.append(q); radii.append(r0 + (r1 - r0) * t)
+            pr = Br(pts, radii, 1); pr.par = trunk; pr.keep = True; pr.prop = True; out.append(pr)
     def side_limbs(grown):  # extra trunk limbs at absolute heights; grown=True ones get the upper levels' children
         made = []
         for k, S in enumerate(CFG.get("side", ())):
@@ -917,9 +942,9 @@ def orient_normal(rng, d, flat):
 
 def terminal_ends(branches):
     """Branches whose end does not continue into a child branch (their tips need foliage). A merged parent
-    (cont) shares its continuation's end, which is counted on the continuation."""
+    (cont) shares its continuation's end, which is counted on the continuation. Prop roots (K3) end in the ground."""
     starts = [(b.pts[0], b.depth) for b in branches]
-    return [b for b in branches if getattr(b, "cont", None) is None
+    return [b for b in branches if getattr(b, "cont", None) is None and not getattr(b, "prop", False)
             and not any(dep > b.depth and (p - b.pts[-1]).length < 0.2 for p, dep in starts)]
 
 def limb_chain(branches, b):
@@ -1377,7 +1402,12 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
             L = rng.uniform(*C["length"]) * sc * (S.get("length", 1.0) if kind != "live" else 1.0)
             tw = rng.uniform(-1, 1) * C.get("twist", 0.0)
             z = Lb - C.get("top", 0.0) - C.get("zone", 0.3) * age * (1.0 if hp is None else sc)
-            if kind == "dead": z -= rng.uniform(0, D.get("zone", 0.4))
+            if kind == "dead":
+                dz = rng.uniform(0, D.get("zone", 0.4))
+                if D.get("start") is not None: z = Lb - C.get("top", 0.0) - D["start"]  # opt-in: skirt from just under the head
+                z -= dz
+                if D.get("tilt_z"):  # opt-in: the top dead fronds splay out (tilt hi), the lowest hang (lo): a flared skirt
+                    tilt = hi + (lo - hi) * dz / max(D.get("zone", 0.4), 1e-6) + (tilt - lo)  # (tilt - lo) = its jitter
             if kind == "young": tilt = rng.uniform(lo, hi)
             A = point_at(b, max(0.0, min(1.0, z / Lb)))[0]
             cell = cells[S["cell"]] if kind != "live" and S.get("cell") is not None else rng.choice(live)
