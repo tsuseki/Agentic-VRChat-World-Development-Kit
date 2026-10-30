@@ -27,6 +27,9 @@
 #                 AND the point is under the canopy (opaque leaves above it within 0.6 m horizontally) or on a
 #                 ground-rooted trunk below the crown base (10th percentile of leaf height; palm and leaning trunks).
 #                 A limb or stem that ends bare is never exempt.
+#                 PROP roots (K3 stilt / pillar roots: a ground tube whose upper end lies inside another tube more
+#                 than 0.3 m past that tube's base) have no bare end, and their runs are exempt under the canopy or
+#                 below the crown base (they carry no leaves by design).
 #   INTERIOR    = an end/run deep inside the crown (opaque leaves within 1.5 m in >= 75 % of directions): it shows
 #                 only from under the tree, so it WARNs instead of failing. ends_covered_in_lod0 = bare ends that had
 #                 leaf cover in the unculled LOD0 (the hidden-card cull bared them).
@@ -329,17 +332,30 @@ def analyze(npz):
         if not ch: break
     def continues(t, s):  # tube t carries leaves beyond arc s (own tip, or a covered child rooted past s)
         return tipcov[t] or any(pa == t and ps >= s - 0.05 and reach[c] for c, (pa, ps) in enumerate(parent))
+    zt = [float(T["P"][:, 2].max()) for T in tubes]
+    def anchored(t):  # K3 prop / pillar root: a ground tube whose upper end lies inside another tube past its base
+        T = tubes[t]  # (a trunk's top meets its children's bases instead: arc ~0, not a prop); hosts: non-ground
+        if not T["ground"]: return False  # tubes or ground tubes reaching > 1 m higher (trunks, not sibling props)
+        m = np.array([u != t and (not tubes[u]["ground"] or zt[u] > zt[t] + 1.0) for u in range(len(tubes))])[S["T"]]
+        if not m.any(): return False
+        top = T["P"][int(np.argmax(T["P"][:, 2]))]
+        ds, ii = cKDTree(S["P"][m]).query(top, k=min(40, int(m.sum()))); ii = np.nonzero(m)[0][np.atleast_1d(ii)]
+        hb = np.array([tubes[int(u)]["P"][0] for u in S["T"][ii]])  # host tube bases: a trunk top meets child bases
+        ok = (np.atleast_1d(ds) - S["R"][ii] <= 0.1) & (S["S"][ii] > 0.3) & (np.linalg.norm(hb - top, axis=1) > 0.5)
+        return top[2] > RUN_Z and bool(ok.any())
+    prop = [anchored(t) for t in range(len(tubes))]
     ends, runs = [], []
     for t, T in enumerate(tubes):
         m = np.nonzero(S5["T"] == t)[0]; P = S5["P"][m]; s = S5["S"][m]; c = cov[m]
-        if P[-1, 2] > END_Z and not c[-1]:
+        if P[-1, 2] > END_Z and not c[-1] and not prop[t]:  # a prop's ends are in the ground and in its host tube
             ci = np.nonzero(c)[0]; j = ci[-1] if len(ci) else 0
             ends.append(dict(tube=t, tip=P[-1].tolist(), length=float(s[-1] - s[j]), r=float(S5["R"][m][j]),
                              e35=float(e35[m][-1]), whole=bool(len(ci) == 0), ground=T["ground"],
                              lod0_covered=None if cov0 is None else bool(cov0[m][-1]), seg=P[j:].tolist(), segr=S5["R"][m][j:].tolist()))
         bare = (P[:, 2] > RUN_Z) & (e60[m] < RUN_E) & ~near_att[m]
-        for k in np.nonzero(bare)[0]:  # trunk below the crown base / limbs under the canopy that lead on into leaves
-            if continues(t, s[k]) and (canopy(P[k]) or (T["ground"] and P[k, 2] < crown_base)): bare[k] = False
+        for k in np.nonzero(bare)[0]:  # trunk below the crown base / limbs under the canopy that lead on into leaves /
+            # prop roots (ground to host tube) under the canopy or below the crown base
+            if (continues(t, s[k]) or prop[t]) and (canopy(P[k]) or (T["ground"] and P[k, 2] < crown_base)): bare[k] = False
         k = 0
         while k < len(bare):
             if not bare[k]: k += 1; continue

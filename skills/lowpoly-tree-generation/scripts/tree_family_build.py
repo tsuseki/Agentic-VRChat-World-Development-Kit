@@ -23,7 +23,11 @@
 #       stilt / prop roots: n tubes, evenly around (own random sequence), each from a trunk point at arc share z
 #       (base buried inside the trunk) arching out and down to the ground `out` m from the trunk axis, `sink` m under
 #       it; radius r x the trunk radius there -> x tip at the ground; bowed up by curve x length. No cards, no taper,
-#       no merge, never a crown head (terminal_ends skips them). Off = identical builds.
+#       no merge, never a crown head or sprig card (terminal_ends / sprig_crown skip them). Off = identical builds.
+#       props may be a list of such dicts (one random sequence each). src="limbs" (pillar roots, banyan): n tubes from
+#       points at arc share at=(lo, hi) on depth-`depth` (1) limbs spread round the crown, straight down (curve 0) to
+#       the ground drift=(lo, hi) m further out, r (0.6) x the limb radius there -> x tip (1.2, thicker at the ground);
+#       points below minz (1.5 m) are skipped. Built after the levels; avoid `smooth` (it would move the limbs).
 #   crown (rosette) dead start=<m>, tilt_z=True (opt-in): dead fronds hang from `start` m under the head top (not
 #       below the live zone) down over `zone` m; with tilt_z the top ones take tilt hi (splayed out) and the lowest
 #       tilt lo (hanging): a petticoat that flares toward the head and tapers down (WashingtoniaSkirt). No draws.
@@ -32,6 +36,8 @@
 #   crown (rosette) unsqueeze=k (opt-in): each frond's width aspect = k / its cell's Cards.json `squeeze` (x young / dead
 #       `width`) instead of one crown `aspect`: atlases whose cells were fitted with very different squeezes (Cordyline
 #       tufts 0.12-0.26) each build at k x their drawn width.
+#   crown (rosette) clear=<m> (opt-in): every frond point (midrib and edges) stays `clear` m above the ground (droop
+#       relaxed as for the 0 / 0.1 m default, else the frond is dropped): sucker leaves off the ground (Banana).
 #   vines=dict(count, size, z=(lo,hi)[, cells=[i,...]][, shrink=True])   hanging sprig cards under depth>=1 branches
 #       (epiphytes / draped foliage); cells (opt-in): the hanging cards draw only these atlas cells (strands under a
 #       crown of sprays); shrink (opt-in): hosts under one card length are kept, their cards shrunk to crown `ground`
@@ -487,7 +493,7 @@ def merge_continuations(branches, M):
     dmin, dmax = M.get("depth", (0, 99))  # parent depths allowed to continue (each chain is meshed with its head's sides)
     kids_of = {}  # raw skeleton: child -> parent by nearest axis point (before any merge moves points)
     for c in branches:
-        if c.depth == 0: continue
+        if c.depth == 0 or getattr(c, "prop", False): continue  # K3 props are never continuations
         best = None
         for b in branches:
             if b.depth != c.depth - 1: continue
@@ -508,7 +514,8 @@ def merge_continuations(branches, M):
         for x in seg: cum.append(cum[-1] + x)
         kids = []
         for c in branches:
-            if c.depth != b.depth + 1 or getattr(c, "merged_into", None) is not None or getattr(c, "sides", None): continue
+            if c.depth != b.depth + 1 or getattr(c, "merged_into", None) is not None or getattr(c, "sides", None) \
+                    or getattr(c, "prop", False): continue
             k = min(range(len(b.pts)), key=lambda i: (b.pts[i] - c.pts[0]).length)
             if (b.pts[k] - c.pts[0]).length < b.radii[k] + 0.1: kids.append((k, c))
         if not kids: continue
@@ -539,6 +546,11 @@ def merge_continuations(branches, M):
             return g0 <= MERGE_ATTACH and axis_gap(x.pts[0], new_p, new_r) > max(g0, 0.0) + x.radii[0]
         if any(x is not c and getattr(x, "merged_into", None) is None and orphaned(x) for x in kids_of.get(id(b), [])):
             MERGE_SKIPPED[0] += 1; continue
+        moved = {id(y) for y in subtree(c)} if q is not None else set()  # the swing would move these rigidly
+        if any(getattr(x, "prop", False) and (getattr(x, "par", None) is b and
+               min(range(len(b.pts)), key=lambda i: (b.pts[i] - x.pts[0]).length) >= k
+               or id(getattr(x, "par", None)) in moved) for x in branches):
+            MERGE_SKIPPED[0] += 1; continue  # a K3 pillar hangs on the stub the merge would drop, or on a swung limb
         if q is not None:
             for y in subtree(c):
                 y.pts = [o + q @ (p - o) for p in y.pts]
@@ -617,23 +629,26 @@ def build_skeleton(seed):
                         t = (f - fa) / max(fb - fa, 1e-6); t = t * t * (3 - 2 * t); m = ma + (mb - ma) * t; break
                 st.radii[i] *= m
     trunk = out[0]; TL = sum((trunk.pts[i + 1] - trunk.pts[i]).length for i in range(len(trunk.pts) - 1))
-    PR = CFG.get("props")
-    if PR:  # opt-in K3 stilt / prop roots: tubes from a trunk point arching out and down into the ground (own sequence)
-        prng = random.Random(seed * 41 + 7); az0 = prng.uniform(0, 2 * math.pi); n = PR["n"]
+    PRS = CFG.get("props") or []
+    PRS = [PRS] if isinstance(PRS, dict) else list(PRS)
+    def prop_tube(st, g, h, r0, r1, PR, j, par):  # one K3 root: st (buried in par) -> g (under the ground)
+        v = g - st; L = v.length; segs = PR.get("segs", 5); arch = PR.get("curve", 0.25) * L
+        pts, radii = [], []
+        for i in range(segs + 1):
+            t = i / segs; q = st.lerp(g, t)
+            q = q + (UP * 0.75 + h * 0.25).normalized() * arch * 4 * t * (1 - t) * (1 - 0.35 * t)  # bowed out and up
+            if 0 < i < segs: q = q + det_noise_vector(q * 1.7 + Vector((j * 3.1, seed * 0.37, 0.5))) * PR.get("gnarl", 0.0) * L / segs
+            pts.append(q); radii.append(r0 + (r1 - r0) * t)
+        pr = Br(pts, radii, 1); pr.par = par; pr.keep = True; pr.prop = True; out.append(pr); return pr
+    for k, PR in enumerate(PRS):  # opt-in K3 stilt / prop roots from the trunk (own random sequence per entry)
+        if PR.get("src", "trunk") != "trunk": continue
+        prng = random.Random(seed * 41 + 7 + k * 101); az0 = prng.uniform(0, 2 * math.pi); n = PR["n"]
         for j in range(n):
             az = az0 + 2 * math.pi * (j + prng.uniform(-0.3, 0.3)) / n; h = Vector((math.cos(az), math.sin(az), 0.0))
             p, r, d = point_at(trunk, min(1.0, prng.uniform(*PR["z"])))
             g = Vector((p.x, p.y, -PR.get("sink", 0.06))) + h * prng.uniform(*PR["out"])  # where it enters the ground
-            st = p + h * r * 0.4  # root base inside the trunk (buried base cone)
-            v = g - st; L = v.length; segs = PR.get("segs", 5); arch = PR.get("curve", 0.25) * L
-            r0 = r * PR.get("r", 0.35); r1 = r0 * PR.get("tip", 0.75)
-            pts, radii = [], []
-            for i in range(segs + 1):
-                t = i / segs; q = st.lerp(g, t)
-                q = q + (UP * 0.75 + h * 0.25).normalized() * arch * 4 * t * (1 - t) * (1 - 0.35 * t)  # bowed out and up
-                if 0 < i < segs: q = q + det_noise_vector(q * 1.7 + Vector((j * 3.1, seed * 0.37, 0.5))) * PR.get("gnarl", 0.0) * L / segs
-                pts.append(q); radii.append(r0 + (r1 - r0) * t)
-            pr = Br(pts, radii, 1); pr.par = trunk; pr.keep = True; pr.prop = True; out.append(pr)
+            r0 = r * PR.get("r", 0.35)
+            prop_tube(p + h * r * 0.4, g, h, r0, r0 * PR.get("tip", 0.75), PR, j, trunk)  # base inside the trunk
     def side_limbs(grown):  # extra trunk limbs at absolute heights; grown=True ones get the upper levels' children
         made = []
         for k, S in enumerate(CFG.get("side", ())):
@@ -739,6 +754,21 @@ def build_skeleton(seed):
                 if c: c.par = b; nxt.append(c)
         parents = nxt
     side_limbs(False)  # stubs etc.: no children
+    for k, PR in enumerate(PRS):  # K3 pillar roots (banyan): from points on depth-`depth` limbs down to the ground
+        if PR.get("src") != "limbs": continue
+        prng = random.Random(seed * 43 + 11 + k * 101)
+        cands = [b for b in out if b.depth == PR.get("depth", 1) and not getattr(b, "prop", False) and len(b.pts) > 1]
+        cands.sort(key=lambda b: math.atan2(b.pts[-1].y, b.pts[-1].x))
+        if not cands: continue
+        host = [cands[int(j * len(cands) / PR["n"]) % len(cands)] for j in range(PR["n"])]  # spread round the crown
+        for j in range(PR["n"]):
+            b = host[j]; slot = host[:j].count(b); cnt = host.count(b); a0, a1 = PR["at"]
+            p, r, d = point_at(b, a0 + (a1 - a0) * (slot + prng.uniform(0.15, 0.85)) / cnt)  # pillars on one limb spaced
+            if p.z < PR.get("minz", 1.5): continue
+            h = Vector((p.x, p.y, 0.0)); h = h.normalized() if h.length > 1e-6 else Vector((1, 0, 0))
+            g = Vector((p.x, p.y, -PR.get("sink", 0.06))) + h * prng.uniform(*PR.get("drift", (0.0, 0.3)))
+            r0 = max(TIP_R * 2, r * PR.get("r", 0.6))
+            prop_tube(p - UP * r * 0.4, g, h, r0, r0 * PR.get("tip", 1.2), dict(PR, curve=PR.get("curve", 0.0)), j, b).pillar = True
     L = CFG.get("lianas")
     if L:  # thin climbing vine stems hugging the trunk, winding slowly up; stop before any keep-out volume
         for j in range(L["n"]):
@@ -981,6 +1011,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     roles (second pass): per placed card "full" or "out" (see card_roles); the card keeps its place, direction and roll
     and only its atlas cell (and the cell's `scale`) changes, falling back to the drawn cell if the new one would not fit."""
     C = CFG["crown"]
+    branches = [b for b in branches if not getattr(b, "prop", False)]  # K3 prop roots carry no cards
     cells = json.load(open(TEX + f"{TEXN}_Leaves_Cards.json"))["cells"]
     md = C["mindepth"]
     if lod1 and CFG.get("lod1_mindepth") is not None: md = CFG["lod1_mindepth"]
@@ -1343,7 +1374,8 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
         return pts, rows
     for _ in range(12):  # a frond may not reach the ground: relax its droop until the midrib clears 0.1 m and the
         pts, rows = strip(droop)  # frond edges (width, fold hang, twist) clear z = 0
-        if min(p.z for p in pts) >= 0.1 and min(q.z for r in rows for q in r) >= 0.0: break
+        gc = C.get("clear", 0.0)  # opt-in: every frond point (midrib and edges) at least `clear` m above the ground
+        if min(p.z for p in pts) >= max(0.1, gc) and min(q.z for r in rows for q in r) >= gc: break
         droop *= 0.8
     else:
         return None
@@ -1695,6 +1727,13 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
             branches = [b for b in branches if b.depth < deep] + [b for b in branches if b.depth == deep][::2]
     if CFG.get("merge"):  # each limb flows into its best-aligned last child: one tube, no tapered spike at the fork
         merge_continuations(branches, CFG["merge"])
+        for x in branches:  # K3 props: re-seat the top on the host's final axis (the merge's round moves the joint)
+            hb = getattr(x, "par", None)
+            if getattr(x, "pillar", False) and hb is not None and len(hb.pts) > 1:
+                i = min(range(len(hb.pts) - 1), key=lambda i: axis_gap(x.pts[0], hb.pts[i:i + 2], hb.radii[i:i + 2]))
+                a, b2 = hb.pts[i], hb.pts[i + 1]; ab = b2 - a
+                t = max(0.0, min(1.0, (x.pts[0] - a).dot(ab) / max(ab.length_squared, 1e-9)))
+                x.pts[0] = a + ab * t - UP * (hb.radii[i] * 0.4)
     sm = CFG.get("smooth")
     if sm and (not lod1 or sub):  # after the skeleton: child bases and card roots stay where the seed put them
         for b in branches:
