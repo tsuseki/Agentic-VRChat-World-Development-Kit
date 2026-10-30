@@ -115,6 +115,10 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   `.omp/skills/unity-vrc-udon-sharp/references/editor-scripting.md`.
 - **GitHub** — [Unity.gitignore](https://github.com/github/gitignore/blob/main/Unity.gitignore) (licence not recorded).
   Basis of `.omp/scripts/unity-world.gitignore`.
+- **Daniel Shervheim** — [unity-stylized-water](https://github.com/danielshervheim/unity-stylized-water)
+  (`Stylized/Water`), BSD 3-Clause, © 2019 Daniel Shervheim, commit `d209d15b`. Adapted as
+  `TropicalWater.shader` (`TropicalPromo/TropicalWater`) in the BoothAssets Tropical promo
+  (`Assets/_Promo/Tropical/Water/`; licence text in the shader header). None of its textures are used.
 
 ## Tools, prefabs & repos
 
