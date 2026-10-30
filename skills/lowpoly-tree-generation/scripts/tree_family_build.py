@@ -192,6 +192,8 @@
 #       (frond lod); the cull then keeps whole fronds (lod1_cull_cards.py --components). Without segs a rosette far
 #       level is the full LOD0 crown. base (opt-in, default 1) = the far frond's base row width share, its UVs cropped
 #       alike: an unfolded strip has no midrib vertex, so a full-width base row puts its corners W/2 out from the trunk.
+#       props (opt-in, default off) = K3 pillar roots that reach the ground stay meshed whatever maxdepth / min_r drop
+#       (hanging curtains follow the normal rule).
 #   clear_drop (0)   drop a branch the keep-out volumes cut to less than this share of its length
 #   limbs=[dict(root, tip, r=(r0, r1), gnarl, children, arch, epiphytes)]   explicit limbs (tree-local, root on the
 #       trunk at root.z; arch m upward bow; epiphytes = hanging cards along it)
@@ -1888,10 +1890,14 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
         md = lv.get("maxdepth")
         if md is None and lv.get("drop") and deep - lv["drop"] >= 1: md = deep - lv["drop"]
         rmin = lv.get("min_r", 0.0) * max(b.radii[0] for b in branches if b.depth == 0)
+        # lv props (opt-in): K3 pillar roots that reach the ground (not the hanging curtains) stay at any depth / radius,
+        # even when their host limb is dropped: they stand on the ground (Banyan: without them the far level lost every
+        # pillar, hole p95 2 m)
+        pil = lambda b: lv.get("props") and getattr(b, "pillar", False) and not getattr(b, "hang", False)
         for bi, b in enumerate(branches):
             p = getattr(b, "par", None)
-            if (md is not None and b.depth > md) or (b.depth > 0 and b.radii[0] < rmin) or \
-                    (p is not None and any(branches[j] is p for j in skip)):
+            if not pil(b) and ((md is not None and b.depth > md) or (b.depth > 0 and b.radii[0] < rmin) or
+                               (p is not None and any(branches[j] is p for j in skip))):
                 skip.add(bi)
     spans = []  # (skeleton index, first bark face, end) per meshed tube
     vspans = []  # (skeleton index, first vertex, end) per meshed tube (base fix)
