@@ -27,6 +27,8 @@
 #   crown (rosette) dead start=<m>, tilt_z=True (opt-in): dead fronds hang from `start` m under the head top (not
 #       below the live zone) down over `zone` m; with tilt_z the top ones take tilt hi (splayed out) and the lowest
 #       tilt lo (hanging): a petticoat that flares toward the head and tapers down (WashingtoniaSkirt). No draws.
+#   crown (rosette) dead max=k (opt-in): at most k dead fronds per plant over all heads (the first heads take them):
+#       clumps whose dead-leaf exemption is per plant, not per head (Banana: 1 per plant).
 #   vines=dict(count, size, z=(lo,hi)[, cells=[i,...]][, shrink=True])   hanging sprig cards under depth>=1 branches
 #       (epiphytes / draped foliage); cells (opt-in): the hanging cards draw only these atlas cells (strands under a
 #       crown of sprays); shrink (opt-in): hosts under one card length are kept, their cards shrunk to crown `ground`
@@ -1379,6 +1381,7 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
     heads = [b for b in terminal_ends(branches) if b.pts[-1].z >= C.get("minz", 0.0) * 0.8]
     Lmax = max(blen(b) for b in heads); cards = []
     jit = C.get("jitter", 6.0); spread = C.get("spread", 360.0)
+    dleft = C["dead"].get("max") if C.get("dead") else None  # opt-in: dead fronds per plant (all heads), first heads first
     for b in heads:
         Lb = blen(b); sc = (Lb / Lmax) ** C.get("stem_scale", 0.7)
         axis = point_at(b, 1.0)[2].lerp(UP, C.get("upright", 0.6)).normalized()
@@ -1391,7 +1394,9 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
         hn = (lambda k: k) if hp is None else (lambda k: round(k * sc ** hp))
         # dead n may be a (lo, hi) range: a per-head count (CoconutPalm review: 1-3 per head, not a 3-frond beard)
         dn = (rng.randint(*D["n"]) if isinstance(D["n"], (tuple, list)) else D["n"]) if D else 0
-        specs += [("young", 0.0)] * (hn(Y["n"]) if Y else 0) + [("dead", 1.0)] * hn(dn)
+        nd = hn(dn)
+        if dleft is not None: nd = min(nd, dleft); dleft -= nd
+        specs += [("young", 0.0)] * (hn(Y["n"]) if Y else 0) + [("dead", 1.0)] * nd
         for i, (kind, age) in enumerate(specs):
             if spread >= 360: az = az0 + i * math.radians(137.508)
             else: az = az0 + math.radians(((i * 0.618034) % 1.0 - 0.5) * spread)
