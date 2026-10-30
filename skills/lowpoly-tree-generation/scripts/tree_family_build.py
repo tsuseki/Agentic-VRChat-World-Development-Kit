@@ -29,6 +29,9 @@
 #       tilt lo (hanging): a petticoat that flares toward the head and tapers down (WashingtoniaSkirt). No draws.
 #   crown (rosette) dead max=k (opt-in): at most k dead fronds per plant over all heads (the first heads take them):
 #       clumps whose dead-leaf exemption is per plant, not per head (Banana: 1 per plant).
+#   crown (rosette) unsqueeze=k (opt-in): each frond's width aspect = k / its cell's Cards.json `squeeze` (x young / dead
+#       `width`) instead of one crown `aspect`: atlases whose cells were fitted with very different squeezes (Cordyline
+#       tufts 0.12-0.26) each build at k x their drawn width.
 #   vines=dict(count, size, z=(lo,hi)[, cells=[i,...]][, shrink=True])   hanging sprig cards under depth>=1 branches
 #       (epiphytes / draped foliage); cells (opt-in): the hanging cards draw only these atlas cells (strands under a
 #       crown of sprays); shrink (opt-in): hosts under one card length are kept, their cards shrunk to crown `ground`
@@ -1323,7 +1326,8 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
     segs = C.get("segs", 4); u0, v0, u1, v1 = cell["rect"]
     au = (cell["attach"][0] - u0) / (u1 - u0); av = (cell["attach"][1] - v0) / (v1 - v0)
     crop = min(C.get("crop", 1.0), 2 * min(au, 1 - au))
-    W = L / max(1.0 - av, 1e-3) * (u1 - u0) / (v1 - v0) * crop * C.get("aspect", 1.0)
+    asp = C["unsqueeze"] / cell["squeeze"] * C.get("width_mul", 1.0) if C.get("unsqueeze") and cell.get("squeeze") else C.get("aspect", 1.0)
+    W = L / max(1.0 - av, 1e-3) * (u1 - u0) / (v1 - v0) * crop * asp
     side0 = axis.cross(rad).normalized(); dp = C.get("droop_pow", 1.5)
     def strip(droop, fo=fold):
         pts, dirs = [A.copy()], []
@@ -1416,7 +1420,7 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
             if kind == "young": tilt = rng.uniform(lo, hi)
             A = point_at(b, max(0.0, min(1.0, z / Lb)))[0]
             cell = cells[S["cell"]] if kind != "live" and S.get("cell") is not None else rng.choice(live)
-            CC = dict(C, aspect=C.get("aspect", 1.0) * S["width"]) if kind != "live" and S.get("width") else C  # narrow spears
+            CC = dict(C, aspect=C.get("aspect", 1.0) * S["width"], width_mul=S["width"]) if kind != "live" and S.get("width") else C  # narrow spears
             r = frond(bm, uvl, A, axis, rad, L, tilt, droop, tw, fold, cell, CC, lod)
             if r: cards.append(r + (b, 1.0))
     return cards
