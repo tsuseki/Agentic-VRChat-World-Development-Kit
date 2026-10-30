@@ -1752,6 +1752,12 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
         full = (b.pts, b.radii)
         if sub and len(b.pts) > 2 and bi not in full_rings:  # every other (lv: every `rings`-th) ring; the cards stay rooted on the full axis
             ks = list(range(0, len(b.pts) - 1, lv.get("rings", 2) if lv is not None else 2)) + [len(b.pts) - 1]
+            kf = lv.get("keep_frac") if lv is not None else None
+            if kf and b.depth == 0:  # far level: keep the trunk ring where the packer's bark `upper` column starts (a face
+                # takes it when its centre is above keep_frac x the top ring), so the crownshaft / boot band spans what LOD0's does
+                thr = kf * max(p.z for p in b.pts)
+                k = next((i for i in range(len(b.pts) - 1) if (b.pts[i].z + b.pts[i + 1].z) / 2 > thr), None)
+                if k is not None: ks = sorted(set(ks) | {k})
             b.pts = [b.pts[k] for k in ks]; b.radii = [b.radii[k] for k in ks]
         if bi in base_over: b.pts, b.radii = base_axis(b.pts, b.radii, base_over[bi])  # base fix (mesh only)
         f0 = len(bm.faces); v0 = len(bm.verts)
