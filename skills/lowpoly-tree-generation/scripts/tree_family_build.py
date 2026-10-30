@@ -38,6 +38,9 @@
 #       whip above the crown. crown tip_upbias_all=True (opt-in): every terminal tip's card uses it (weeping mound:
 #       low drooping twig ends get a level tip card that clears the ground instead of being skipped, tips_uncovered).
 #       No extra random draws. Off = identical builds.
+#   crown tip_t=<float> (opt-in, default 0.97): where the card on every terminal end sits along that member; 0.97
+#       leaves the last 3 % bare (a long rising shoot showed 0.26 m bare tips, bare_limbs, Monkeypod 2026-10-30);
+#       0.995 roots it at the very end. No extra random draws: off = identical builds.
 #   hug=dict(c=(x, y, z), rad=(rx, ry, rz), at=0.92, depth=(0, 0)) (opt-in; clipped hedges / balls): branches of these
 #       depths slide along the ellipsoid level surface `at` of (c, rad) instead of growing through it: once a branch
 #       reaches that surface each next segment keeps only its tangential direction and its end is put back on the
@@ -1073,8 +1076,9 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     # crown still dresses the nodding culm tip (no bare whip above the crown). No extra random draws: off = identical.
     for b in terminal_ends(branches):
         if b.pts[-1].z >= C["minz"] * 0.8:
-            _, _, d = point_at(b, 0.97)
-            place(b, 0.97, d, ub=C.get("tip_upbias") if b.depth == 0 or C.get("tip_upbias_all") else None)
+            tt = C.get("tip_t", 0.97)  # opt-in crown tip_t: where every terminal end's card sits (0.995 = at the very end)
+            _, _, d = point_at(b, tt)
+            place(b, tt, d, ub=C.get("tip_upbias") if b.depth == 0 or C.get("tip_upbias_all") else None)
     fill = C.get("fill")  # share of the cards spread over the inner limbs to close the gaps between clumps
     if fill:
         KIND[0] = "fill"
