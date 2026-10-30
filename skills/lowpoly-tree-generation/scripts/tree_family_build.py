@@ -140,11 +140,12 @@
 #       a limb whose last fork is past `at` of its length continues into its best-aligned child as one tube (no
 #       spike past the fork); see merge_continuations(). Recommended for every new tree.
 #   lod1_mindepth   LOD1 drops the deepest level and roots its cards on this depth
-#   lods=[dict(rings, sides, grow, maxdepth | drop, min_r[, segs]), ...] (--lods; default LOD_LEVELS)   far LODGroup levels
+#   lods=[dict(rings, sides, grow, maxdepth | drop, min_r[, segs, fold]), ...] (--lods; default LOD_LEVELS)   far levels
 #       <Species>_Tree_LOD2, _LOD3 built from the LOD1's skeleton and card draws (see make_lod lv); the hidden-card cull
 #       (BoothAssets lod1_cull_cards.py --lod N --keep-cards K) then thins their cards by visibility. Rosette crowns:
-#       segs (opt-in) = every frond resampled to that many segments, unfolded, width x grow (frond lod); the cull then
-#       keeps whole fronds (lod1_cull_cards.py --components). Without segs a rosette far level is the full LOD0 crown.
+#       segs (opt-in) = every frond resampled to that many segments, width x grow, folded by fold (default 0 = unfolded)
+#       (frond lod); the cull then keeps whole fronds (lod1_cull_cards.py --components). Without segs a rosette far
+#       level is the full LOD0 crown.
 #   clear_drop (0)   drop a branch the keep-out volumes cut to less than this share of its length
 #   limbs=[dict(root, tip, r=(r0, r1), gnarl, children, arch, epiphytes)]   explicit limbs (tree-local, root on the
 #       trunk at root.z; arch m upward bow; epiphytes = hanging cards along it)
@@ -1196,9 +1197,10 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
     The atlas cell's attach point (bottom-centre, branch_atlas.py) sits on A; the cell top is the tip; `crop` = share
     of the cell width used, `aspect` squeezes the width (1 = undistorted texture). fold > 0: the frond edges hang
     below the midrib (Λ section). Returns (first vertex, grid, attach) like sprig_card, or None if it hits the ground.
-    lod=dict(segs, grow) (--lods far level of a rosette crown): the frond is relaxed exactly as at LOD0 (same segs and
-    fold, so the same fronds survive and droop alike), then resampled: lod segs quads, unfolded, its vertices on the
-    LOD0 midrib and edges at the same arc fractions (UV v = arc fraction, as at LOD0), the width x grow."""
+    lod=dict(segs, grow[, fold]) (--lods far level of a rosette crown): the frond is relaxed exactly as at LOD0 (same
+    segs and fold, so the same fronds survive and droop alike), then resampled: lod segs segments, its vertices on the
+    LOD0 midrib and edges at the same arc fractions (UV v = arc fraction, as at LOD0), the width x grow, folded by the
+    level's fold (default 0: unfolded, one quad per segment; LOD0's fold keeps the Λ that shades one half)."""
     segs = C.get("segs", 4); u0, v0, u1, v1 = cell["rect"]
     au = (cell["attach"][0] - u0) / (u1 - u0); av = (cell["attach"][1] - v0) / (v1 - v0)
     crop = min(C.get("crop", 1.0), 2 * min(au, 1 - au))
@@ -1223,15 +1225,15 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
     else:
         return None
     if lod is not None:
-        n, g = lod["segs"], lod.get("grow", 1.0)
-        flat = strip(droop, 0.0)[1]  # the relaxed LOD0 arc, unfolded: edges level with the midrib
+        n, g, fo = lod["segs"], lod.get("grow", 1.0), lod.get("fold", 0.0)
+        flat = strip(droop, fo)[1]  # the relaxed LOD0 arc, with the level's fold
         def at(f):
             x = f * segs; i = min(int(x), segs - 1); t = x - i
             return [a.lerp(b, t) for a, b in zip(flat[i], flat[i + 1])]
         rows = []
         for k in range(n + 1):
             l, p, r = at(k / n); rows.append((p + (l - p) * g, p, p + (r - p) * g))
-        segs, fold = n, 0.0
+        segs, fold = n, fo
     lus = (0.0, 0.5, 1.0) if fold > 0 else (0.0, 1.0)
     grid = ((0, 0), (.5, 0), (1, 0), (1, 1), (.5, 1), (0, 1)) if fold > 0 else ((0, 0), (1, 0), (1, 1), (0, 1))
     first = len(bm.verts); vv = []
@@ -1251,7 +1253,7 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
     """Palm / tree fern / banana: fronds radiating from every stem top (terminal end above minz). Per head: `count`
     fronds on a golden-angle spiral (or interleaved over `spread` deg), age 0 (youngest, top, upright) .. 1 (oldest,
     `zone` m lower, flattest, most drooping); optional upright `young` spears and hanging `dead` fronds. lod: a far
-    level's dict(segs, grow): every frond with the same draws, resampled (frond lod)."""
+    level's dict(segs, grow[, fold]): every frond with the same draws, resampled (frond lod)."""
     C = CFG["crown"]
     cells = json.load(open(TEX + f"{TEXN}_Leaves_Cards.json"))["cells"]
     live = [cells[i] for i in C.get("cells", range(len(cells)))]
@@ -1408,8 +1410,9 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
             print(f"STAT crown roles bare {R['bare']} {'lod1' if lod1 else 'lod0'} turned full {len(kept)} (bare m, root xyz) {kept}")
         return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep, roles=roles)
     if mode == "rosette":  # lod1_subset (keep): fronds identical to LOD0 (unfolding moves the edges by fold x width);
-        # a far level (keep with segs, make_lod lv): the same fronds resampled to fewer segments, unfolded, width x grow
-        lod = dict(segs=keep["segs"], grow=keep.get("grow", 1.0)) if keep is not None and keep.get("segs") else None
+        # a far level (keep with segs, make_lod lv): the same fronds resampled to fewer segments, width x grow, lv fold
+        lod = dict(segs=keep["segs"], grow=keep.get("grow", 1.0), fold=keep.get("fold", 0.0)) \
+            if keep is not None and keep.get("segs") else None
         return rosette_crown(bm, uvl, branches, rng, C.get("fold", 0.0) if keep is not None else fold, lod)
     cells = None  # atlas: each card shows one cell of <tex>_Leaves_Cards.json instead of the whole texture
     if C.get("atlas"):
@@ -1536,12 +1539,13 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
     draws: every `rings`-th ring, `sides`, tubes deeper than `maxdepth` (or `drop` levels off the deepest, kept when the
     tree has fewer levels than that) or thinner at the base than `min_r` x the thickest stem not meshed (nor any branch
     on them); every card kept, `grow` x larger about its attach point, unfolded (the cull thins them by visibility).
-    A rosette crown with lv segs: every frond kept, resampled to segs segments, unfolded, `grow` x wider (frond lod)."""
+    A rosette crown with lv segs: every frond kept, resampled to segs segments, `grow` x wider, folded by lv fold
+    (default 0: unfolded) (frond lod)."""
     base_over = base_over or {}
     MERGE_SKIPPED[0] = 0
     branches = build_skeleton(seed)
     if lv is not None: lod1 = True
-    sub = (dict(keep=1.0, grow=lv.get("grow", 1.0), **({"segs": lv["segs"]} if lv.get("segs") else {}))
+    sub = (dict(keep=1.0, grow=lv.get("grow", 1.0), **({"segs": lv["segs"], "fold": lv.get("fold", 0.0)} if lv.get("segs") else {}))
            if lv is not None else CFG.get("lod1_subset")) if lod1 else None
     if lod1 and not sub:
         for b in branches:
