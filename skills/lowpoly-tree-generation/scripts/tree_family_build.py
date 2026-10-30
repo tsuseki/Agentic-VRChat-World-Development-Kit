@@ -90,6 +90,10 @@
 #   crown max_fall=<deg> (sprig, opt-in): likewise a card whose tip falls more than max_fall deg below horizontal is
 #       raised to -max_fall (55: no card within 35 deg of hanging vertical; an edge-on hanging card reads as a
 #       stippled vertical stripe). Off = identical builds.
+#   crown face_out=dict(c=(x, y, z), rad=(rx, ry, rz), k=0.8) (sprig, opt-in): each card is rolled about its own axis
+#       so its face turns toward the outward normal of that ellipsoid at the card root (k = share of the normal vs
+#       the drawn roll): a dense mound seen from outside shows card faces, not edge-on streaks (SeaGrape review
+#       2026-10-30). Applied after roll_tilt. No extra random draws: off = identical builds.
 #   crown fill up=0.6, minz=<crown minz> (opt-in): the fill cards' up lean (d*0.4 + to_axis*inward + UP*up; < 0 leans
 #       them down over the limbs) and the lowest fill root. Defaults = the old fixed values: off = identical builds.
 #   low_tips out=(lo, hi) (opt-in): each low_tips card is re-aimed tip-out: heading = radial from the trunk + its own
@@ -188,6 +192,9 @@
 #       (atan(le) / atan(mid of `stems` lean range)), toward its lean azimuth: an upright foot that enters the ground
 #       without ring shear, a leaning run, a top that turns up under the head (palms: CoconutPalmLean review 2026-10-30).
 #       foot_split: the first k segments are halved (k extra rings) so the foot-to-lean bend is not one kink
+#   stem_profile=dict(keys=[(f, mult), ...]) (opt-in): every stem's radius (after the r0 -> r1 taper) x mult at arc
+#       fraction f, smoothstep between keys: palm swellings (royal palm mid-trunk bulge, bottle palms). The flare
+#       still applies at the foot. No random draws: off = identical builds.
 #   crown mode "rosette" (palms, tree ferns, bananas): fronds radiating from every stem top; see rosette_crown()
 #       and SKILL.md. levels=[] allowed (no branches); suckers = `side` limbs at the trunk base (each its own head),
 #       rosette `head_pow` (opt-in) shrinks small heads' frond counts (x sc^head_pow) and zones. crown atlas=True|[cells] (twig/ellipsoid/spindle): each card
@@ -585,6 +592,17 @@ def build_skeleton(seed):
         else:
             parents.append(grow(base, d, rng.uniform(*L) * sc, r0 * sc, r1 * sc, CFG.get("stem_segs", 6), 0, out, gn,
                                 CFG.get("bend", 0.0), seed + k, up_end=CFG.get("bend_end")))  # bend_end: stem bend ramps to it (nodding tips)
+        SP = CFG.get("stem_profile")
+        if SP and parents[-1] is not None:  # opt-in: radius x a smoothstep profile over the arc fraction (palm swellings)
+            st = parents[-1]; seg = [(st.pts[i + 1] - st.pts[i]).length for i in range(len(st.pts) - 1)]
+            tot = max(sum(seg), 1e-9); acc = 0.0; ks = sorted(SP["keys"])
+            for i in range(len(st.pts)):
+                f = acc / tot; acc += seg[i] if i < len(seg) else 0.0
+                m = ks[0][1] if f <= ks[0][0] else ks[-1][1]
+                for (fa, ma), (fb, mb) in zip(ks, ks[1:]):
+                    if fa <= f <= fb:
+                        t = (f - fa) / max(fb - fa, 1e-6); t = t * t * (3 - 2 * t); m = ma + (mb - ma) * t; break
+                st.radii[i] *= m
     trunk = out[0]; TL = sum((trunk.pts[i + 1] - trunk.pts[i]).length for i in range(len(trunk.pts) - 1))
     def side_limbs(grown):  # extra trunk limbs at absolute heights; grown=True ones get the upper levels' children
         made = []
@@ -1006,6 +1024,14 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             if u.length > 1e-3:
                 u.normalize(); a = math.radians(trng.uniform(*RT)) * (1.0 if trng.random() < 0.5 else -1.0)
                 roll = (u * math.cos(a) + d.cross(u) * math.sin(a)).normalized()
+        FO = C.get("face_out") if C["mode"] == "sprig" and not hang else None
+        if FO:  # opt-in (sprig): the card face turns toward the outward normal of a shell (c, rad) at its root, axis kept
+            q = A - Vector(FO["c"]); R2 = [x * x for x in FO["rad"]]  # (no edge-on cards seen from outside; no draws)
+            g = Vector((q.x / R2[0], q.y / R2[1], q.z / R2[2]))
+            if g.length > 1e-9:
+                w = roll if roll.dot(g) >= 0.0 else -roll  # the card is two-sided: start from the face nearer the normal
+                t = w.lerp(g.normalized(), FO.get("k", 0.8))
+                if (t - d * t.dot(d)).length > 1e-3: roll = t.normalized()
         FB = None
         if C.get("floor_base") and C["mode"] == "sprig" and not hang:
             # opt-in floor_base: no card hangs below the base of its limb (where its merged chain leaves its parent)
