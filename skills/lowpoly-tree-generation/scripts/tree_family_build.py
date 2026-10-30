@@ -144,12 +144,13 @@
 #       a limb whose last fork is past `at` of its length continues into its best-aligned child as one tube (no
 #       spike past the fork); see merge_continuations(). Recommended for every new tree.
 #   lod1_mindepth   LOD1 drops the deepest level and roots its cards on this depth
-#   lods=[dict(rings, sides, grow, maxdepth | drop, min_r[, segs, fold]), ...] (--lods; default LOD_LEVELS)   far levels
+#   lods=[dict(rings, sides, grow, maxdepth | drop, min_r[, segs, fold, base]), ...] (--lods; default LOD_LEVELS)   far
 #       <Species>_Tree_LOD2, _LOD3 built from the LOD1's skeleton and card draws (see make_lod lv); the hidden-card cull
 #       (BoothAssets lod1_cull_cards.py --lod N --keep-cards K) then thins their cards by visibility. Rosette crowns:
 #       segs (opt-in) = every frond resampled to that many segments, width x grow, folded by fold (default 0 = unfolded)
 #       (frond lod); the cull then keeps whole fronds (lod1_cull_cards.py --components). Without segs a rosette far
-#       level is the full LOD0 crown.
+#       level is the full LOD0 crown. base (opt-in, default 1) = the far frond's base row width share, its UVs cropped
+#       alike: an unfolded strip has no midrib vertex, so a full-width base row puts its corners W/2 out from the trunk.
 #   clear_drop (0)   drop a branch the keep-out volumes cut to less than this share of its length
 #   limbs=[dict(root, tip, r=(r0, r1), gnarl, children, arch, epiphytes)]   explicit limbs (tree-local, root on the
 #       trunk at root.z; arch m upward bow; epiphytes = hanging cards along it)
@@ -174,6 +175,11 @@
 #       along each limb: drooping tips); crown size_top (card size x this at `height`, spire), ground (m, hanging
 #       cards shrink/skip to stay above it); proxy="cone"
 #   bend (0.0)   upward pull per stem segment (a leaning palm trunk curving up), stem_segs (6) segments per stem
+#   stem_curve=dict(keys=[(f, deg), ...], foot_split=2)   opt-in, replaces `bend` for the stems: each stem's tilt from
+#       vertical follows the keys (f = arc fraction 0..1, smoothstep between keys), scaled per stem by its drawn lean
+#       (atan(le) / atan(mid of `stems` lean range)), toward its lean azimuth: an upright foot that enters the ground
+#       without ring shear, a leaning run, a top that turns up under the head (palms: CoconutPalmLean review 2026-10-30).
+#       foot_split: the first k segments are halved (k extra rings) so the foot-to-lean bend is not one kink
 #   crown mode "rosette" (palms, tree ferns, bananas): fronds radiating from every stem top; see rosette_crown()
 #       and SKILL.md. levels=[] allowed (no branches); suckers = `side` limbs at the trunk base (each its own head),
 #       rosette `head_pow` (opt-in) shrinks small heads' frond counts (x sc^head_pow) and zones. crown atlas=True|[cells] (twig/ellipsoid/spindle): each card
@@ -386,6 +392,29 @@ def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, ke
     if len(pts) < segs + 1: radii = [r0 + (radii[-1] - r0) * k / (len(pts) - 1) for k in range(len(pts))]
     b = Br(pts, radii, depth); out.append(b); return b
 
+def grow_curve(start, az, scale, length, r0, r1, segs, out, gnarl, seed, SC):
+    """A ground-rooted stem along a tilt profile (CFG stem_curve): the segment at arc fraction f points `tilt(f)` deg
+    from vertical toward azimuth az, tilt(f) = smoothstep between the keys x `scale` (the stem's drawn lean over the
+    family's middle lean); the first foot_split segments are halved. Radius tapers r0 -> r1 by arc fraction."""
+    keys = sorted(SC["keys"])
+    def tilt(f):
+        if f <= keys[0][0]: return keys[0][1]
+        for (fa, ta), (fb, tb) in zip(keys, keys[1:]):
+            if f <= fb:
+                t = (f - fa) / max(fb - fa, 1e-6); t = t * t * (3 - 2 * t); return ta + (tb - ta) * t
+        return keys[-1][1]
+    fs = [i / segs for i in range(segs + 1)]
+    for i in range(min(SC.get("foot_split", 0), segs)): fs.append((i + 0.5) / segs)
+    fs = sorted(fs); pts, radii = [start.copy()], [r0]; p = start.copy()
+    hz = Vector((math.cos(az), math.sin(az), 0.0))
+    for a, b in zip(fs, fs[1:]):
+        e = math.radians(tilt((a + b) / 2) * scale)
+        d = (hz * math.sin(e) + UP * math.cos(e))
+        n = det_noise_vector(p * 1.7 + Vector((0.0, seed * 0.37, 0.5)))
+        d = (d + n * gnarl).normalized()
+        p = p + d * (length * (b - a)); pts.append(p.copy()); radii.append(r0 + (r1 - r0) * b)
+    br = Br(pts, radii, 0); out.append(br); return br
+
 def smooth_path(pts, radii, thr, iters):
     """Chaikin corner cut on interior points bending more than thr rad; first/last point stay put."""
     for _ in range(iters):
@@ -540,8 +569,14 @@ def build_skeleton(seed):
             le *= SL.get("lean_min", 0.3) + (1.0 - SL.get("lean_min", 0.3)) * min(1.0, rad.length / rim)
             d = Vector((math.cos(az) * le, math.sin(az) * le, 1.0))
         sc = 1.0 if k == 0 or cnt < 4 else rng.uniform(0.7, 1.0)
-        parents.append(grow(base, d, rng.uniform(*L) * sc, r0 * sc, r1 * sc, CFG.get("stem_segs", 6), 0, out, gn,
-                            CFG.get("bend", 0.0), seed + k, up_end=CFG.get("bend_end")))  # bend_end: stem bend ramps to it (nodding tips)
+        SC = CFG.get("stem_curve")
+        if SC:  # opt-in: the stem follows a tilt profile (upright foot, lean, turned-up top), see the CFG notes
+            lmid = math.atan(sum(lean) / 2.0)
+            parents.append(grow_curve(base, az, math.atan(le) / max(lmid, 1e-3), rng.uniform(*L) * sc, r0 * sc, r1 * sc,
+                                      CFG.get("stem_segs", 6), out, gn, seed + k, SC))
+        else:
+            parents.append(grow(base, d, rng.uniform(*L) * sc, r0 * sc, r1 * sc, CFG.get("stem_segs", 6), 0, out, gn,
+                                CFG.get("bend", 0.0), seed + k, up_end=CFG.get("bend_end")))  # bend_end: stem bend ramps to it (nodding tips)
     trunk = out[0]; TL = sum((trunk.pts[i + 1] - trunk.pts[i]).length for i in range(len(trunk.pts) - 1))
     def side_limbs(grown):  # extra trunk limbs at absolute heights; grown=True ones get the upper levels' children
         made = []
@@ -1207,10 +1242,12 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
     The atlas cell's attach point (bottom-centre, branch_atlas.py) sits on A; the cell top is the tip; `crop` = share
     of the cell width used, `aspect` squeezes the width (1 = undistorted texture). fold > 0: the frond edges hang
     below the midrib (Λ section). Returns (first vertex, grid, attach) like sprig_card, or None if it hits the ground.
-    lod=dict(segs, grow[, fold]) (--lods far level of a rosette crown): the frond is relaxed exactly as at LOD0 (same
-    segs and fold, so the same fronds survive and droop alike), then resampled: lod segs segments, its vertices on the
-    LOD0 midrib and edges at the same arc fractions (UV v = arc fraction, as at LOD0), the width x grow, folded by the
-    level's fold (default 0: unfolded, one quad per segment; LOD0's fold keeps the Λ that shades one half)."""
+    lod=dict(segs, grow[, fold, base]) (--lods far level of a rosette crown): the frond is relaxed exactly as at LOD0
+    (same segs and fold, so the same fronds survive and droop alike), then resampled: lod segs segments, its vertices on
+    the LOD0 midrib and edges at the same arc fractions (UV v = arc fraction, as at LOD0), the width x grow, folded by
+    the level's fold (default 0: unfolded, one quad per segment; LOD0's fold keeps the Λ that shades one half). base:
+    the base row narrowed to that share of the width about the midrib, its UVs alike (the texture is cropped, not
+    squeezed): the frond leaves the trunk at its petiole instead of a full-width edge (default 1 = full width)."""
     segs = C.get("segs", 4); u0, v0, u1, v1 = cell["rect"]
     au = (cell["attach"][0] - u0) / (u1 - u0); av = (cell["attach"][1] - v0) / (v1 - v0)
     crop = min(C.get("crop", 1.0), 2 * min(au, 1 - au))
@@ -1234,15 +1271,16 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
         droop *= 0.8
     else:
         return None
+    bw = 1.0  # base row width share (lod base)
     if lod is not None:
-        n, g, fo = lod["segs"], lod.get("grow", 1.0), lod.get("fold", 0.0)
+        n, g, fo, bw = lod["segs"], lod.get("grow", 1.0), lod.get("fold", 0.0), lod.get("base", 1.0)
         flat = strip(droop, fo)[1]  # the relaxed LOD0 arc, with the level's fold
         def at(f):
             x = f * segs; i = min(int(x), segs - 1); t = x - i
             return [a.lerp(b, t) for a, b in zip(flat[i], flat[i + 1])]
         rows = []
         for k in range(n + 1):
-            l, p, r = at(k / n); rows.append((p + (l - p) * g, p, p + (r - p) * g))
+            l, p, r = at(k / n); w = g * (bw if k == 0 else 1.0); rows.append((p + (l - p) * w, p, p + (r - p) * w))
         segs, fold = n, fo
     lus = (0.0, 0.5, 1.0) if fold > 0 else (0.0, 1.0)
     grid = ((0, 0), (.5, 0), (1, 0), (1, 1), (.5, 1), (0, 1)) if fold > 0 else ((0, 0), (1, 0), (1, 1), (0, 1))
@@ -1251,7 +1289,7 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
         cols = (row if fold > 0 else (row[0], row[2]))
         order = list(range(len(lus)))[::-1] if k == 1 else list(range(len(lus)))
         made = {j: bm.verts.new(cols[j]) for j in order}; vv.append([made[j] for j in range(len(lus))])
-    def uv(j, k): return (u0 + (au + (lus[j] - 0.5) * crop) * (u1 - u0), v0 + (av + (1 - av) * k / segs) * (v1 - v0))
+    def uv(j, k): return (u0 + (au + (lus[j] - 0.5) * crop * (bw if k == 0 else 1.0)) * (u1 - u0), v0 + (av + (1 - av) * k / segs) * (v1 - v0))
     for k in range(segs):
         for j in range(len(lus) - 1):
             q = ((j, k), (j + 1, k), (j + 1, k + 1), (j, k + 1))
@@ -1263,7 +1301,7 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
     """Palm / tree fern / banana: fronds radiating from every stem top (terminal end above minz). Per head: `count`
     fronds on a golden-angle spiral (or interleaved over `spread` deg), age 0 (youngest, top, upright) .. 1 (oldest,
     `zone` m lower, flattest, most drooping); optional upright `young` spears and hanging `dead` fronds. lod: a far
-    level's dict(segs, grow[, fold]): every frond with the same draws, resampled (frond lod)."""
+    level's dict(segs, grow[, fold, base]): every frond with the same draws, resampled (frond lod)."""
     C = CFG["crown"]
     cells = json.load(open(TEX + f"{TEXN}_Leaves_Cards.json"))["cells"]
     live = [cells[i] for i in C.get("cells", range(len(cells)))]
@@ -1281,7 +1319,9 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
         specs = [("live", i / max(1, n - 1)) for i in range(n)]
         Y, D = C.get("young"), C.get("dead")
         hn = (lambda k: k) if hp is None else (lambda k: round(k * sc ** hp))
-        specs += [("young", 0.0)] * (hn(Y["n"]) if Y else 0) + [("dead", 1.0)] * (hn(D["n"]) if D else 0)
+        # dead n may be a (lo, hi) range: a per-head count (CoconutPalm review: 1-3 per head, not a 3-frond beard)
+        dn = (rng.randint(*D["n"]) if isinstance(D["n"], (tuple, list)) else D["n"]) if D else 0
+        specs += [("young", 0.0)] * (hn(Y["n"]) if Y else 0) + [("dead", 1.0)] * hn(dn)
         for i, (kind, age) in enumerate(specs):
             if spread >= 360: az = az0 + i * math.radians(137.508)
             else: az = az0 + math.radians(((i * 0.618034) % 1.0 - 0.5) * spread)
@@ -1296,7 +1336,8 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
             if kind == "young": tilt = rng.uniform(lo, hi)
             A = point_at(b, max(0.0, min(1.0, z / Lb)))[0]
             cell = cells[S["cell"]] if kind != "live" and S.get("cell") is not None else rng.choice(live)
-            r = frond(bm, uvl, A, axis, rad, L, tilt, droop, tw, fold, cell, C, lod)
+            CC = dict(C, aspect=C.get("aspect", 1.0) * S["width"]) if kind != "live" and S.get("width") else C  # narrow spears
+            r = frond(bm, uvl, A, axis, rad, L, tilt, droop, tw, fold, cell, CC, lod)
             if r: cards.append(r + (b, 1.0))
     return cards
 
@@ -1421,7 +1462,7 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
         return sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1, keep, roles=roles)
     if mode == "rosette":  # lod1_subset (keep): fronds identical to LOD0 (unfolding moves the edges by fold x width);
         # a far level (keep with segs, make_lod lv): the same fronds resampled to fewer segments, width x grow, lv fold
-        lod = dict(segs=keep["segs"], grow=keep.get("grow", 1.0), fold=keep.get("fold", 0.0)) \
+        lod = dict(segs=keep["segs"], grow=keep.get("grow", 1.0), fold=keep.get("fold", 0.0), base=keep.get("base", 1.0)) \
             if keep is not None and keep.get("segs") else None
         return rosette_crown(bm, uvl, branches, rng, C.get("fold", 0.0) if keep is not None else fold, lod)
     cells = None  # atlas: each card shows one cell of <tex>_Leaves_Cards.json instead of the whole texture
@@ -1550,12 +1591,12 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
     tree has fewer levels than that) or thinner at the base than `min_r` x the thickest stem not meshed (nor any branch
     on them); every card kept, `grow` x larger about its attach point, unfolded (the cull thins them by visibility).
     A rosette crown with lv segs: every frond kept, resampled to segs segments, `grow` x wider, folded by lv fold
-    (default 0: unfolded) (frond lod)."""
+    (default 0: unfolded), its base row lv base x as wide (default 1) (frond lod)."""
     base_over = base_over or {}
     MERGE_SKIPPED[0] = 0
     branches = build_skeleton(seed)
     if lv is not None: lod1 = True
-    sub = (dict(keep=1.0, grow=lv.get("grow", 1.0), **({"segs": lv["segs"], "fold": lv.get("fold", 0.0)} if lv.get("segs") else {}))
+    sub = (dict(keep=1.0, grow=lv.get("grow", 1.0), **({"segs": lv["segs"], "fold": lv.get("fold", 0.0), "base": lv.get("base", 1.0)} if lv.get("segs") else {}))
            if lv is not None else CFG.get("lod1_subset")) if lod1 else None
     if lod1 and not sub:
         for b in branches:
