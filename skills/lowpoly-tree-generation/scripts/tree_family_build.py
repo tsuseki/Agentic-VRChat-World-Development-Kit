@@ -19,11 +19,15 @@
 #       the ground on leaning stems when the base is seen without terrain); s = the pack scale the mesh ships at
 #       (horizontal offset / s, because the pack scales x/y but keeps underground depths). Off = identical builds.
 #   side=[dict(n, z=(lo,hi), len, ang, r, tip, gnarl, up)]  extra trunk limbs/stubs at given heights (no children)
-#   vines=dict(count, size, z=(lo,hi))   hanging sprig cards under depth>=1 branches (epiphytes / draped foliage)
+#   vines=dict(count, size, z=(lo,hi)[, cells=[i,...]][, shrink=True])   hanging sprig cards under depth>=1 branches
+#       (epiphytes / draped foliage); cells (opt-in): the hanging cards draw only these atlas cells (strands under a
+#       crown of sprays); shrink (opt-in): hosts under one card length are kept, their cards shrunk to crown `ground`
 #   low_tips=dict(min=3, n=4, reach=1.0, size=0.6, ground=0.1, cut=0.3)   bare low limbs (sprig): every terminal limb
 #       chain carrying fewer than `min` cards gets `n` more over its outer `reach` m (one at the tip), card length
 #       `size`, kept above `ground`; chains lying entirely below `cut` m (ground limbs, never leafy) are not meshed.
 #       Added after every other card with its own random sequence: no other card moves. Off = identical builds.
+#       tip_t (opt-in, default 0.97): where the tip card sits on the tip member; the default leaves its last 3 % bare
+#       (0.3 m on a 10 m weeping arch): 0.995 roots it at the very end. Off = identical builds.
 #   crown roll_tilt=(lo, hi) (sprig, opt-in): each card is rolled about its own axis so its plane stands lo..hi deg
 #       (random sign) off the plane through the axis and the horizontal; replaces `flat`'s face-to-sky roll (flat still
 #       levels the direction). For low mats whose face-up cards read as flat rosettes. Own random sequence: card
@@ -917,7 +921,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             if not ok: return False
         else:
             d = ((-UP + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * UB)).normalized()
-        roll, cell = nrm if nrm is not None else rand_unit(rng), rng.choice(cards_cells)
+        roll, cell = nrm if nrm is not None else rand_unit(rng), rng.choice(hang_cells if hang and hang_cells else cards_cells)
         if C.get("cell_scale"):  # opt-in (sprig): the drawn cell's Cards.json "scale" (card length multiplier, default 1)
             sz *= cell.get("scale", 1.0)  # so a cell drawn with bigger leaves builds the same leaf size in metres; no draws
         fl = C.get("flat", 0.0) if C["mode"] == "sprig" and not hang else 0.0
@@ -1016,6 +1020,9 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     # opt-in crown cells=[i, ...] (sprig/bamboo): cards draw only these atlas cells (e.g. a dense clipped-surface cell for
     # topiary variants, open sprays for the free-growing ones); same single rng.choice per card, off = identical
     cards_cells = [cells[i] for i in C["cells"]] if C.get("cells") is not None else cells
+    # opt-in vines cells=[i, ...]: the hanging vines cards draw only these cells (e.g. strand cells under a crown of
+    # sprays); same single rng.choice per card, off = identical
+    hang_cells = [cells[i] for i in CFG["vines"]["cells"]] if (CFG.get("vines") or {}).get("cells") is not None else None
     if roles is not None:  # crown roles: interior cards show "full" cells, the protruding ones lateral/shoot/sprig
         FULL = [c for c in cards_cells if c.get("role") == "full"]
         OUT = [c for c in cards_cells if c.get("role") in ("lateral", "shoot", "sprig")]
@@ -1077,7 +1084,9 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             tries += 1
             b = rng.choices(hosts, hl)[0]; t = rng.uniform(0.15, 0.95)
             A = point_at(b, t)[0]
-            if not (V["z"][0] <= A.z <= V["z"][1]) or A.z - size < 0.3: continue
+            # opt-in vines shrink=True: low hosts are kept and the crown's `ground` shrinks their cards (x0.75 steps)
+            # instead of skipping every host less than one card length above the ground (curtains reaching the ground)
+            if not (V["z"][0] <= A.z <= V["z"][1]) or (A.z - size < 0.3 and not V.get("shrink")): continue
             place(b, t, -UP, hang=True)
         size = base
     for b in branches:  # epiphytes / moss tufts hanging along explicit limbs (cards keep out of the volumes)
@@ -1118,16 +1127,17 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
                 h = h.normalized() if h.length > 1e-6 else Vector((1.0, 0.0, 0.0))
                 e = math.radians(orng.uniform(*LT["out"]))
                 return (h * math.cos(e) + UP * math.sin(e)).normalized()
+        tt = LT.get("tip_t", 0.97)  # the tip card's place on the tip member (header: low_tips tip_t)
         for b in terminal_ends(branches):
             ch = limb_chain(branches, b); ids = {id(x) for x in ch}
             if id(ch[0]) in cut or sum(id(c[3]) in ids for c in cards) >= LT.get("min", 3): continue
             segs = [(x, blen(x)) for x in reversed(ch)]  # tip member first
             for k in range(LT.get("n", 4)):
-                s = 0.03 * blen(b) if k == 0 else rng.uniform(0.0, LT.get("reach", 1.0))  # arc length back from the tip
+                s = (1.0 - tt) * blen(b) if k == 0 else rng.uniform(0.0, LT.get("reach", 1.0))  # arc length back from the tip
                 for x, L in segs:
                     if s <= L or x is ch[0]: break
                     s -= L
-                t = max(0.05, min(0.97, 1.0 - s / max(L, 1e-6)))
+                t = max(0.05, min(tt, 1.0 - s / max(L, 1e-6)))
                 _, _, d = point_at(x, t); place(x, t, d, aim=aim)
         C["ground"] = g0
         if g0 is None: del C["ground"]
