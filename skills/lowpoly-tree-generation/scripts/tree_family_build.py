@@ -229,6 +229,10 @@
 #   stem_profile=dict(keys=[(f, mult), ...]) (opt-in): every stem's radius (after the r0 -> r1 taper) x mult at arc
 #       fraction f, smoothstep between keys: palm swellings (royal palm mid-trunk bulge, bottle palms). The flare
 #       still applies at the foot. No random draws: off = identical builds.
+#   stem_dome=<k> (opt-in, taper trees): depth-0 stems skip the end taper (by default a stem narrows to a 3 mm spear
+#       from ~0.9 of its length, so a whorl of thick limbs near the top leaves a cone and the limbs cross at a point)
+#       and end in a low dome k x the end radius high, inside the limbs (banyan: the limbs leave a broad drum top, as
+#       a forked trunk's crotch dome). Off = identical builds.
 #   crown mode "rosette" (palms, tree ferns, bananas): fronds radiating from every stem top; see rosette_crown()
 #       and SKILL.md. levels=[] allowed (no branches); suckers = `side` limbs at the trunk base (each its own head),
 #       rosette `head_pow` (opt-in) shrinks small heads' frond counts (x sc^head_pow) and zones. crown atlas=True|[cells] (twig/ellipsoid/spindle): each card
@@ -966,7 +970,8 @@ def tube(bm, br, sides, lobe_amt, cap):
         ring = rings[-1][0]
         t = (br.pts[-1] - br.pts[-2]).normalized()
         # forked trunk: a low crotch dome, not a spear; palm stem / sucker under a rosette: a blunt cone in the frond bases
-        k = 0.35 if (br.depth == 0 and CFG.get("fork")) else 1.0 if rosette else 2.5
+        k = 0.35 if (br.depth == 0 and CFG.get("fork")) else CFG["stem_dome"] if (br.depth == 0 and CFG.get("stem_dome")) \
+            else 1.0 if rosette else 2.5
         apex = bm.verts.new(br.pts[-1] + t * max(br.radii[-1] * k, 0.02))
         for s in range(sides):
             f = bm.faces.new((ring[s], ring[(s + 1) % sides], apex)); f.material_index = 0
@@ -1849,7 +1854,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
                 b.pts, b.radii = smooth_path(b.pts, b.radii, math.radians(sm.get("bend", 12)), sm.get("iters", 2))
     if CFG.get("taper"):  # every branch end narrows smoothly to TIP_R over its last 40%: no cut/capped ends
         for b in branches:
-            if b.depth == 0 and CFG.get("fork"): continue  # the trunk ends inside its fork limbs, no spear tip
+            if b.depth == 0 and (CFG.get("fork") or CFG.get("stem_dome")): continue  # trunk ends inside its fork limbs / dome
             if getattr(b, "keep", False):  # explicit limb: keeps its end radius, gently rounded by the end cap
                 continue
             seg = [(b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)]
