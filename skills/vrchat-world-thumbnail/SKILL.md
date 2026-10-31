@@ -27,5 +27,10 @@ description: "Placement, size and legibility rules for the title on a VRChat wor
     - the Airship retro serif reused on the mansion (wrong theme);
     - the thin ivory serif gpt-image drew for the mansion.
 - **Render with real fonts, not an image model.** Image models drift in size and position and can misspell. Use `scripts/title_render.py`:
-  - `--preview [--themes ...]` builds a font contact sheet;
-  - `--font X --fill HEX --glow HEX` renders the final at the standard position and size.
+  - `--preview [--themes ...] [--fonts ...]` builds a font contact sheet;
+  - `--font X --fill HEX --glow HEX` renders the final at the standard position and size;
+  - `--sub TEXT [--sub-font K]` adds a smaller second row (e.g. the Japanese name; `ja_sub` fonts carry the glyphs);
+    the whole ink block is then centred at 45 %;
+  - `--credit TEXT` adds one small, quiet line in the bottom band (full view only), e.g. the asset credit;
+  - `--crops` writes the crop previews: full, menu tile with the badge, hover zoom, portal circle. Crop geometry is
+    measured from Maebbie's template (vrclibrary.com world-thumbnail guide); import `render` / `crop_sheet` to script it.

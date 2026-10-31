@@ -58,6 +58,9 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
   Fax, [UdonSharp Nitpicks](https://wiki.vrchat.com/wiki/Guides:UdonSharp_Nitpicks). Used by
   `.omp/agents/blender-optimizer.md`, `.omp/skills/vrchat-world-thumbnail/SKILL.md`,
   `.omp/skills/unity-vrc-udon-sharp/references/events.md`.
+- **Maebbie** — [World Thumbnail / World Image Guide including a Template](https://vrclibrary.com/wiki/books/maebbies-precise-solutions/page/world-thumbnailworld-image-guide-including-a-template)
+  (VRCLibrary, CC BY-ND 4.0); crop boxes and portal ellipses measured from it (no image copied). Used by
+  `.omp/skills/vrchat-world-thumbnail/scripts/title_render.py`.
 - **Lura (QuickBrown Design Studio)** — [Unityライトベイクのいろは](https://cgworld.jp/article/2409-313T-vrchat02.html),
   CGWORLD, 2024-09-25. Used by `.omp/skills/bakery-light-baking/SKILL.md`.
 - **れいんつ (laynts)** — [VRChat World「Chrono Cabin」ができるまで](https://note.com/laynts_/n/nbd10954de90d), 2024-08.
