@@ -30,7 +30,8 @@ description: "Placement, size and legibility rules for the title on a VRChat wor
   - `--preview [--themes ...] [--fonts ...]` builds a font contact sheet;
   - `--font X --fill HEX --glow HEX` renders the final at the standard position and size;
   - `--sub TEXT [--sub-font K]` adds a smaller second row (e.g. the Japanese name; `ja_sub` fonts carry the glyphs);
-    the whole ink block is then centred at 45 %;
+    the whole ink block is then centred at 45 %. A small sub row over a busy band (a treeline) gets its own wider,
+    stronger glow with `--sub-glow-alpha 0.9 --sub-glow-blur 0.35`, which reads as a soft local dark band;
   - `--credit TEXT` adds one small, quiet line in the bottom band (full view only), e.g. the asset credit;
   - `--crops` writes the crop previews: full, menu tile with the badge, hover zoom, portal circle. Crop geometry is
     measured from Maebbie's template (vrclibrary.com world-thumbnail guide); import `render` / `crop_sheet` to script it.

@@ -154,24 +154,29 @@ def _draw_row(d, W, y, text, font, tr):
         x += font.getlength(c) + tr
 
 
-def _halo(img, mask, size, fill, glow_col, glow_alpha, shadow_alpha):
+def _halo(img, mask, size, fill, glow_col, glow_alpha, shadow_alpha, glow_blur=0.14):
     W, H = img.size
     shadow = mask.filter(ImageFilter.GaussianBlur(size * 0.06))
     img.paste(Image.new("RGB", (W, H), (10, 6, 4)), (0, 0), shadow.point(lambda v: int(v * shadow_alpha)))
-    glow = mask.filter(ImageFilter.GaussianBlur(size * 0.14))
+    glow = mask.filter(ImageFilter.GaussianBlur(size * glow_blur))
+    if glow_blur > 0.14:   # a wide glow spreads thin: renormalise so its core still reaches glow_alpha
+        peak = max(1, glow.getextrema()[1])
+        glow = glow.point(lambda v: min(255, int(v * 255 / peak)))
     img = Image.composite(Image.new("RGB", (W, H), glow_col), img, glow.point(lambda v: int(v * glow_alpha)))
     img.paste(Image.new("RGB", (W, H), fill), (0, 0), mask)
     return img
 
 
 def render(base, rows, key, row_frac=ROW_WIDTH, center_y=CENTER_Y, fill=FILL, glow_col=GLOW,
-           sub=None, sub_key=None, sub_scale=0.38, sub_gap=0.22, sub_fill=None,
+           sub=None, sub_key=None, sub_scale=0.38, sub_gap=0.22, sub_fill=None, sub_glow_alpha=None, sub_glow_blur=0.14,
            glow_alpha=0.55, shadow_alpha=0.6, credit=None, credit_key="josefin_light", credit_fill="ffffff",
            credit_alpha=0.82, credit_px=CREDIT_PX):
     """Title rows (widest = row_frac of the width, block centred at center_y). Without `sub` the layout is the
     standard line-box layout. With `sub` (a smaller row, e.g. a Japanese name, in `sub_key`, default the title font,
     `sub_scale` x the title size, `sub_gap` x the title size below the title ink) the ink box of the whole block is
-    centred at center_y instead. `credit`: one small line centred in the bottom band (full view only)."""
+    centred at center_y instead. `sub_glow_alpha` / `sub_glow_blur` (x the sub size) give the sub row its own, wider
+    and stronger glow: a soft local dark band for a small row over a busy band such as a treeline.
+    `credit`: one small line centred in the bottom band (full view only)."""
     _, _, axes, upper, tracking, gap, _ = FONTS[key]
     path = font_path(key)
     fill, glow_col = hexrgb(fill), hexrgb(glow_col)
@@ -212,7 +217,8 @@ def render(base, rows, key, row_frac=ROW_WIDTH, center_y=CENTER_Y, fill=FILL, gl
             _draw_row(d, W, top + dy + i * (line_h + gap * size), r, f, tr)
         smask = Image.new("L", (W, H), 0)
         _draw_row(ImageDraw.Draw(smask), W, sy + dy, stext, sf, s_track * ssize)
-        img = _halo(img, smask, ssize * 1.6, hexrgb(sub_fill) if sub_fill else fill, glow_col, glow_alpha, shadow_alpha)
+        img = _halo(img, smask, ssize * 1.6, hexrgb(sub_fill) if sub_fill else fill, glow_col,
+                    glow_alpha if sub_glow_alpha is None else sub_glow_alpha, shadow_alpha, sub_glow_blur)
     img = _halo(img, mask, size, fill, glow_col, glow_alpha, shadow_alpha)
     if credit:
         img = render_credit(img, credit, credit_key, credit_fill, credit_alpha, credit_px)
@@ -325,6 +331,9 @@ def main():
     ap.add_argument("--sub", help="optional smaller row under the title (e.g. the Japanese name)")
     ap.add_argument("--sub-font", choices=sorted(FONTS), help="font of the sub row (default: the title font)")
     ap.add_argument("--sub-scale", type=float, default=0.38, help="sub row size as a fraction of the title size")
+    ap.add_argument("--sub-glow-alpha", type=float, help="sub row glow strength (default: --glow-alpha)")
+    ap.add_argument("--sub-glow-blur", type=float, default=0.14,
+                    help="sub row glow radius x its size; 0.3-0.5 = a soft local dark band over a busy treeline")
     ap.add_argument("--credit", help="small quiet line in the bottom band (full view only)")
     ap.add_argument("--credit-font", choices=sorted(FONTS), default="josefin_light")
     ap.add_argument("--credit-px", type=float, default=CREDIT_PX, help="credit size in px at 1200x900")
@@ -341,7 +350,8 @@ def main():
     made = []
     for k in keys:
         img = render(a.base, a.rows, k, a.row_width, a.center_y, a.fill, a.glow, sub=a.sub, sub_key=a.sub_font,
-                     sub_scale=a.sub_scale, glow_alpha=a.glow_alpha, shadow_alpha=a.shadow_alpha, credit=a.credit,
+                     sub_scale=a.sub_scale, sub_glow_alpha=a.sub_glow_alpha, sub_glow_blur=a.sub_glow_blur,
+                     glow_alpha=a.glow_alpha, shadow_alpha=a.shadow_alpha, credit=a.credit,
                      credit_key=a.credit_font, credit_px=a.credit_px)
         full = out / f"title_{k}.png"
         img.save(full)
