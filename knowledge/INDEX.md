@@ -6,7 +6,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 - [lighting-baking](#lighting-baking) (72)
 - [probes-reflection-and-light](#probes-reflection-and-light) (21)
-- [materials-textures-shaders](#materials-textures-shaders) (38)
+- [materials-textures-shaders](#materials-textures-shaders) (39)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (29)
 - [import-fbx-prefabs](#import-fbx-prefabs) (16)
 - [placement-layout-design](#placement-layout-design) (46)
@@ -151,6 +151,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [One-atlas tree layout: four 3:4 portrait spray cells plus a bark strip that repeats in V](notes/one-atlas-tree-layout-portrait-cells-and-bark-strip.md) — A square 2048² atlas with four 3:4 portrait spray cells and a vertical bark strip (wrap U Clamp / V Repeat) lets any shader tile bark with plain UVs in one material; cards take the cell aspect so sprays aren't squeezed; a square bark tile with cut UVs cost +47–92 % tris or 4× blurrier bark.
 - [Recolour one material class in a shared atlas with an HSV saturation mask](notes/recolour-shared-atlas-by-saturation-mask.md) — To retint wood in a furniture atlas without changing its fabric, mask by saturation and remap the masked mean to the target albedo's mean; a _Color tint multiplies everything.
 - [Scaled primitives sharing a material get different texture periods — fix with MaterialPropertyBlock](notes/scaled-primitive-texture-period-mpb.md) — Unit cubes scaled to different lengths with one material show a different world texture period each; set _MainTex_ST per renderer from world size via MaterialPropertyBlock.
+- [Screen-derivative face normals from worldPos turn to noise far from the world origin](notes/derivative-face-normals-break-far-from-origin.md) — A fragment-shader face normal built from cross(ddy(worldPos), ddx(worldPos)) is quantised noise when the scene sits a kilometre or more from the origin and the pixel footprint is about a millimetre (near leaves at 4K or in supersampled captures); interpolate a camera-relative position from the vertex shader and take the derivatives of that instead.
 - [SetColor converts gamma to linear: brightness fits must follow the sRGB curve](notes/setcolor-gamma-conversion-breaks-linear-fits.md) — In a Linear project SetColor applies the exact sRGB-to-linear curve, so rendered luminance scales as ~k^2.2 above the 0.04045 knee and linearly below it; pick the right regime and raise search ceilings since albedo can exceed 1.
 - [SetPropertyBlock replaces the whole block and covers every submesh](notes/setpropertyblock-replaces-not-merges.md) — A MaterialPropertyBlock replaces the renderer block rather than merging, so a renderer in two passes keeps only the last, and one per-renderer block hits every submesh, so solving against sharedMaterial moves the wrong element.
 - [Surface-shader alphatest pragma can make cutout foliage blend with the framebuffer](notes/alphatest-pragma-blends-cutout-against-background.md) — A `alphatest:_Cutoff` surface-shader pragma left cutout leaves blending with whatever was behind them, so leaves in front of a bright HDR sky burned to white; use an explicit clip() instead.

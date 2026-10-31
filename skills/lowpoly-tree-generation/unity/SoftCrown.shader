@@ -86,7 +86,10 @@ Shader "SoftCrown"
 
         sampler2D _MainTex;
         sampler2D _BumpMap;
-        struct Input { float2 uv_MainTex; float facing : VFACE; float3 worldPos; };
+        // camRel: position relative to the camera, written in vert. Small numbers keep its screen derivatives exact far
+        // from the world origin (an interpolated worldPos 1-2 km out is quantised to ~0.1 mm, so the edge-fade normal
+        // turns to per-pixel noise on near leaves at 4K or supersampled renders: scattered single-pixel holes)
+        struct Input { float2 uv_MainTex; float facing : VFACE; float3 camRel; };
 
         fixed4 _Color;
         float4 _BarkRect;
@@ -97,8 +100,9 @@ Shader "SoftCrown"
         float4 _WindDirection;
         float _WindStrength, _WindSpeed, _WindWaveSize, _FlutterStrength, _FlutterSpeed;
 
-        void vert (inout appdata_full v)
+        void vert (inout appdata_full v, out Input o)
         {
+            UNITY_INITIALIZE_OUTPUT(Input, o);
         #if defined(_WIND_ON) && !defined(UNITY_PASS_META)
             float3 wp = mul(unity_ObjectToWorld, v.vertex).xyz;
             float2 d2 = _WindDirection.xz;
@@ -133,6 +137,9 @@ Shader "SoftCrown"
             v.normal = normalize(v.normal + offObj);
             v.tangent.xyz = normalize(v.tangent.xyz + offObj);
         #endif
+            // object origin minus camera first: the large-number subtraction happens once per object, not per pixel
+            float3 op = float3(unity_ObjectToWorld[0].w, unity_ObjectToWorld[1].w, unity_ObjectToWorld[2].w);
+            o.camRel = mul((float3x3)unity_ObjectToWorld, v.vertex.xyz) + (op - _WorldSpaceCameraPos);
         }
         void surf (Input IN, inout SurfaceOutputStandard o)
         {
@@ -169,9 +176,11 @@ Shader "SoftCrown"
             fixed4 c = tex2Dgrad(_MainTex, uv, dx * g, dy * g) * _Color;
             // edge fade: a card seen edge-on shows as a dotted streak past the crown (worse with big cards). Its true
             // face normal comes from the screen derivatives (the mesh normals are the crown proxy's, not the card's);
-            // alpha ramps to 0 as |cos| between view and card drops from 2.5x to 1x _EdgeFadeAngle.
-            float3 faceN = normalize(cross(ddy(IN.worldPos), ddx(IN.worldPos)));
-            float cosv = abs(dot(faceN, normalize(_WorldSpaceCameraPos - IN.worldPos)));
+            // alpha ramps to 0 as |cos| between view and card drops from 2.5x to 1x _EdgeFadeAngle. A degenerate
+            // derivative pair (sub-pixel slivers) gets no fade.
+            float3 fc = cross(ddy(IN.camRel), ddx(IN.camRel));
+            float fl = dot(fc, fc);
+            float cosv = fl > 1e-24 ? abs(dot(fc * rsqrt(fl), normalize(-IN.camRel))) : 1;
             half fade = lerp(1, saturate((cosv - _EdgeFadeAngle) / (1.5 * _EdgeFadeAngle)), _EdgeFade);
         #if defined(UNITY_PASS_META)
             clip(c.a - _Cutoff); // bakes keep the whole leaf silhouette
