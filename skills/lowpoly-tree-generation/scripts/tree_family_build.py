@@ -197,6 +197,16 @@
 #   merge=dict(at=0.7, ang=50, blend=2, round=1, round_bend=20, depth=(0, 99), straighten=True)   sympodial joints:
 #       a limb whose last fork is past `at` of its length continues into its best-aligned child as one tube (no
 #       spike past the fork); see merge_continuations(). Recommended for every new tree.
+#       ang0=<deg> (opt-in, depth 0 in `depth`): a stem continues into its best-aligned top limb up to ang0 deg off its
+#       end without swinging it (stem_cont: the stem ends inside that limb, no drum top; the chain tapers like a limb,
+#       a keep_rings limb's chain keeps its LOD1 rings where the axis turns > 8 deg only (keep_rings "bends"); stem_dome
+#       then only shapes stems that did not continue; the flute fades out 0.6 m
+#       below the joint, which is corner-cut round0 times, default `round`). Off = identical builds.
+#   sag=dict(depth=1, thr=10, dev=0.2, span=3.0, amp=0.08, at=0.45) (opt-in): a near-level run of a merged chain whose
+#       head depth is `depth` (or in (lo, hi)) (chord within thr deg of horizontal, heights within dev m of the chord,
+#       >= span m: on its pillars it reads as a beam and posts) dips amp x the run length at `at` of it, straight down
+#       and back up (a sag with a mid-span bend; a ring is added at the dip unless one lies within snap (0.15) x the
+#       run of it). See sag_runs(). Off = identical builds.
 #   lod1_mindepth   LOD1 drops the deepest level and roots its cards on this depth
 #   lods=[dict(rings, sides, grow, maxdepth | drop, min_r[, segs, fold, base]), ...] (--lods; default LOD_LEVELS)   far
 #       <Species>_Tree_LOD2, _LOD3 built from the LOD1's skeleton and card draws (see make_lod lv); the hidden-card cull
@@ -571,7 +581,8 @@ def merge_continuations(branches, M):
         if not cand: continue
         a, k, c = min(cand, key=lambda x: x[0])
         q = None
-        if a > ang:
+        a_lim = ang if b.depth > 0 or M.get("ang0") is None else math.radians(M["ang0"])  # ang0: stems never swing
+        if a > a_lim:
             if not M.get("straighten", True): continue
             cd = (c.pts[1] - c.pts[0]).normalized(); axis = end_d.cross(cd)
             if axis.length < 1e-6: continue
@@ -602,16 +613,81 @@ def merge_continuations(branches, M):
                 y.pts = [o + q @ (p - o) for p in y.pts]
                 if y.depth > 0:
                     for p in y.pts: p.z = max(p.z, 0.25)
-        b.lobe_end = cum[k - 1]
+        S0 = b.depth == 0 and M.get("ang0") is not None  # stem_cont (ang0)
+        # stem_cont: the flute / lobes fade out over the 0.6 m below the stem's last kept ring (no ridge ledge in the
+        # elbow), and the joint is corner-cut round0 times (default `round`): a 50-80 deg elbow of a thick stem
+        b.lobe_end = cum[k - 1] - (0.6 if S0 else 0.0)
         b.pts = b.pts[:k] + [p.copy() for p in c.pts]
         b.radii = new_r
-        rd = M.get("round", 0)  # corner-cut only the joint (window around the fork): a curve, not an elbow
-        if rd:
+        rd = M.get("round0", M.get("round", 0)) if S0 else M.get("round", 0)  # corner-cut only the joint (window
+        if rd:  # around the fork): a curve, not an elbow
             i0, i1 = max(0, k - 2), min(len(b.pts), k + 3)
             wp, wr = smooth_path(b.pts[i0:i1], b.radii[i0:i1], math.radians(M.get("round_bend", 15)), rd)
             b.pts = b.pts[:i0] + wp + b.pts[i1:]; b.radii = b.radii[:i0] + wr + b.radii[i1:]
             b.lobe_end += 0.0
         b.cont = c; c.merged_into = b
+        if S0:  # stem_cont: the chain tapers like the limb and keeps its rings at the bends (keep_rings "bends")
+            b.stem_cont = True; b.keep_rings = "bends" if getattr(c, "keep_rings", False) else getattr(b, "keep_rings", False)
+
+def sag_runs(branches, SG):
+    """CFG sag (opt-in): every near-level run of a depth-`depth` chain head dips amp x the run length at `at` of it
+    (straight down to there and back up: a sag with a mid-span bend; run ends stay). A run: vertices i..j whose chord
+    pitches < thr deg and whose heights stay within dev m of the chord (a gently waving limb reads as a beam too),
+    >= span m of arc; greedy, longest first from the root. Its merged continuations move point by point; every other
+    branch rooted on the chain moves rigidly (with its subtree) by the dip at its root; K3 props are left to the
+    re-seat after the merge."""
+    thr, span, amp, at = math.radians(SG.get("thr", 10)), SG.get("span", 3.0), SG.get("amp", 0.08), SG.get("at", 0.45)
+    dev = SG.get("dev", 0.2)
+    kids = {}; dd = SG.get("depth", 1); dd = (dd, dd) if isinstance(dd, int) else dd  # depth: one or (lo, hi)
+    for y in branches: kids.setdefault(id(getattr(y, "par", None)), []).append(y)
+    for b in branches:
+        if not dd[0] <= b.depth <= dd[1] or getattr(b, "merged_into", None) is not None or getattr(b, "prop", False) \
+                or len(b.pts) < 3: continue
+        old = [p.copy() for p in b.pts]; n = len(old)
+        cum = [0.0]
+        for i in range(n - 1): cum.append(cum[-1] + (old[i + 1] - old[i]).length)
+        def level(i, j):  # chord pitch under thr and every vertex within dev of the chord's height
+            dz = old[j].z - old[i].z; hz = Vector((old[j].x - old[i].x, old[j].y - old[i].y)).length
+            if math.atan2(abs(dz), max(hz, 1e-9)) >= thr or cum[j] - cum[i] < 1e-6: return False
+            return all(abs(old[k].z - old[i].z - dz * (cum[k] - cum[i]) / (cum[j] - cum[i])) < dev for k in range(i, j + 1))
+        runs = []; i = 0
+        while i < n - 1:
+            j = next((j for j in range(n - 1, i, -1) if level(i, j)), None)
+            if j is None or cum[j] - cum[i] < span: i += 1; continue
+            runs.append((cum[i], cum[j])); i = j
+        if not runs: continue
+        for c0, c1 in runs:  # the bend needs a ring: a vertex at the dip unless one is within snap x the run of it
+            cd = c0 + at * (c1 - c0)
+            if min(abs(c - cd) for c in cum) < SG.get("snap", 0.15) * (c1 - c0): continue
+            v = max(k for k in range(n - 1) if cum[k] < cd); t = (cd - cum[v]) / max(cum[v + 1] - cum[v], 1e-9)
+            old.insert(v + 1, old[v].lerp(old[v + 1], t)); cum.insert(v + 1, cd)
+            b.radii.insert(v + 1, b.radii[v] + (b.radii[v + 1] - b.radii[v]) * t); n += 1
+        D = [0.0] * n
+        for c0, c1 in runs:
+            S = c1 - c0
+            for v in range(n):
+                if c0 - 1e-6 <= cum[v] <= c1 + 1e-6:
+                    u = (cum[v] - c0) / S; D[v] = -amp * S * (u / at if u < at else (1.0 - u) / (1.0 - at))
+        def disp(q):  # dip at the nearest point of the old axis
+            best = None
+            for v in range(n - 1):
+                a, e = old[v], old[v + 1] - old[v]; ll = e.length_squared
+                t = 0.0 if ll < 1e-12 else max(0.0, min(1.0, (q - a).dot(e) / ll))
+                dq = (q - (a + e * t)).length
+                if best is None or dq < best[0]: best = (dq, D[v] + (D[v + 1] - D[v]) * t)
+            return best[1]
+        chain = [b]; x = getattr(b, "cont", None)
+        while x is not None: chain.append(x); x = getattr(x, "cont", None)
+        ids = {id(x) for x in chain}
+        tops = [y for x in chain for y in kids.get(id(x), []) if id(y) not in ids and not getattr(y, "prop", False)]
+        shift = [(y, disp(y.pts[0])) for y in tops]
+        for x in chain[1:]: x.pts = [q + UP * disp(q) for q in x.pts]
+        b.pts = [p + UP * D[v] for v, p in enumerate(old)]
+        for y, dz in shift:
+            st = [y]
+            while st:
+                z = st.pop(); z.pts = [q + UP * dz for q in z.pts]
+                st += [w for w in kids.get(id(z), []) if not getattr(w, "prop", False)]
 
 def stem_layout_points(SL, cnt, seed):
     """CFG stem_layout (opt-in): cnt stem bases scattered over an area with its own random sequence, at least `gap` m
@@ -933,7 +1009,7 @@ def flare_axis(br):
 def tube(bm, br, sides, lobe_amt, cap):
     rings = []; acc = 0.0; prev_n = None
     pts, radii, skirt, fh = flare_axis(br)
-    SD = CFG.get("stem_dome") if br.depth == 0 else None
+    SD = CFG.get("stem_dome") if br.depth == 0 and not getattr(br, "stem_cont", False) else None
     if isinstance(SD, dict) and SD.get("shoulder") and len(pts) > 1:  # opt-in: a rounded shoulder ring under the dome
         hk, rk = SD["shoulder"]; te = (pts[-1] - pts[-2]).normalized()
         pts = pts + [pts[-1] + te * radii[-1] * SD["k"] * hk]; radii = radii + [radii[-1] * rk]
@@ -1000,7 +1076,7 @@ def tube(bm, br, sides, lobe_amt, cap):
         ring = rings[-1][0]
         t = (br.pts[-1] - br.pts[-2]).normalized()
         # forked trunk: a low crotch dome, not a spear; palm stem / sucker under a rosette: a blunt cone in the frond bases
-        SD = CFG.get("stem_dome")
+        SD = CFG.get("stem_dome") if not getattr(br, "stem_cont", False) else None  # stem_cont: a limb's spear tip
         k = 0.35 if (br.depth == 0 and CFG.get("fork")) else (SD["k"] if isinstance(SD, dict) else SD) \
             if (br.depth == 0 and SD) else 1.0 if rosette else 2.5
         apex = bm.verts.new(br.pts[-1] + t * max(br.radii[-1] * k, 0.02))
@@ -1892,6 +1968,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
             branches = [b for b in branches if b.depth < deep] + [b for b in branches if b.depth == deep][::2]
     if CFG.get("merge"):  # each limb flows into its best-aligned last child: one tube, no tapered spike at the fork
         merge_continuations(branches, CFG["merge"])
+        if CFG.get("sag"): sag_runs(branches, CFG["sag"])  # opt-in: before the K3 re-seat, so the pillar tops follow
         for x in branches:  # K3 props: re-seat the top on the host's final axis (the merge's round moves the joint)
             hb = getattr(x, "par", None)
             if getattr(x, "pillar", False) and hb is not None and len(hb.pts) > 1:
@@ -1916,7 +1993,8 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
                 b.pts, b.radii = smooth_path(b.pts, b.radii, math.radians(sm.get("bend", 12)), sm.get("iters", 2))
     if CFG.get("taper"):  # every branch end narrows smoothly to TIP_R over its last 40%: no cut/capped ends
         for b in branches:
-            if b.depth == 0 and (CFG.get("fork") or CFG.get("stem_dome")): continue  # trunk ends inside its fork limbs / dome
+            if b.depth == 0 and (CFG.get("fork") or CFG.get("stem_dome")) and not getattr(b, "stem_cont", False):
+                continue  # trunk ends inside its fork limbs / dome (stem_cont: it tapers as the limb it became)
             if getattr(b, "keep", False):  # explicit limb: keeps its end radius, gently rounded by the end cap
                 continue
             seg = [(b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)]
@@ -1973,8 +2051,16 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
         else: sides = St[2]
         full = (b.pts, b.radii)
         kr = lv is None and getattr(b, "keep_rings", False)  # opt-in (levels keep_rings, flared collars): LOD1 keeps all
-        if sub and len(b.pts) > 2 and bi not in full_rings and not kr:  # every other (lv: every `rings`-th) ring; the cards stay rooted on the full axis
+        # kr "bends" (stem_cont chains of keep_rings limbs): LOD1 keeps every ring where the axis turns > 8 deg and every
+        # other one along the straight runs (the stem), so the limb part keeps its round elbows at fewer rings
+        if sub and len(b.pts) > 2 and bi not in full_rings and (not kr or kr == "bends"):  # every other (lv: every `rings`-th) ring; the cards stay rooted on the full axis
             ks = list(range(0, len(b.pts) - 1, lv.get("rings", 2) if lv is not None else 2)) + [len(b.pts) - 1]
+            if kr == "bends":
+                ks = [0]
+                for i in range(1, len(b.pts) - 1):
+                    u, w = b.pts[i] - b.pts[i - 1], b.pts[i + 1] - b.pts[i]
+                    if i - ks[-1] >= 2 or (u.length > 1e-6 and w.length > 1e-6 and u.angle(w) > math.radians(8)): ks.append(i)
+                ks.append(len(b.pts) - 1)
             kf = lv.get("keep_frac") if lv is not None else None
             if kf and b.depth == 0:  # far level: keep the trunk ring where the packer's bark `upper` column starts (a face
                 # takes it when its centre is above keep_frac x the top ring), so the crownshaft / boot band spans what LOD0's does
