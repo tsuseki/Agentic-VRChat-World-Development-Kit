@@ -33,11 +33,16 @@
 #       side by side along the limb gap (0.9) x its radius apart, splayed fuse_spread (1.8) x their radius at the
 #       foot, 0.5-0.85 x as thick); collar=dict(r, h): top on the limb axis, swelling to r x the limb radius (<= 0.62)
 #       inside it and easing to the pillar radius h m under the limb (no butt joint; the pillar tapers up to <= 0.5 x
-#       the limb radius); foot=dict(r, h): ground ring x r, easing in over h m; hang=(lo, hi): an aerial root
+#       the limb radius); collar flare=<w> (opt-in, with flare_at=<a>, default 0.7): a flared union instead: the top
+#       ring on the limb axis widens to w x the limb radius at a x it under the axis (the limb skin wraps down into
+#       it), then the concave ease to the pillar over h m with one more ring; the packed LOD1 keeps every collar ring.
+#       foot=dict(r, h): ground ring x r, easing in over h m; hang=(lo, hi): an aerial root
 #       hanging that far and ending in the air (>= floor (1.2) m up; tip < 1 thins it); sides: tube sides.
 #   levels[i] wave=dict(amp, n, side) (opt-in): sinuous limbs: each step tilted up/down by amp x sin over n cycles
 #       along the limb (+ side x a sideways sway), own phases per limb; the heading itself drifts as before.
 #   levels[i] sides=(lod0, lod1) (opt-in): tube sides of that level's limbs (and their merged continuations).
+#   levels[i] keep_rings=True (opt-in): the packed LOD1 meshes every ring of that level's limbs (and their merged
+#       continuations) instead of every other one, so sinuous limbs keep round elbows (more bark tris).
 #   flute=dict(n, amt, base, base_h, twist, vary) (opt-in, use sides[0] = 2 n): depth-0 stems fluted like fused root
 #       strands: ring vertices alternate ridge (+amt, each strand x 1 +- vary) / groove (-amt), ridges deeper by
 #       base x toward the ground over base_h m (buttresses), the ring turned twist rad per m up (spiralling strands).
@@ -53,6 +58,11 @@
 #       tufts 0.12-0.26) each build at k x their drawn width.
 #   crown (rosette) clear=<m> (opt-in): every frond point (midrib and edges) stays `clear` m above the ground (droop
 #       relaxed as for the 0 / 0.1 m default, else the frond is dropped): sucker leaves off the ground (Banana).
+#   crown (rosette) clear_bark=<m> (opt-in): no frond surface (midrib, edges, between rows) rests within `m` m of the
+#       skin of any bark tube outside its own attach zone (radius 1.5 x the stem radius at A + 0.1 m). A frond lying
+#       across a neighbouring branch or cane tip carries leaf wind weights there (tremble G, raised bend A) the bark
+#       lacks, so in the wind it slides out of it (TreeLODs wind pass-through base slip; Pandanus limbs, Cordyline
+#       canes). A clashing frond is turned 10 / 20 / 30 deg about its stem either way, else dropped. Prints STAT.
 #   vines=dict(count, size, z=(lo,hi)[, cells=[i,...]][, shrink=True])   hanging sprig cards under depth>=1 branches
 #       (epiphytes / draped foliage); cells (opt-in): the hanging cards draw only these atlas cells (strands under a
 #       crown of sprays); shrink (opt-in): hosts under one card length are kept, their cards shrunk to crown `ground`
@@ -118,6 +128,9 @@
 #       move). Prints STAT floor_base. Off = identical builds (StonePineYoung pendant cards by the trunk, 2026-10-27).
 #   crown mirror=True (sprig, opt-in): about half the cards (per-card own sequence) show their cell U-mirrored; the
 #       mirrored attach point stays on the branch axis. Off (both) = identical builds.
+#   crown size_jitter=(lo, hi) (sprig, opt-in): every card's size x lo..hi on top of the drawn 0.85-1.15 (own random
+#       sequence): the painted leaf spacing and size differ from card to card (SeaGrape "coin necklace" review,
+#       2026-10-31). Off = identical builds.
 #   crown max_rise=<deg> (sprig, opt-in; weeping mounds): a card whose axis rises more than max_rise deg above
 #       horizontal is lowered to max_rise, keeping its heading (0: every card tip-out or tip-down, the willow rule).
 #       Applied after `flat`, before surface/roll_tilt. No extra random draws: off = identical builds.
@@ -234,7 +247,8 @@
 #   stem_dome=<k> (opt-in, taper trees): depth-0 stems skip the end taper (by default a stem narrows to a 3 mm spear
 #       from ~0.9 of its length, so a whorl of thick limbs near the top leaves a cone and the limbs cross at a point)
 #       and end in a low dome k x the end radius high, inside the limbs (banyan: the limbs leave a broad drum top, as
-#       a forked trunk's crotch dome). Off = identical builds.
+#       a forked trunk's crotch dome). Off = identical builds. stem_dome=dict(k, shoulder=(hk, rk)): the same dome,
+#       plus a mesh-only shoulder ring hk x k x r above the end ring at rk x r (a rounded top, not a squared drum).
 #   crown mode "rosette" (palms, tree ferns, bananas): fronds radiating from every stem top; see rosette_crown()
 #       and SKILL.md. levels=[] allowed (no branches); suckers = `side` limbs at the trunk base (each its own head),
 #       rosette `head_pow` (opt-in) shrinks small heads' frond counts (x sc^head_pow) and zones. crown atlas=True|[cells] (twig/ellipsoid/spindle): each card
@@ -256,6 +270,7 @@ import base_cones
 from tree_uv import cylinder_uvs, stretch_stats
 import lightmap_uv
 import json, statistics
+import numpy as np
 UP = Vector((0, 0, 1))
 # --lods far levels (LODGroup LOD1 / LOD2 of a pack whose LOD0 is this builder's culled LOD1): lighter bark (every
 # `rings`-th ring, `sides`), small branches dropped, every card kept `grow` x larger about its twig base, unfolded.
@@ -668,7 +683,10 @@ def build_skeleton(seed):
         ts = [i / segs for i in range(segs + 1)]
         if CO or FO:  # extra rings for the collar (swelling into the limb) and the flared foot
             tl = top[1] if top else 0.0  # top: (radius inside the host, axis -> host underside length)
+            FW = CO.get("flare") if CO else None  # opt-in flared union: widest ring FW x host r at flare_at x host r
+            if FW: tl = CO.get("flare_at", 0.7) * top[1]  # under the axis (the host's skin wraps down into it)
             ex = [tl / L, (tl + CO["h"]) / L] if CO else []
+            ex += [(tl + CO["h"] * 0.35) / L] if FW else []  # one more ring: the trumpet curve, not a cone
             ex += [1 - FO["h"] / L] if FO else []
             ts = sorted(set(ts) | {t for t in ex if 0.01 < t < 0.99})
         pts, radii = [], []
@@ -676,13 +694,17 @@ def build_skeleton(seed):
             q = st.lerp(g, t)
             q = q + (UP * 0.75 + h * 0.25).normalized() * arch * 4 * t * (1 - t) * (1 - 0.35 * t)  # bowed out and up
             if 0 < i < len(ts) - 1:  # (the collar rings stay on the axis line: they sit in / under the host limb)
-                w = min(1.0, t * L / (top[1] + CO["h"])) if CO else 1.0
+                w = min(1.0, t * L / (tl + CO["h"])) if CO else 1.0
                 q = q + det_noise_vector(q * 1.7 + Vector((j * 3.1, seed * 0.37, 0.5))) * PR.get("gnarl", 0.0) * L / segs * w
             rad = r0 + (r1 - r0) * t
             if CO:  # swelling: top[0] inside the host, easing (concave) down to the plain radius CO h m under it
-                s = t * L
-                if s <= top[1] + 1e-6: rad = max(rad, top[0])
-                elif s < top[1] + CO["h"]: w = (s - top[1]) / CO["h"]; rad = max(rad, top[0] + (rad - top[0]) * (1 - (1 - w) ** 2))
+                s = t * L; t0 = top[0]
+                if FW:  # flare: top[0] on the axis widening to FW x host r at tl, then the same concave ease
+                    t0 = FW * top[1]
+                    if s <= tl + 1e-6: rad = max(rad, top[0] + (t0 - top[0]) * s / max(tl, 1e-6))
+                    elif s < tl + CO["h"]: w = (s - tl) / CO["h"]; rad = max(rad, t0 + (rad - t0) * (1 - (1 - w) ** 2))
+                elif s <= tl + 1e-6: rad = max(rad, t0)
+                elif s < tl + CO["h"]: w = (s - tl) / CO["h"]; rad = max(rad, t0 + (rad - t0) * (1 - (1 - w) ** 2))
             if FO:  # flared foot: x FO r at the ground ring, easing in over FO h m
                 s = (1 - t) * L
                 if s < FO["h"]: w = 1 - s / FO["h"]; rad *= 1 + (FO["r"] - 1) * w * w
@@ -796,6 +818,7 @@ def build_skeleton(seed):
                          P.get("segs", 4 if lv == 0 else 3), lv + 1, out, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
                          up_end=P.get("up_end"), flat=P.get("flat", 0.0), wave=P.get("wave"))
                 if c and P.get("sides"): c.lsides = P["sides"]  # opt-in per-level tube sides (LOD0, LOD1)
+                if c and P.get("keep_rings"): c.keep_rings = True  # opt-in: the packed LOD1 meshes every ring (round elbows)
                 if c and P.get("root_out"):  # opt-in: the whole limb shifted rigidly root_out x parent radius out along
                     rad = cd - d * cd.dot(d)  # its own radial (same shape and noise), so a thick limb clears the parent wall sooner
                     if rad.length > 1e-6:
@@ -844,7 +867,8 @@ def build_skeleton(seed):
                 if CO:  # top on the limb axis, swelling to CO r x the limb radius inside it
                     rm = min(re, 0.5 * r); tr = min(0.62 * r, max(rm, CO["r"] * r))
                     x = prop_tube(st, ge, h, rm, rt, dict(PR, curve=PR.get("curve", 0.0)), j * 3 + e, b, top=(tr, r))
-                    x.seat = (0.0, r + CO["h"]); x.bury = 0.3  # the base cone stays inside the limb
+                    FW = CO.get("flare"); x.seat = (0.0, (CO.get("flare_at", 0.7) * r if FW else r) + CO["h"]); x.bury = 0.3
+                    x.keep_rings = bool(FW)  # flared union: the packed LOD1 keeps every collar ring (no faceted cap)
                 else:
                     x = prop_tube(st - UP * r * 0.4, ge, h, re, rt, dict(PR, curve=PR.get("curve", 0.0)), j * 3 + e, b)
                 x.pillar = True; x.hang = "hang" in PR
@@ -909,6 +933,10 @@ def flare_axis(br):
 def tube(bm, br, sides, lobe_amt, cap):
     rings = []; acc = 0.0; prev_n = None
     pts, radii, skirt, fh = flare_axis(br)
+    SD = CFG.get("stem_dome") if br.depth == 0 else None
+    if isinstance(SD, dict) and SD.get("shoulder") and len(pts) > 1:  # opt-in: a rounded shoulder ring under the dome
+        hk, rk = SD["shoulder"]; te = (pts[-1] - pts[-2]).normalized()
+        pts = pts + [pts[-1] + te * radii[-1] * SD["k"] * hk]; radii = radii + [radii[-1] * rk]
     for i, (p, r) in enumerate(zip(pts, radii)):
         t = (pts[i + 1] - p).normalized() if i < len(pts) - 1 else (p - pts[i - 1]).normalized()
         if i > 0: acc += (p - pts[i - 1]).length
@@ -972,8 +1000,9 @@ def tube(bm, br, sides, lobe_amt, cap):
         ring = rings[-1][0]
         t = (br.pts[-1] - br.pts[-2]).normalized()
         # forked trunk: a low crotch dome, not a spear; palm stem / sucker under a rosette: a blunt cone in the frond bases
-        k = 0.35 if (br.depth == 0 and CFG.get("fork")) else CFG["stem_dome"] if (br.depth == 0 and CFG.get("stem_dome")) \
-            else 1.0 if rosette else 2.5
+        SD = CFG.get("stem_dome")
+        k = 0.35 if (br.depth == 0 and CFG.get("fork")) else (SD["k"] if isinstance(SD, dict) else SD) \
+            if (br.depth == 0 and SD) else 1.0 if rosette else 2.5
         apex = bm.verts.new(br.pts[-1] + t * max(br.radii[-1] * k, 0.02))
         for s in range(sides):
             f = bm.faces.new((ring[s], ring[(s + 1) % sides], apex)); f.material_index = 0
@@ -1112,6 +1141,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     cards = []  # every placed card (counts drive the loops below); dropped subset cards have first = None
     krng = random.Random(7919)  # own sequence: the subset choice never shifts the placement draws
     trng = random.Random(6007)  # own sequence for roll_tilt: card positions/directions stay those of the plain build
+    srng = random.Random(5381)  # own sequence for size_jitter
     CHAIN_UP = {id(x.cont): x for x in branches if getattr(x, "cont", None) is not None}  # floor_base: merged chain heads
     FBN = [0]  # floor_base: cards levelled
     KIND = ["tip"]  # which loop places the card (crown roles: tip / main / fill / low / hang)
@@ -1121,6 +1151,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         sz = size * rng.uniform(0.85, 1.15)
         if C.get("size_top") is not None:  # cards shrink toward the top (conifer spire): size x size_top at `height`
             sz *= 1.0 + (C["size_top"] - 1.0) * max(0.0, min(1.0, A.z / CFG["height"]))
+        if C.get("size_jitter"): sz *= srng.uniform(*C["size_jitter"])  # opt-in: wider card size spread
         if CFG.get("clear"):
             if in_clear(A): return False
             ok = False
@@ -1446,7 +1477,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     if C.get("floor_base") and probe is None: print(f"STAT floor_base {'lod1' if lod1 else 'lod0'} levelled {FBN[0]}")
     return [c for c in cards if c[0] is not None]
 
-def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None):
+def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None, bark=None):
     """One rosette frond: a strip of C['segs'] quads (2 per segment when folded) along a drooping arc. It leaves A
     (a point on the stem axis) along `rad` (unit, perpendicular to `axis`) at `tilt` deg above it and bends `droop` deg
     down toward the tip (bend ~ s^droop_pow), the cross direction rolling `twist` deg about the spine by the tip.
@@ -1458,13 +1489,15 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
     the LOD0 midrib and edges at the same arc fractions (UV v = arc fraction, as at LOD0), the width x grow, folded by
     the level's fold (default 0: unfolded, one quad per segment; LOD0's fold keeps the Λ that shades one half). base:
     the base row narrowed to that share of the width about the midrib, its UVs alike (the texture is cropped, not
-    squeezed): the frond leaves the trunk at its petiole instead of a full-width edge (default 1 = full width)."""
+    squeezed): the frond leaves the trunk at its petiole instead of a full-width edge (default 1 = full width).
+    bark (crown clear_bark): (P0, P1, R0, R1, margin, exempt) tube segments; the frond is turned about `axis` until
+    its surface clears them (outside `exempt` m of A), else dropped (returns None)."""
     segs = C.get("segs", 4); u0, v0, u1, v1 = cell["rect"]
     au = (cell["attach"][0] - u0) / (u1 - u0); av = (cell["attach"][1] - v0) / (v1 - v0)
     crop = min(C.get("crop", 1.0), 2 * min(au, 1 - au))
     asp = C["unsqueeze"] / cell["squeeze"] * C.get("width_mul", 1.0) if C.get("unsqueeze") and cell.get("squeeze") else C.get("aspect", 1.0)
     W = L / max(1.0 - av, 1e-3) * (u1 - u0) / (v1 - v0) * crop * asp
-    side0 = axis.cross(rad).normalized(); dp = C.get("droop_pow", 1.5)
+    side0 = axis.cross(rad).normalized(); dp = C.get("droop_pow", 1.5); rad0, droop0 = rad, droop
     def strip(droop, fo=fold):
         pts, dirs = [A.copy()], []
         for i in range(segs):
@@ -1477,11 +1510,29 @@ def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None)
             nv = t.cross(sd); hang = nv * fo * W
             rows.append((p - sd * W / 2 - hang, p, p + sd * W / 2 - hang))
         return pts, rows
-    for _ in range(12):  # a frond may not reach the ground: relax its droop until the midrib clears 0.1 m and the
-        pts, rows = strip(droop)  # frond edges (width, fold hang, twist) clear z = 0
-        gc = C.get("clear", 0.0)  # opt-in: every frond point (midrib and edges) at least `clear` m above the ground
-        if min(p.z for p in pts) >= max(0.1, gc) and min(q.z for r in rows for q in r) >= gc: break
-        droop *= 0.8
+    def clash(rows):  # bark clear_bark: min skin clearance of the frond surface (rows and 3 steps between) to the tubes
+        P0, P1, R0, R1, mg, ex = bark
+        Q = []
+        for k in range(len(rows) - 1):
+            for f in (0.0, 0.25, 0.5, 0.75):
+                Q += [a.lerp(b2, f) for a, b2 in zip(rows[k], rows[k + 1])]
+        Q += list(rows[-1]); Q = np.array([tuple(q) for q in Q if (q - A).length > ex])
+        if not len(Q): return False
+        D = P1 - P0; dd = np.maximum((D * D).sum(1), 1e-12)
+        t = np.clip(((Q[:, None, :] - P0[None]) * D[None]).sum(2) / dd[None], 0.0, 1.0)
+        g = np.linalg.norm(Q[:, None, :] - (P0[None] + t[..., None] * D[None]), axis=2) - (R0[None] + t * (R1 - R0)[None])
+        return bool(g.min() < mg)
+    for oa in ((0,) if bark is None else (0, 10, -10, 20, -20, 30, -30)):
+        rad = rad0 if oa == 0 else Quaternion(axis, math.radians(oa)) @ rad0
+        side0 = axis.cross(rad).normalized(); droop = droop0
+        for _ in range(12):  # a frond may not reach the ground: relax its droop until the midrib clears 0.1 m and the
+            pts, rows = strip(droop)  # frond edges (width, fold hang, twist) clear z = 0
+            gc = C.get("clear", 0.0)  # opt-in: every frond point (midrib and edges) at least `clear` m above the ground
+            if min(p.z for p in pts) >= max(0.1, gc) and min(q.z for r in rows for q in r) >= gc: break
+            droop *= 0.8
+        else:
+            continue
+        if bark is None or not clash(rows): break
     else:
         return None
     bw = 1.0  # base row width share (lod base)
@@ -1523,6 +1574,12 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
     Lmax = max(blen(b) for b in heads); cards = []
     jit = C.get("jitter", 6.0); spread = C.get("spread", 360.0)
     dleft = C["dead"].get("max") if C.get("dead") else None  # opt-in: dead fronds per plant (all heads), first heads first
+    BK = None; ndrop = [0, 0]  # opt-in clear_bark: every meshed tube's segments (fronds tried, dropped)
+    if C.get("clear_bark") is not None:
+        sg = [(b2.pts[i], b2.pts[i + 1], b2.radii[i], b2.radii[i + 1]) for b2 in branches
+              if getattr(b2, "merged_into", None) is None for i in range(len(b2.pts) - 1)]
+        BK = [np.array([tuple(s[0]) for s in sg]), np.array([tuple(s[1]) for s in sg]),
+              np.array([s[2] for s in sg]), np.array([s[3] for s in sg]), float(C["clear_bark"])]
     for b in heads:
         Lb = blen(b); sc = (Lb / Lmax) ** C.get("stem_scale", 0.7)
         axis = point_at(b, 1.0)[2].lerp(UP, C.get("upright", 0.6)).normalized()
@@ -1558,8 +1615,11 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
             A = point_at(b, max(0.0, min(1.0, z / Lb)))[0]
             cell = cells[S["cell"]] if kind != "live" and S.get("cell") is not None else rng.choice(live)
             CC = dict(C, aspect=C.get("aspect", 1.0) * S["width"], width_mul=S["width"]) if kind != "live" and S.get("width") else C  # narrow spears
-            r = frond(bm, uvl, A, axis, rad, L, tilt, droop, tw, fold, cell, CC, lod)
+            bk = None if BK is None else tuple(BK) + (1.5 * point_at(b, max(0.0, min(1.0, z / Lb)))[1] + 0.1,)
+            r = frond(bm, uvl, A, axis, rad, L, tilt, droop, tw, fold, cell, CC, lod, bk)
+            ndrop[0] += 1; ndrop[1] += r is None
             if r: cards.append(r + (b, 1.0))
+    if BK is not None: print(f"STAT crown clear_bark {C['clear_bark']} {'far' if lod else 'lod0/1'} fronds {ndrop[0]} dropped {ndrop[1]}")
     return cards
 
 def bare_behind(probe, branches):
@@ -1912,7 +1972,8 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
         elif b.depth < deep or deep == 1: sides = St[1]
         else: sides = St[2]
         full = (b.pts, b.radii)
-        if sub and len(b.pts) > 2 and bi not in full_rings:  # every other (lv: every `rings`-th) ring; the cards stay rooted on the full axis
+        kr = lv is None and getattr(b, "keep_rings", False)  # opt-in (levels keep_rings, flared collars): LOD1 keeps all
+        if sub and len(b.pts) > 2 and bi not in full_rings and not kr:  # every other (lv: every `rings`-th) ring; the cards stay rooted on the full axis
             ks = list(range(0, len(b.pts) - 1, lv.get("rings", 2) if lv is not None else 2)) + [len(b.pts) - 1]
             kf = lv.get("keep_frac") if lv is not None else None
             if kf and b.depth == 0:  # far level: keep the trunk ring where the packer's bark `upper` column starts (a face

@@ -21,9 +21,12 @@
 # of the bark surface: ~1 inside foliage, ~0.5 on the crown surface, ~0 in the open.
 #   covered(p)  = enclosure(p, 0.35) >= 0.5, or a spray's painted twig base is attached within max(0.10, 2 r) of p.
 #   BARE END    = tube tip above 0.6 m that is not covered. Bare length = distance along the tube from the tip back
-#                 to the last covered point (whole = never covered). FAIL when >= 0.25 m (shorter = 'minor').
+#                 to the last covered point (whole = never covered). FAIL when >= 0.25 m (shorter = 'minor'). A ground
+#                 stem whose top divides into a limb whorl (a child rooted within 0.3 m of its end that reaches leaves;
+#                 kit stem_dome without a merge) ends in its limbs: no bare end (its length falls to the run rule).
 #   BARE RUN    = stretch above 1.0 m, longer than 1.0 m, with enclosure(p, 0.6) < 0.3 and no attached spray
-#                 (no leaf mass within 0.6 m). Exempt when the tube (or a child limb rooted further out) ends covered
+#                 (no leaf mass within 0.6 m). Exempt when the tube (or a child limb rooted further out; a tube's
+#                 parent = the other tube nearest its base, never a sibling rooted at the same point) ends covered
 #                 AND the point is under the canopy (opaque leaves above it within 0.6 m horizontally) or on a
 #                 ground-rooted trunk below the crown base (10th percentile of leaf height; palm and leaning trunks).
 #                 A limb or stem that ends bare is never exempt.
@@ -320,8 +323,10 @@ def analyze(npz):
     # tube tree: parent of each tube = the other tube nearest its base; reach = tip covered or a child reaching cover
     tipcov = [bool(cov[np.nonzero(S5["T"] == t)[0][-1]]) for t in range(len(tubes))]
     parent = [(-1, 0.0)] * len(tubes)
-    for t, T in enumerate(tubes):
-        m = S["T"] != t
+    b0 = np.array([T["P"][0] for T in tubes])
+    for t, T in enumerate(tubes):  # (not a sibling rooted at the same point: a whorl's limbs start inside each other)
+        sib = np.nonzero(np.linalg.norm(b0 - T["P"][0], axis=1) < 0.05)[0]
+        m = ~np.isin(S["T"], sib)
         if not m.any(): continue
         d, i = cKDTree(S["P"][m]).query(T["P"][0]); i = np.nonzero(m)[0][i]
         if d - S["R"][i] <= 0.05 and not T["ground"]: parent[t] = (int(S["T"][i]), float(S["S"][i]))
@@ -357,7 +362,10 @@ def analyze(npz):
     ends, runs = [], []
     for t, T in enumerate(tubes):
         m = np.nonzero(S5["T"] == t)[0]; P = S5["P"][m]; s = S5["S"][m]; c = cov[m]
-        if P[-1, 2] > END_Z and not c[-1] and not prop[t]:  # a prop's ends are in the ground and in its host tube
+        # (a ground stem dividing into a limb whorl at its top, kit stem_dome without merge, ends in its limbs: no bare
+        # end; its length is judged by the run rule below)
+        whorl = T["ground"] and any(pa == t and ps >= s[-1] - 0.3 and reach[c_] for c_, (pa, ps) in enumerate(parent))
+        if P[-1, 2] > END_Z and not c[-1] and not prop[t] and not whorl:  # a prop's ends are in the ground and in its host tube
             ci = np.nonzero(c)[0]; j = ci[-1] if len(ci) else 0
             ends.append(dict(tube=t, tip=P[-1].tolist(), length=float(s[-1] - s[j]), r=float(S5["R"][m][j]),
                              e35=float(e35[m][-1]), whole=bool(len(ci) == 0), ground=T["ground"],
