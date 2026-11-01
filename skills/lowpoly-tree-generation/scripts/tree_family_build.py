@@ -193,6 +193,14 @@
 #       and a ring where its axis leaves the parent (parent radius out) k x as wide, easing back to its own radius h x
 #       its radius further on: a flared socket, not a flat sawn seam where a thick limb leaves its stem near 90 deg
 #       (BanyanGrove v3.1). Skeleton, cards, children and draws unchanged: off = identical builds.
+#       base_flare sink=<f>, steps=<n> (opt-in; review banyan_v3_1: the k x ring at the stem wall stood 6-8 cm proud of
+#       it, a hard rim read as a sleeve / sawn log end): the k x ring is sunk to the farthest point of the limb's first
+#       segment where it lies wholly within f x the parent chain's radius (inside its facets and flutes), and n rings
+#       ease concavely (r x (1 + (k - 1)(1 - j / (n + 1))^2)) from where the limb axis leaves the parent to the plain
+#       ring h x the radius past it: only the cone through the wall shows (BanyanGrove v3.2: sink 0.75, steps 2; bark_clash
+#       `socket_rims` / runner `--rim`). along=<e> (opt-in, with sink): the flare's section is e x as long along the
+#       parent's axis (fit tested on that ellipse), stretched on the meshed tube up to the plain ring (flare_stretch):
+#       a collar running up and down the stem, not a round sleeve (v3.2: 1.6). Mesh only, no draws: off = identical.
 #   stem_plane=dict(az=<deg>) (opt-in): stems evenly round from az with no azimuth jitter (the draw kept) and no
 #       sideways noise: each stem is a planar curve in its vertical lean plane. Two stems = one plane (a V): their
 #       picture from any eye outside the plane is a projective image of the plane, so they never cross on screen from
@@ -277,6 +285,11 @@
 #       first card exactly at `to`) of every stem (depth 0) whose top is
 #       above minz, spread out round the leader (random heading, `rise` up per 1 out; the stem's own up direction would
 #       stand them edge-on as a spike): the leader ends in a leaf rosette like the limb tips (Terminalia pagoda tiers).
+#       Off = identical builds.
+#       stem_tip mid=dict(n=8, t=(0.45, 0.85), rise=0.4, seed=7951) (opt-in): n more cards per stem, stratified over
+#       the arc fractions t of the stem's whole chain (a stem_cont leader runs on into its merged limb), random heading
+#       and `rise` as above, above minz; placed after every other card with their own random sequence, so no other
+#       card moves (BanyanGrove v3.2, review banyan_v3_1 nit 3: the rising leader bare through the crown gap).
 #       Off = identical builds.
 #   lianas=dict(n, z=(lo, hi), r=(lo, hi), twist, segs)   thin vine stems climbing the trunk from the waterline
 #   leaf_cluster (None) m, leaf_crown_mix (0.35)   per-clump leaf normals (tree_normals cluster mode) instead
@@ -576,11 +589,12 @@ def base_flare_axis(b, BF):
     base ring and a ring added where its axis leaves the parent tube (the parent chain's radius there along the axis)
     widen to k x their radius, and a ring added h x the limb radius further on is plain: a flared socket that eases
     into the limb, so a thick limb leaving its stem near 90 deg does not end in a flat sawn seam (BanyanGrove v3.1).
-    Too short a first segment: the base ring only."""
+    Too short a first segment: the base ring only. sink=<f> (opt-in): the sunk flare of base_flare_sunk."""
     hp = getattr(b, "par", None)
     while hp is not None and getattr(hp, "merged_into", None) is not None: hp = hp.merged_into
     if hp is None or len(hp.pts) < 2 or len(b.pts) < 2: return b.pts, b.radii
     k, h = BF.get("k", 1.35), BF.get("h", 2.5)
+    if BF.get("sink"): return base_flare_sunk(b, hp, k, h, BF["sink"], BF.get("steps", 1), BF.get("along"))
     rh = _near_axis(b.pts[0], hp.pts, hp.radii)[1]
     pts, radii = list(b.pts), list(b.radii); seg = (pts[1] - pts[0]).length
     s1 = rh; s2 = s1 + h * radii[0]
@@ -590,6 +604,73 @@ def base_flare_axis(b, BF):
         pts[1:1] = [pts[0].lerp(pts[1], f1), pts[0].lerp(pts[1], f2)]; radii[1:1] = [r1 * k, r2]
     radii[0] *= k
     return pts, radii
+
+
+def base_flare_sunk(b, hp, k, h, f, steps, along=None):
+    """base_flare sink=f (opt-in; review banyan_v3_1: the flared ring at the stem wall stood 6-8 cm proud of it as a hard
+    rim, read as a sleeve or a sawn log end butted onto the stem). The widest ring (k x the limb radius) is sunk inside
+    the host: the farthest arc along the limb's first segment at which that whole ring lies within f x the host
+    chain's radius (f < 1 keeps it inside the host's facets, lobes and flutes). From where the limb axis leaves the
+    host (s_w), `steps` rings ease concavely back to the limb radius, r x (1 + (k - 1)(1 - j / (steps + 1))^2), and a
+    plain ring follows h x the limb radius past s_w. Only the cone through the wall shows: a buttressed root of the
+    limb with no ring at the wall. Too short a first segment: the base ring only (k x, shrunk to fit inside).
+    along=e (opt-in): the flare's cross-section is e x as long along the host's axis (a branch collar running up and
+    down the stem, where the wall is straight, not round it, where a wide ring would stand proud); the fit is tested
+    on that ellipse and b.bflare_prof is set for flare_stretch (mesh step after the tube)."""
+    pts, radii = list(b.pts), list(b.radii); b.bflare_prof = None
+    p0, p1 = pts[0], pts[1]; seg = (p1 - p0).length
+    if seg < 1e-6: return pts, radii
+    d = (p1 - p0) / seg
+    u = d.cross(UP if abs(d.z) < 0.9 else Vector((1, 0, 0))).normalized(); v = d.cross(u); e = 1.0
+    if along:
+        ta = _near_axis(p0, hp.pts, hp.radii)[3]; ta = ta - d * ta.dot(d)
+        if ta.length > 0.2: u = ta.normalized(); v = d.cross(u); e = along
+    hr_in = [x * f for x in hp.radii]
+    rad = lambda s: radii[0] + (radii[1] - radii[0]) * s / seg
+    def fits(s, R):  # the whole ring of radius R (e x along the host axis) at arc s inside f x the host
+        c = p0 + d * s
+        return all(axis_gap(c + (u * (e * math.cos(a)) + v * math.sin(a)) * R, hp.pts, hr_in) <= 0.0
+                   for a in (i * math.pi / 8 for i in range(16)))
+    lo, hi = 0.0, seg  # s_w: where the limb axis leaves the host (bisection on the axis gap)
+    if axis_gap(p0, hp.pts, hp.radii) >= 0.0: hi = 0.0
+    elif axis_gap(p1, hp.pts, hp.radii) < 0.0: lo = seg
+    for _ in range(30):
+        if hi - lo < 1e-4: break
+        m = 0.5 * (lo + hi)
+        if axis_gap(p0 + d * m, hp.pts, hp.radii) < 0.0: lo = m
+        else: hi = m
+    sw = hi
+    s_in = None  # the deepest-out arc (<= s_w) whose k x ring still fits
+    for i in range(100, -1, -1):
+        s = sw * i / 100
+        if fits(s, k * rad(s)): s_in = s; break
+    if s_in is not None and s_in < 0.02 * seg: s_in = None  # no room for a wide ring past the base: the base ring alone
+    k0 = k  # the base ring (on the host axis) shrunk until it fits too
+    while k0 > 1.0 and not fits(0.0, k0 * radii[0]): k0 = max(1.0, k0 - 0.05)
+    L = min(h * radii[0], 0.9 * seg - sw)
+    new_p, new_r = [], []
+    if s_in is not None: new_p.append(p0 + d * s_in); new_r.append(k * rad(s_in))
+    if L > 0.05 * h * radii[0]:
+        for j in range(1, steps + 1):
+            t = j / (steps + 1); s = sw + t * L
+            new_p.append(p0 + d * s); new_r.append(rad(s) * (1 + (k - 1) * (1 - t) ** 2))
+        new_p.append(p0 + d * (sw + L)); new_r.append(rad(sw + L))
+    pts[1:1] = new_p; radii[1:1] = new_r; radii[0] *= k0
+    b.bflare_prof = (p0.copy(), d.copy(), u.copy(), e, sw, sw + max(L, 0.0), 2.0 * k * radii[0]) if e != 1.0 else None
+    return pts, radii
+
+
+def flare_stretch(bm, v0, prof):
+    """base_flare along (mesh step): every vertex of the limb's tube (from vertex v0) up to where the axis left the host
+    (and within rmax of the limb's first-segment axis) is moved out along the host-axis direction a by (e - 1) x its
+    offset from the limb axis there, easing (1 - t)^2 to plain at the flare's plain ring; no new geometry, UVs kept."""
+    p0, d, a, e, sw, s1, rmax = prof
+    bm.verts.ensure_lookup_table()
+    for i in range(v0, len(bm.verts)):
+        q = bm.verts[i].co - p0; s = q.dot(d)
+        if s >= s1 or (q - d * s).length > rmax: continue
+        w = 1.0 if s <= sw or s1 <= sw else (1.0 - (s - sw) / (s1 - sw)) ** 2
+        bm.verts[i].co += a * (q.dot(a) * (e - 1.0) * w)
 
 
 def point_at(b, f):
@@ -1806,6 +1887,19 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         if probe is None:
             print(f"STAT crest {'lod1' if lod1 else 'lod0'} candidates {len(cand)} cards {made} "
                   f"z {round(min((c[0].z for c in chosen), default=0.0), 2)}-{round(max((c[0].z for c in chosen), default=0.0), 2)}")
+    SM = (C.get("stem_tip") or {}).get("mid")
+    if SM:  # opt-in (header: crown stem_tip mid): cards along the middle of every leader, placed last
+        KIND[0] = "main"
+        rng = random.Random(SM.get("seed", 7951))  # own sequence, placed last: every card above is unchanged
+        k = SM["n"] if not lod1 else max(1, int(SM["n"] * CFG.get("lod1_cards", 0.6)))
+        lo, hi = SM.get("t", (0.45, 0.85))
+        for b in branches:
+            if b.depth != 0 or b.pts[-1].z < C["minz"]: continue
+            for i in range(k):
+                t = lo + (hi - lo) * (i + rng.uniform(0.0, 1.0)) / k  # stratified: spread along the stretch
+                if point_at(b, t)[0].z < C["minz"]: continue
+                az = rng.uniform(0.0, 2 * math.pi)
+                place(b, t, Vector((math.cos(az), math.sin(az), SM.get("rise", 0.4))).normalized())
     if C.get("floor_base") and probe is None: print(f"STAT floor_base {'lod1' if lod1 else 'lod0'} levelled {FBN[0]}")
     return [c for c in cards if c[0] is not None]
 
@@ -2368,6 +2462,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
         if bi in base_over: b.pts, b.radii = base_axis(b.pts, b.radii, base_over[bi])  # base fix (mesh only)
         f0 = len(bm.faces); v0 = len(bm.verts)
         tube(bm, b, sides, CFG.get("lobe", 0.16), CFG.get("caps", False))  # lobe: trunk cross-section wobble (lumpy base)
+        if getattr(b, "bflare", None) and getattr(b, "bflare_prof", None): flare_stretch(bm, v0, b.bflare_prof)  # along
         spans.append((bi, f0, len(bm.faces))); meshed[bi] = (list(b.pts), list(b.radii))
         vspans.append((bi, v0, len(bm.verts)))
         b.pts, b.radii = full

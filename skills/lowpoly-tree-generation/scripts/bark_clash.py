@@ -307,6 +307,48 @@ def elbow_sockets(bm, k=1.0, max_turn=ELBOW_TURN, w=ELBOW_W):
                 turn_max=rows[0]["turn"] if rows else 0.0)
 
 
+# ---- socket rims: a flared limb base whose wide ring stands proud of its host (review banyan_v3_1: the BanyanGrove's
+# base_flare ring sat at the stem wall, 6-8 cm out on one side: a hard five-sided rim with the grain switching at it, read
+# as a sleeve or a sawn log end pushed onto the stem). A plain limb passes its host's wall at its own radius; a flare
+# whose widest ring lies inside the host shows only the cone through the wall (a buttress).
+RIM_STEP = 1.15    # a ring at least this many times as wide as the limb's next ring is a step (a flare's crease) ...
+RIM_TOL = 0.02     # m shipped: ... and RIM when it is also this much wider than that ring and stands this far outside
+#                    its host's surface (the review's 2 cm)
+
+
+def socket_rims(bm, k=1.0, step=RIM_STEP, tol=RIM_TOL):
+    """Every limb socketed at its base: each ring past its base ring (the base ring and its cone are base_cones' job)
+    inside the socket zone (bark_clash's, from the base apex) that is at least `step` x as wide as the limb's next ring
+    and sits AT the host's wall (some corner inside the host tube) is a rim candidate; RIM when a corner of it stands
+    more than tol outside the host's surface (the radial step between that ring and the host wall) and the ring is
+    more than tol wider than the next one (a thin twig's end taper is no visible step). A ring wholly outside the host
+    is the limb's own taper, not a socket. -> dict(sockets=[...] limbs with a candidate, worst first, n_rim,
+    out_max_cm). Positive control: the BanyanGrove of BoothAssets 60bb22a1 (base_flare without sink: 3 of its 4
+    side-limb sockets, 6-8 cm out, 7.7 cm steps); 0 on Banyan, BanyanYoung, Monkeypod, MangoWide, SeaAlmond,
+    OliveAncient, HolmOakAncient, StonePine."""
+    C = _Check(bm, k); rows = []
+    for (tid, end), (h, zone, lv, E) in C.hosts.items():
+        t = C.tubes[tid]
+        if end != 0 or t["ground"] or len(t["rings"]) < 3: continue
+        s_base = t["S"][1]   # arc of the base ring centre from the base apex
+        worst = None
+        for i in range(1, len(t["rings"]) - 1):
+            if s_base + t["RS"][i] > zone: break
+            if t["RR"][i] < step * t["RR"][i + 1]: continue
+            sds = [C.T.sd(h, v.co) for v in t["rings"][i]]
+            if min(sds) >= 0.0: continue
+            if worst is None or max(sds) > worst[0]: worst = (max(sds), i)
+        if worst is None: continue
+        i = worst[1]
+        rows.append(dict(limb=_label(t, C), host=_label(h, C), ring=i, ratio=round(t["RR"][i] / t["RR"][i + 1], 2),
+                         r=round(t["RR"][i] / k, 3), step_cm=round(100 * (t["RR"][i] - t["RR"][i + 1]) / k, 1),
+                         out_cm=round(100 * worst[0] / k, 1), at=[round(x / k, 2) for x in t["RP"][0]],
+                         cls="RIM" if worst[0] > tol * k and t["RR"][i] - t["RR"][i + 1] > tol * k else "ok"))
+    rows.sort(key=lambda x: -x["out_cm"])
+    return dict(sockets=rows, n_rim=sum(1 for x in rows if x["cls"] == "RIM"),
+                out_max_cm=rows[0]["out_cm"] if rows else None)
+
+
 # ---- silhouette crossings (screen space): two trunks crossing in a picture read as one through the other, whatever
 # the depth gap between them (user on a BanyanGrove vignette whose stems were 0.1 m+ apart in 3D but formed an X)
 SIL_ABOVE = 3.0    # m shipped: stem axes may not cross from the root plate to this far (arc) past each stem's fork
