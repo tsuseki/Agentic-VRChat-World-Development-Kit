@@ -24,7 +24,12 @@ under TOL are not reported.
 `silhouettes(bm, k, plate, views, az=True)` -> per view: stems / big limbs crossing each other ON SCREEN near the fork
 and stem tops clear / hidden / partial (a clean mesh can still read as one trunk through another: the user judges the
 picture). 8 eye-height azimuths by default plus any set camera (a vignette); positive control: the BanyanGrove of
-BoothAssets 87c9724a, 0 clashes in 3D but an X from the vignette 05 camera (2 crossings there).
+BoothAssets 87c9724a, 0 clashes in 3D but an X from the vignette 05 camera (2 crossings there). `az_step` / `dists`: the
+any-direction ring (Main's acceptance for groves: 36 azimuths x 8, 12, 20 m + set cameras, 0 crossings; positive control
+the BanyanGrove of BoothAssets 3a5e68b4: 24 crossings, 1 at the World_Tropical grove 2 camera).
+`ground_contact(bm, k)` -> hanging tips (aerial roots: FLOAT when they end 0.1-2.2 m up, shipped) as a height histogram,
+and every pillar's burial depth below z 0 at full girth (SHALLOW under 1.4 m: on a slope its end cone shows); positive
+control the Banyans of 3a5e68b4 (4 / 8 / 8 FLOAT tips, burial 0.06 m).
 """
 import math
 from mathutils import Vector
@@ -216,6 +221,55 @@ def scan(bm, k=1.0, plate=0.35):
                 hosts={f"{t}:{e}": H[0]["id"] for (t, e), H in C.hosts.items()})
 
 
+# ---- ground contact: aerial roots either reach the ground (a pillar, buried deep enough to stay in the soil when the
+# tree is planted on a slope) or end clearly overhead (user / Main 2026-11-01 on a BanyanGrove vignette: a bundle of
+# root tips hovering just above the grass on the island slope)
+TIP_LO = 0.1       # m shipped: a hanging tip at or below this counts as reaching the ground
+TIP_HI = 2.2       # m shipped: a hanging tip at or above this is an overhead fringe; anything between FLOATS
+BURY_MIN = 1.4     # m shipped: a pillar's full-girth shaft must run this far below z 0 (slopes ~10 deg 8 m out)
+HANG_VERT = 0.8    # a non-ground tube hangs when its axis from its socketed top to its free end is this vertical
+
+
+def ground_contact(bm, k=1.0, lo=TIP_LO, hi=TIP_HI, bury=BURY_MIN, bins=(0.1, 0.5, 1.0, 1.5, 2.0, 2.2, 3.0)):
+    """Hanging tips and pillar burial on a meshed tree (shipped m):
+      tips : every non-ground tube hosted at its top end (a socket) whose other end is free and lies below the top
+             with the axis between them >= HANG_VERT vertical: its free end's height, binned (`hist`: tips below each
+             bin edge, the last bin open). FLOAT = lo < z < hi.
+      bury : every pillar (a ground tube thinner than half the thickest ground tube: K3 pillar roots) and stem: the depth
+             below z 0 down to which its rings keep >= 0.8 x the girth at the ground (the ring nearest z 0 at or above
+             it); the end cone starts there. SHALLOW = a pillar shallower than `bury` (stems: info only)."""
+    C = _Check(bm, k); tips = []; bur = []
+    for t in C.tubes:
+        if t["ground"]: continue
+        for end in (0, 1):
+            if (t["id"], end) not in C.hosts or (t["id"], 1 - end) in C.hosts: continue
+            top = C.hosts[(t["id"], end)][3]; E = t["P"][-1] if end == 0 else t["P"][0]
+            v = top - E
+            if v.z <= 0 or v.z / max(v.length, 1e-9) < HANG_VERT: continue
+            z = E.z / k
+            tips.append(dict(id=t["id"], z=round(z, 2), top=round(top.z / k, 2), r=round(t["rmax"] / k, 3),
+                             at=[round(x / k, 2) for x in E], cls="ground" if z <= lo else "fringe" if z >= hi else "FLOAT"))
+    for t in C.tubes:
+        if not t["ground"]: continue
+        rings = t["axis"]; above = [(c, r) for c, r in rings if c.z >= 0.0]
+        if not above: continue
+        r0 = min(above, key=lambda cr: cr[0].z)[1]; d = 0.0
+        for c, r in sorted(rings, key=lambda cr: -cr[0].z):
+            if c.z >= 0.0: continue
+            if r < 0.8 * r0: break
+            d = -c.z
+        pil = C._hung(t)
+        bur.append(dict(id=t["id"], kind="pillar" if pil else "stem", r_ground=round(r0 / k, 3), bury=round(d / k, 2),
+                        cls=("ok" if d / k >= bury else "SHALLOW") if pil else "stem",
+                        at=[round(x / k, 2) for x in min(rings, key=lambda cr: cr[0].z)[0]]))
+    hist = [sum(1 for x in tips if (i == 0 or x["z"] >= bins[i - 1]) and (i == len(bins) or x["z"] < bins[i]))
+            for i in range(len(bins) + 1)]
+    return dict(tips=tips, hist=dict(edges=list(bins), counts=hist), n_float=sum(1 for x in tips if x["cls"] == "FLOAT"),
+                tip_min=min([x["z"] for x in tips], default=None), bury=bur,
+                n_shallow=sum(1 for x in bur if x["cls"] == "SHALLOW"),
+                bury_min=min([x["bury"] for x in bur if x["kind"] == "pillar"], default=None))
+
+
 # ---- silhouette crossings (screen space): two trunks crossing in a picture read as one through the other, whatever
 # the depth gap between them (user on a BanyanGrove vignette whose stems were 0.1 m+ apart in 3D but formed an X)
 SIL_ABOVE = 3.0    # m shipped: stem axes may not cross from the root plate to this far (arc) past each stem's fork
@@ -246,7 +300,7 @@ def _seg_x(a0, a1, b0, b1):
 
 
 def silhouettes(bm, k=1.0, plate=0.35, views=(), az=True, dist=10.0, eye=1.3, above=SIL_ABOVE, near=SIL_NEAR,
-                ratio=SIL_RATIO, hide=SIL_HIDE):
+                ratio=SIL_RATIO, hide=SIL_HIDE, az_step=45, dists=None):
     """Screen-space crossings of the trunk structure, per view. Stems = ground tubes that are not pillars; each stem's
     fork = the socket of its thickest limb on the stem body; big limbs: base radius > ratio x the stem there; a stem
     merged into a top limb runs on past its fork as one tube. Per view (perspective, from `loc` looking along `fwd`):
@@ -256,8 +310,8 @@ def silhouettes(bm, k=1.0, plate=0.35, views=(), az=True, dist=10.0, eye=1.3, ab
       tops           : per stem pair, the fork centres on screen: clear (silhouette gap >= one diameter, ra + rb),
                        hidden (centres within hide x (ra + rb): one trunk behind the other) or partial (between).
     views: extra [dict(name, loc, fwd[, fov, aspect])] in shipped m (fov: vertical deg; set = only what is in a frame
-    counts); az=True adds 8 azimuths first (0, 45, ... 315; az 0 looks along +y) at `dist` m, eye `eye` m, aimed at the
-    mean fork height."""
+    counts); az=True adds azimuths first (0, az_step, ...; az 0 looks along +y) at each of `dists` m (default: `dist`),
+    eye `eye` m, aimed at the mean fork height (names az000, or az000_d12 when several distances)."""
     C = _Check(bm, k); UPV = Vector((0, 0, 1))
     stems = [t for t in C.tubes if t["ground"] and not C._hung(t)]
     fork, big, thick = {}, [], {}
@@ -285,9 +339,11 @@ def silhouettes(bm, k=1.0, plate=0.35, views=(), az=True, dist=10.0, eye=1.3, ab
         return RP[-1], RR[-1]
     tops = {A["id"]: fpt(A) for A in stems}
     fz = sum(p.z for p, _ in tops.values()) / max(len(tops), 1) / k; vv = []
-    for a in (range(0, 360, 45) if az else ()):
-        r = math.radians(a); loc = Vector((math.sin(r) * dist, -math.cos(r) * dist, eye))
-        vv.append(dict(name=f"az{a:03d}", loc=loc, fwd=Vector((0, 0, fz)) - loc))
+    DS = list(dists) if dists else [dist]
+    for dd in (DS if az else ()):
+        for a in range(0, 360, az_step):
+            r = math.radians(a); loc = Vector((math.sin(r) * dd, -math.cos(r) * dd, eye))
+            vv.append(dict(name=f"az{a:03d}" + (f"_d{dd:g}" if len(DS) > 1 else ""), loc=loc, fwd=Vector((0, 0, fz)) - loc))
     views = vv + list(views)
     lines = [(A, [A["RP"][i] for i in span[A["id"]]]) for A in stems]
     others = [(t, A, t["RP"]) for t, A in big] + [(A, A, [A["RP"][i] for i in runs[A["id"]]]) for A in stems]

@@ -31,7 +31,9 @@
 #                 ground-rooted trunk below the crown base (10th percentile of leaf height; palm and leaning trunks).
 #                 A limb or stem that ends bare is never exempt.
 #                 PROP roots (K3 stilt / pillar roots: a ground tube whose upper end lies inside another tube more
-#                 than 0.3 m past that tube's base) have no bare end, and their runs are exempt under the canopy or
+#                 than 0.3 m past that tube's base; that host is a non-ground tube, a ground tube reaching > 1 m
+#                 higher, or, for a pillar thinner than half the thickest ground tube, any stem at least that thick: a
+#                 stem merged into a limb carries pillars on its limb part) have no bare end, and their runs are exempt under the canopy or
 #                 below the crown base (they carry no leaves by design). AERIAL roots (K3 hang: a tube hanging plumb
 #                 > 0.8 m from a host point past its base, not tapering to a twig tip) count as props the same way.
 #   INTERIOR    = an end/run deep inside the crown (opaque leaves within 1.5 m in >= 75 % of directions): it shows
@@ -339,6 +341,7 @@ def analyze(npz):
     def continues(t, s):  # tube t carries leaves beyond arc s (own tip, or a covered child rooted past s)
         return tipcov[t] or any(pa == t and ps >= s - 0.05 and reach[c] for c, (pa, ps) in enumerate(parent))
     zt = [float(T["P"][:, 2].max()) for T in tubes]
+    gmax = max([float(T["R"].max()) for T in tubes if T["ground"]] or [0.0])  # the thickest ground tube (a stem)
     def anchored(t):  # K3 prop / pillar root: a ground tube whose upper end lies inside another tube past its base
         T = tubes[t]  # (a trunk's top meets its children's bases instead: arc ~0, not a prop); hosts: non-ground
         if not T["ground"]:  # tubes or ground tubes reaching > 1 m higher (trunks, not sibling props)
@@ -349,8 +352,12 @@ def analyze(npz):
             if L < 0.8 or v[2] / L > -0.9 or len(R) < 2 or R[-1] < 0.45 * R[0]: return False
             m = np.array([u != t and float(tubes[u]["R"].max()) > 1.5 * R[0] for u in range(len(tubes))])[S["T"]]
             top = T["P"][0]
-        else:
-            m = np.array([u != t and (not tubes[u]["ground"] or zt[u] > zt[t] + 1.0) for u in range(len(tubes))])[S["T"]]
+        else:  # a pillar (a ground tube thinner than half the thickest ground tube) may also hang from a stem (a ground
+            # tube at least that thick) reaching less than 1 m above its top: a stem merged into a limb that carries
+            # the pillar out on its limb part (BanyanGrove v3's in-plane continuations); sibling pillars still don't host
+            thin = float(T["R"].max()) < 0.5 * gmax
+            m = np.array([u != t and (not tubes[u]["ground"] or zt[u] > zt[t] + 1.0
+                                      or (thin and float(tubes[u]["R"].max()) >= 0.5 * gmax)) for u in range(len(tubes))])[S["T"]]
             top = T["P"][int(np.argmax(T["P"][:, 2]))]
         if not m.any(): return False
         # (k 400: a twig forking at the same point fills the nearest 1 cm samples; the host limb lies beyond them)

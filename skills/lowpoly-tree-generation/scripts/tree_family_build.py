@@ -38,8 +38,15 @@
 #       it), then the concave ease to the pillar over h m with one more ring; the packed LOD1 keeps every collar ring.
 #       foot=dict(r, h): ground ring x r, easing in over h m; hang=(lo, hi): an aerial root
 #       hanging that far and ending in the air (>= floor (1.2) m up; tip < 1 thins it); sides: tube sides.
+#       deep=<m> (opt-in, pillars): a straight full-girth shaft that far on below the flared ground ring, so a pillar
+#       stays in the soil when the tree is planted on a slope (else its buried end cone shows as a spike over the
+#       grass downhill). hard=True (opt-in, hang): the floor also holds after the avoid slide / late re-seat (a
+#       curtain moved down is squeezed toward its top); check with `bark_clash_check.py --tips` (FLOAT 0.1-2.2 m
+#       shipped, pillar burial). Off = identical builds.
 #   levels[i] wave=dict(amp, n, side) (opt-in): sinuous limbs: each step tilted up/down by amp x sin over n cycles
-#       along the limb (+ side x a sideways sway), own phases per limb; the heading itself drifts as before.
+#       along the limb (+ side x a sideways sway), own phases per limb; the heading itself drifts as before. lead=<f>
+#       (opt-in): the wave fades in over that fraction of the limb (0 at the parent), so the limb leaves at its drawn
+#       angle (Banyan v3: a first step the wave pitched level ran across the trunk top as a band). Off = identical.
 #   levels[i] sides=(lod0, lod1) (opt-in): tube sides of that level's limbs (and their merged continuations).
 #   levels[i] keep_rings=True (opt-in): the packed LOD1 meshes every ring of that level's limbs (and their merged
 #       continuations) instead of every other one, so sinuous limbs keep round elbows (more bark tris).
@@ -176,6 +183,17 @@
 #   levels[0] fan=<deg> (opt-in, whorl levels on off-centre stems; multi-stem groves): the whorl opens away from the
 #       tree centre, its limbs spread fan deg around the stem's outward azimuth (drawn jitter x fan_jitter kept), so no
 #       limb (nor a stem's merged continuation) heads back over the centre across a neighbour stem: BanyanGrove r5 v2.
+#       plane_mid=True (opt-in, odd whorl, fan_jitter 0): the middle limb of each stem's fan grows in the stem's own
+#       vertical plane (kit grow `plane`: no sideways noise or wave sway; never swung by avoid), its angle drawn from
+#       mid_ang (steeper than the side limbs, so the merge continues the stem into it): the stem stays planar.
+#   stem_plane=dict(az=<deg>) (opt-in): stems evenly round from az with no azimuth jitter (the draw kept) and no
+#       sideways noise: each stem is a planar curve in its vertical lean plane. Two stems = one plane (a V): their
+#       picture from any eye outside the plane is a projective image of the plane, so they never cross on screen from
+#       any direction (BanyanGrove v3; `bark_clash_check.py --sil --az-step 10 --dists 8,12,20`). Off = identical builds.
+#   kid_cap=dict(k=0.8, depth=2) (opt-in): after merge / sag / smooth / taper, a child of depth >= `depth` thicker than
+#       k x the tube its base sits on there (a shoot near a limb tip the merge blend or end taper thinned) is scaled down
+#       its whole length to that; hosts first, so its own shoots follow (BanyanGrove v3: 5-6 cm shoots 1-3 cm out
+#       through 4 cm limb tips). No draws: off = identical builds.
 #   yaw=<deg> (opt-in): the finished skeleton turned about z (no draws): a placed tree faced to its set camera.
 #   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
 #       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
@@ -458,7 +476,11 @@ def in_clear(p):
             if (p - (a + ab * t)).length <= v["r"]: return True
     return False
 
-def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, keep_out=True, up_end=None, flat=0.0, wave=None):
+def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, keep_out=True, up_end=None, flat=0.0, wave=None,
+         plane=None):
+    # plane (opt-in, a unit normal): every step stays in the plane through `start` with that normal (noise and the wave's
+    # sideways sway removed), so a stem / limb is a planar curve (BanyanGrove v3: two stems and their continuations in
+    # one vertical plane never cross on screen from any viewpoint); None = the old path, identical draws
     pts, radii = [start.copy()], [r0]
     d = direction.normalized(); p = start.copy()
     if wave:  # opt-in (levels[i] wave): a sinuous limb rising and dipping (+ a sideways sway), own phases per limb
@@ -468,13 +490,17 @@ def grow(start, direction, length, r0, r1, segs, depth, out, gnarl, up, seed, ke
         n = det_noise_vector(p * 1.7 + Vector((depth * 3.1, seed * 0.37, 0.5)))
         u = up if up_end is None else up + (up_end - up) * (i - 1) / max(1, segs - 1)  # up_end: bias ramps along it
         d = (d + n * gnarl + UP * u).normalized()
+        if plane is not None: d = (d - plane * d.dot(plane)).normalized()
         if flat and Vector((d.x, d.y, 0.0)).length > 1e-6:  # flat: each segment levels out toward horizontal
             d = Vector((d.x, d.y, d.z * (1.0 - flat))).normalized()
         db = d
         if wave:  # the wave tilts this step only; the limb's own heading (gnarl / up drift) carries on underneath
             f = (i - 0.5) / segs
-            d = (d + UP * wave["amp"] * math.sin(2 * math.pi * wave["n"] * f + wph)
-                 + wside * wave.get("side", 0.0) * math.sin(2 * math.pi * wave["n"] * 0.7 * f + wph2)).normalized()
+            wl = min(1.0, f / wave["lead"]) if wave.get("lead") else 1.0  # opt-in lead: the wave fades in over that
+            # fraction of the limb, so it leaves its parent at its drawn angle (Banyan v3: a first step pitched level by
+            # the wave ran across the trunk top as a band)
+            d = (d + UP * wl * wave["amp"] * math.sin(2 * math.pi * wave["n"] * f + wph)
+                 + wside * wl * (0.0 if plane is not None else wave.get("side", 0.0)) * math.sin(2 * math.pi * wave["n"] * 0.7 * f + wph2)).normalized()
         p = p + d * (length / segs)
         d = db
         if depth > 0: p.z = max(p.z, 0.25)  # drooping twigs never reach the ground
@@ -661,7 +687,8 @@ def merge_continuations(branches, M):
         end_d = (b.pts[-1] - b.pts[-2]).normalized()
         cand = [(end_d.angle((c.pts[1] - c.pts[0]).normalized()), k, c) for k, c in kids if k == klast and len(c.pts) > 1]
         if not cand: continue
-        a, k, c = min(cand, key=lambda x: x[0])
+        pm = [x for x in cand if getattr(x[2], "plane_mid", False)]  # opt-in plane_mid: the stem continues into its
+        a, k, c = min(pm or cand, key=lambda x: x[0])  # in-plane middle limb whatever the wave tilts (BanyanGrove v3)
         q = None
         a_lim = ang if b.depth > 0 or M.get("ang0") is None else math.radians(M["ang0"])  # ang0: stems never swing
         if a > a_lim:
@@ -802,6 +829,9 @@ def build_skeleton(seed):
             az = CFG["lean_dir"] + (k - (cnt - 1) / 2) * CFG.get("lean_fan", 0.5) + rng.uniform(-0.15, 0.15)
         else:
             az = 2 * math.pi * k / cnt + rng.uniform(-0.3, 0.3)
+            if CFG.get("stem_plane") is not None:  # opt-in: no azimuth jitter (the draw kept): stems evenly round, a
+                az = math.radians(CFG["stem_plane"].get("az", 0.0)) + 2 * math.pi * k / cnt  # 2-stem V in one plane
+        SPN = Vector((-math.sin(az), math.cos(az), 0.0)) if CFG.get("stem_plane") is not None else None
         le = rng.uniform(*lean) if cnt > 1 else rng.uniform(*lean)
         d = Vector((math.cos(az) * le, math.sin(az) * le, 1.0))
         base = Vector((math.cos(az) * spread, math.sin(az) * spread, 0.0))
@@ -823,7 +853,7 @@ def build_skeleton(seed):
             def mk_stem(dd):
                 tmp = []
                 b0 = grow(base, dd, Ld, r0 * sc, r1 * sc, CFG.get("stem_segs", 6), 0, tmp, gn, CFG.get("bend", 0.0),
-                          seed + k, up_end=CFG.get("bend_end"))  # bend_end: stem bend ramps to it (nodding tips)
+                          seed + k, up_end=CFG.get("bend_end"), plane=SPN)  # bend_end: stem bend ramps to it (nodding tips)
                 return b0, tmp
             sb, tmp = mk_stem(d)
             AV = CFG.get("avoid")
@@ -888,6 +918,8 @@ def build_skeleton(seed):
                 s = (1 - t) * L
                 if s < FO["h"]: w = 1 - s / FO["h"]; rad *= 1 + (FO["r"] - 1) * w * w
             pts.append(q); radii.append(rad)
+        if PR.get("deep") and "hang" not in PR:  # opt-in: a straight full-girth shaft `deep` m on below the ground ring, so
+            pts.append(pts[-1] - UP * PR["deep"]); radii.append(radii[-1])  # a pillar stays in the soil on a slope
         pr = Br(pts, radii, 1); pr.par = par; pr.keep = True; pr.prop = True; out.append(pr); return pr
     for k, PR in enumerate(PRS):  # opt-in K3 stilt / prop roots from the trunk (own random sequence per entry)
         if PR.get("src", "trunk") != "trunk": continue
@@ -994,11 +1026,19 @@ def build_skeleton(seed):
                     if outw.length > 0.05 and lv == 0 and n <= 3: pp = (pp + outw.normalized() * CFG.get("outward", 1.2)).normalized()
                     return pp
                 perp = mk_perp(az)
+                # opt-in plane_mid (fan whorls, odd whorl size): the middle limb of each stem's fan, aimed straight out
+                # (fan_jitter 0), grows in the stem's own vertical plane (no sideways noise or sway, never swung by
+                # avoid) and draws its angle from mid_ang: steeper than the side limbs, so the stem's merged continuation
+                # is this limb and stays in that plane (BanyanGrove v3: a V of two stems never crosses on screen)
+                MPN = None
+                if wk and P.get("plane_mid") and P.get("fan") is not None and lv == 0 and Vector((p.x, p.y, 0)).length > 0.05 \
+                        and 2 * (j % wk) == wk - 1:
+                    th0 = math.atan2(p.y, p.x); MPN = Vector((-math.sin(th0), math.cos(th0), 0.0))
                 if "ang_end" in P:  # angle range moves from `ang` (at[0]) to `ang_end` (at[1]): drooping lower limbs
                     h = max(0.0, min(1.0, (f - P["at"][0]) / max(1e-6, P["at"][1] - P["at"][0])))
                     a = math.radians(rng.uniform(*(x + (y - x) * h for x, y in zip(P["ang"], P["ang_end"]))))
                 else:
-                    a = math.radians(rng.uniform(*P["ang"]))
+                    a = math.radians(rng.uniform(*(P["mid_ang"] if MPN is not None and "mid_ang" in P else P["ang"])))
                 cd = (d * math.cos(a) + perp * math.sin(a)).normalized()
                 ln = rng.uniform(*P["len"]) * CFG.get("len_scale", 1.0)  # olives: long sweeping limbs
                 if CFG.get("len_taper"): ln *= 1.0 - CFG["len_taper"] * f  # columnar: shorter limbs higher up
@@ -1010,7 +1050,7 @@ def build_skeleton(seed):
                     tmp = []
                     cx = grow(p - d * min(0.03, r), cdx, ln, rr, P["tip"] * rr if P["tip"] > 0.05 else P["tip"],
                               P.get("segs", 4 if lv == 0 else 3), lv + 1, tmp, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
-                              up_end=P.get("up_end"), flat=P.get("flat", 0.0), wave=P.get("wave"))
+                              up_end=P.get("up_end"), flat=P.get("flat", 0.0), wave=P.get("wave"), plane=MPN)
                     if cx and P.get("root_out"):  # opt-in: the whole limb shifted rigidly root_out x parent radius out along
                         rad = cdx - d * cdx.dot(d)  # its own radial (same shape and noise), so a thick limb clears the parent wall sooner
                         if rad.length > 1e-6:
@@ -1018,7 +1058,7 @@ def build_skeleton(seed):
                     return cx, tmp
                 c, tmp = grow_at(0.0)
                 AV = CFG.get("avoid")
-                if AV and c is not None and lv + 1 <= AV.get("depth", 1):
+                if AV and c is not None and lv + 1 <= AV.get("depth", 1) and MPN is None:
                     # opt-in: a limb whose tube runs into another (not its parent at its socket, not a sibling in the
                     # crotch) is swung round its parent to the first clear azimuth (avoid_offsets), else the least overlap
                     anc, x = set(), b
@@ -1044,6 +1084,7 @@ def build_skeleton(seed):
                 if c and P.get("sides"): c.lsides = P["sides"]  # opt-in per-level tube sides (LOD0, LOD1)
                 if c and P.get("keep_rings"): c.keep_rings = True  # opt-in: the packed LOD1 meshes every ring (round elbows)
                 if c: c.par = b; nxt.append(c)
+                if c and MPN is not None: c.plane_mid = True  # merge continues the stem into this limb
         parents = nxt
     side_limbs(False)  # stubs etc.: no children
     for k, PR in enumerate(PRS):  # K3 pillar roots (banyan): from points on depth-`depth` limbs down to the ground
@@ -1129,6 +1170,7 @@ def build_skeleton(seed):
                 else:
                     x = prop_tube(st - UP * r * 0.4, ge, h, re, rt, dict(PR, curve=PR.get("curve", 0.0)), j * 3 + e, b)
                 x.pillar = True; x.hang = "hang" in PR
+                if x.hang and PR.get("hard"): x.floor = PR.get("floor", 1.2)  # opt-in: the floor holds after slides / seats
                 if PR.get("sides"): x.sides = PR["sides"]
     L = CFG.get("lianas")
     if L:  # thin climbing vine stems hugging the trunk, winding slowly up; stop before any keep-out volume
@@ -2211,8 +2253,32 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
             for i in range(len(b.pts)):
                 f = max(0.0, (cum[i] / L - f0) / (1 - f0)) ** 1.5
                 b.radii[i] = b.radii[i] * (1 - f) + TIP_R * f
+    KC = CFG.get("kid_cap")  # opt-in dict(k=0.8, depth=2): a child (depth >= `depth`) whose base sits on a tube that the
+    if KC:  # merge blend / end taper thinned below it is scaled down to k x that tube's radius there, its whole length
+        kk, kd, ncap = KC.get("k", 0.8), KC.get("depth", 2), 0  # (BanyanGrove v3: shoots 5-6 cm on limb tips 4 cm thick)
+        live = [b for b in branches if getattr(b, "merged_into", None) is None and not getattr(b, "prop", False) and len(b.pts) > 1]
+        for c in sorted(live, key=lambda x: x.depth):  # hosts first: a capped shoot's own shoots cap against it
+            if c.depth < kd: continue
+            best = None
+            for h in live:
+                if h is c or h.depth >= c.depth: continue
+                for i in range(len(h.pts) - 1):
+                    a, e = h.pts[i], h.pts[i + 1] - h.pts[i]; ll = e.length_squared
+                    t = 0.0 if ll < 1e-12 else max(0.0, min(1.0, (c.pts[0] - a).dot(e) / ll))
+                    rh = h.radii[i] + (h.radii[i + 1] - h.radii[i]) * t; g = (c.pts[0] - (a + e * t)).length - rh
+                    if best is None or g < best[0]: best = (g, rh)
+            if best is None or best[0] > 0.05: continue  # base not on a tube
+            r0 = max(c.radii[:2]); lim = kk * best[1]
+            if r0 > lim > 0: c.radii = [r * lim / r0 for r in c.radii]; ncap += 1
+        if ncap: print("STAT", name, "kid_cap shoots thinned", ncap)
     if AVL:  # CFG avoid (late_seat): the K3 tops re-seat on the meshed chain head's FINAL axis and radius, after the
         reseat(True)  # merge, sag, smooth and taper (seated before the smooth, a corner-cut limb left tops 2-7 cm out on top)
+    for x in branches:  # opt-in hard floor (K3 hang + hard): a curtain moved down by its slide / re-seat is shortened from
+        fl = getattr(x, "floor", None)  # its top, so no tip ends under the floor (Banyan v3: tips 1.3-2.0 m shipped
+        if fl is None or len(x.pts) < 2: continue  # hovered over the grass); its points squeeze toward the top
+        top, lo = x.pts[0].z, min(q.z for q in x.pts)
+        if lo < fl and top > fl + 1e-3:
+            sq = (top - fl) / max(top - lo, 1e-9); x.pts = [Vector((q.x, q.y, top - (top - q.z) * sq)) for q in x.pts]
     if CFG.get("declip"):  # opt-in: limbs that clash (bark through bark) are tilted apart about their bases, see CFG["declip"]["script"]
         if "mod" not in DECLIP_STATS:  # loaded once: its cache replays the same moves for every LOD
             import importlib.util as _ilu
