@@ -30,7 +30,7 @@ the BanyanGrove of BoothAssets 3a5e68b4: 24 crossings, 1 at the World_Tropical g
 Blind spot: only projected stem / limb AXES are tested, so a stem rising from behind another (a silhouette overlap with
 no axis crossing) scores 0; review the in-world frames by eye as well.
 `ground_contact(bm, k)` -> hanging tips (aerial roots: FLOAT when they end 0.1-2.2 m up, shipped) as a height histogram,
-and every pillar's burial depth below z 0 at full girth (SHALLOW under 1.4 m: on a slope its end cone shows); positive
+and every pillar's burial depth below z 0 at full girth (SHALLOW under 1.0 m: on a slope its end cone shows); positive
 control the Banyans of 3a5e68b4 (4 / 8 / 8 FLOAT tips, burial 0.06 m).
 `elbow_sockets(bm, k)` -> limbs socketed into a host whose axis turns more than ELBOW_TURN deg across the socket
 (tangents at +-ELBOW_W x the host radius from where the limb's base sits on it): a side limb on the outside of a stem's
@@ -232,7 +232,8 @@ def scan(bm, k=1.0, plate=0.35):
 # root tips hovering just above the grass on the island slope)
 TIP_LO = 0.1       # m shipped: a hanging tip at or below this counts as reaching the ground
 TIP_HI = 2.2       # m shipped: a hanging tip at or above this is an overhead fringe; anything between FLOATS
-BURY_MIN = 1.4     # m shipped: a pillar's full-girth shaft must run this far below z 0 (slopes ~10 deg 8 m out)
+BURY_MIN = 1.0     # m shipped: a pillar's full-girth shaft must run this far below z 0 (10 deg slope 5.7 m out; Main 2026-11-01,
+#                    was 1.4; a tree whose pillars stand farther out on a steeper placed slope needs its own `bury`)
 HANG_VERT = 0.8    # a non-ground tube hangs when its axis from its socketed top to its free end is this vertical
 
 

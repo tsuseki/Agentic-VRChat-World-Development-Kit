@@ -187,6 +187,12 @@
 #       plane_mid=True (opt-in, odd whorl, fan_jitter 0): the middle limb of each stem's fan grows in the stem's own
 #       vertical plane (kit grow `plane`: no sideways noise or wave sway; never swung by avoid), its angle drawn from
 #       mid_ang (steeper than the side limbs, so the merge continues the stem into it): the stem stays planar.
+#       side_r=<k> (opt-in, with plane_mid): the fan's side limbs take k instead of the level's r (the middle one keeps
+#       r): thinner side limbs leave the stem as branches, not as beams butted onto it (BanyanGrove v3.1). No draws.
+#   levels[i] base_flare=dict(k=1.35, h=2.5) (opt-in, mesh only): each limb of that level is meshed with its base ring
+#       and a ring where its axis leaves the parent (parent radius out) k x as wide, easing back to its own radius h x
+#       its radius further on: a flared socket, not a flat sawn seam where a thick limb leaves its stem near 90 deg
+#       (BanyanGrove v3.1). Skeleton, cards, children and draws unchanged: off = identical builds.
 #   stem_plane=dict(az=<deg>) (opt-in): stems evenly round from az with no azimuth jitter (the draw kept) and no
 #       sideways noise: each stem is a planar curve in its vertical lean plane. Two stems = one plane (a V): their
 #       picture from any eye outside the plane is a projective image of the plane, so they never cross on screen from
@@ -565,6 +571,27 @@ def smooth_path(pts, radii, thr, iters):
         pts, radii = np_, nr
     return pts, radii
 
+def base_flare_axis(b, BF):
+    """opt-in levels[i] base_flare=dict(k=1.35, h=2.5) (mesh only; skeleton, cards and children unchanged): the limb's
+    base ring and a ring added where its axis leaves the parent tube (the parent chain's radius there along the axis)
+    widen to k x their radius, and a ring added h x the limb radius further on is plain: a flared socket that eases
+    into the limb, so a thick limb leaving its stem near 90 deg does not end in a flat sawn seam (BanyanGrove v3.1).
+    Too short a first segment: the base ring only."""
+    hp = getattr(b, "par", None)
+    while hp is not None and getattr(hp, "merged_into", None) is not None: hp = hp.merged_into
+    if hp is None or len(hp.pts) < 2 or len(b.pts) < 2: return b.pts, b.radii
+    k, h = BF.get("k", 1.35), BF.get("h", 2.5)
+    rh = _near_axis(b.pts[0], hp.pts, hp.radii)[1]
+    pts, radii = list(b.pts), list(b.radii); seg = (pts[1] - pts[0]).length
+    s1 = rh; s2 = s1 + h * radii[0]
+    if seg > s2 * 1.1:
+        f1, f2 = s1 / seg, s2 / seg
+        r1, r2 = (radii[0] + (radii[1] - radii[0]) * f for f in (f1, f2))
+        pts[1:1] = [pts[0].lerp(pts[1], f1), pts[0].lerp(pts[1], f2)]; radii[1:1] = [r1 * k, r2]
+    radii[0] *= k
+    return pts, radii
+
+
 def point_at(b, f):
     x = f * (len(b.pts) - 1); i = min(int(x), len(b.pts) - 2); t = x - i
     p = b.pts[i].lerp(b.pts[i + 1], t); r = b.radii[i] + (b.radii[i + 1] - b.radii[i]) * t
@@ -690,7 +717,6 @@ def merge_continuations(branches, M):
         if not cand: continue
         pm = [x for x in cand if getattr(x[2], "plane_mid", False)]  # opt-in plane_mid: the stem continues into its
         a, k, c = min(pm or cand, key=lambda x: x[0])  # in-plane middle limb whatever the wave tilts (BanyanGrove v3)
-        if b.depth == 0 and os.environ.get("TFB_DBG"): print("STAT TFB_DBG merge", tuple(round(v, 2) for v in b.pts[-1]), "klast", klast, "/", len(b.pts), [(round(math.degrees(x[0])), x[1], bool(getattr(x[2], "plane_mid", False)), tuple(round(v, 2) for v in x[2].pts[1])) for x in [(e[0], e[1], e[2]) for e in cand]], "all kids", [(k2, bool(getattr(c2, "plane_mid", False))) for k2, c2 in kids])
         q = None
         a_lim = ang if b.depth > 0 or M.get("ang0") is None else math.radians(M["ang0"])  # ang0: stems never swing
         if a > a_lim:
@@ -712,13 +738,11 @@ def merge_continuations(branches, M):
             g0 = axis_gap(x.pts[0], b.pts, b.radii)
             return g0 <= MERGE_ATTACH and axis_gap(x.pts[0], new_p, new_r) > max(g0, 0.0) + x.radii[0]
         if any(x is not c and getattr(x, "merged_into", None) is None and orphaned(x) for x in kids_of.get(id(b), [])):
-            if b.depth == 0 and os.environ.get("TFB_DBG"): print("STAT TFB_DBG skip orphan")
             MERGE_SKIPPED[0] += 1; continue
         moved = {id(y) for y in subtree(c)} if q is not None else set()  # the swing would move these rigidly
         if any(getattr(x, "prop", False) and not getattr(x, "hang", False) and (getattr(x, "par", None) is b and
                min(range(len(b.pts)), key=lambda i: (b.pts[i] - x.pts[0]).length) >= k
                or id(getattr(x, "par", None)) in moved) for x in branches):
-            if b.depth == 0 and os.environ.get("TFB_DBG"): print("STAT TFB_DBG skip pillar", "swing", q is not None, round(math.degrees(a)), round(math.degrees(a_lim)))
             MERGE_SKIPPED[0] += 1; continue  # a K3 pillar hangs on the stub the merge would drop, or on a swung limb
             # (aerial roots don't block it: they move with their re-seated top)
         if q is not None:
@@ -1046,7 +1070,8 @@ def build_skeleton(seed):
                 cd = (d * math.cos(a) + perp * math.sin(a)).normalized()
                 ln = rng.uniform(*P["len"]) * CFG.get("len_scale", 1.0)  # olives: long sweeping limbs
                 if CFG.get("len_taper"): ln *= 1.0 - CFG["len_taper"] * f  # columnar: shorter limbs higher up
-                rr = min(r * P["r"], r * 0.9) if P["r"] < 1 else min(0.03, r * 0.6)
+                rf = P["side_r"] if MPN is None and P.get("plane_mid") and "side_r" in P else P["r"]  # opt-in side_r: the side
+                rr = min(r * rf, r * 0.9) if P["r"] < 1 else min(0.03, r * 0.6)  # limbs of a plane_mid fan thinner (v3.1)
                 if CFG.get("clear") and (in_clear(p) or any(in_clear(p + e * (rr * 1.5 + 0.3)) for e in (UP, -UP, -cd))):
                     continue  # no branch starts in (or with its thickness / buried base cone reaching into) a volume
                 def grow_at(off):  # the limb at its drawn azimuth + off (same draws, seed and noise), into a scratch list
@@ -1087,6 +1112,7 @@ def build_skeleton(seed):
                 out.extend(tmp)
                 if c and P.get("sides"): c.lsides = P["sides"]  # opt-in per-level tube sides (LOD0, LOD1)
                 if c and P.get("keep_rings"): c.keep_rings = True  # opt-in: the packed LOD1 meshes every ring (round elbows)
+                if c and P.get("base_flare"): c.bflare = P["base_flare"]  # opt-in: a flared socket, meshed only
                 if c: c.par = b; nxt.append(c)
                 if c and MPN is not None: c.plane_mid = True  # merge continues the stem into this limb
         parents = nxt
@@ -2338,6 +2364,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
                 k = next((i for i in range(len(b.pts) - 1) if (b.pts[i].z + b.pts[i + 1].z) / 2 > thr), None)
                 if k is not None: ks = sorted(set(ks) | {k})
             b.pts = [b.pts[k] for k in ks]; b.radii = [b.radii[k] for k in ks]
+        if getattr(b, "bflare", None): b.pts, b.radii = base_flare_axis(b, b.bflare)  # opt-in flared socket (mesh only)
         if bi in base_over: b.pts, b.radii = base_axis(b.pts, b.radii, base_over[bi])  # base fix (mesh only)
         f0 = len(bm.faces); v0 = len(bm.verts)
         tube(bm, b, sides, CFG.get("lobe", 0.16), CFG.get("caps", False))  # lobe: trunk cross-section wobble (lumpy base)
