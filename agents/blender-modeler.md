@@ -113,6 +113,27 @@ one"):
   every result by eye for seams, baked-in shadows and the wrong grain or weave scale.
 - **Flames are never meshes.** Leave an empty `FlameSocket` transform where the flame goes; the
   world-builder adds a particle flame in Unity.
+- **Shared style atlas for a structure family** (a set of buildings, decks and built-in furniture
+  that share materials):
+  - One 2048² atlas of 16 cells, 512 px each at 256 px/m (one cell = 2.0 m), in a fixed role layout
+    (e.g. plaster, stone, teak, deck, linen, sage, bronze, black, glass, light, stone2, teak2, sand,
+    white, chalk, rope). Fill every cell edge to edge with its one material: no empty gutter.
+  - Every piece of the family uses the same layout, so a style variant is a texture-only swap with
+    identical UVs. Ship **one** copy of the atlas in a shared folder (e.g. `<props>/_shared/`) under
+    one material name, never a copy per piece: a world once had to replace 12 identical per-piece
+    copies with one atlas.
+  - **UV windows:** keep every island at least 24 px (0.094 m) inside its cell; 10 px let mips bleed
+    the neighbour cell. 24 px covers about mip 4 (pad ≥ 2^mips used). A face larger than the window
+    (2.0 m − 2 × pad ≈ 1.81 m) gets shrunk and loses texel density, so keep planks and tiles
+    ≤ 1.8 m long.
+  - **Sunlit whites:** author large white and near-white cells at about sRGB 200–210. A cell at sRGB
+    241 clipped to flat 255 under a bright baked sun (≈ 1.4× linear, no tonemapper) and had to be
+    compressed in the world.
+  - **Opaque glass** is an atlas cell: a light blue-grey vertical gradient with a faint warm tint at
+    the bottom, smoothness about 0.9 in the smoothness channel. Dark slate glass reads as black
+    boxes. Water surfaces (and any extra card the brief asks for) are separate objects with their
+    own material, never cells of the opaque atlas: a second material left on the atlas renders as a
+    chequered atlas block.
 
 ## Realistic, not a dressed-up blockout
 
@@ -162,6 +183,16 @@ When the user or WORLD.md supplies a reference image for the asset:
 - **UV unwrap everything**, seams on hidden edges, pack to fill the 0–1 space.
   If the asset will be lightmapped in Unity, either add a clean UV2 or let Unity
   generate secondary UVs on import — call out which.
+- **Default furniture and slot positions follow the seating rules.** Before publishing slot or
+  default furniture positions in a structure (stools along a bar, dining sets, a chaise by a door),
+  read `.omp/skills/spatial-design/references/spatial-design.md` §5.6 (door zones: 1.2 m deep ×
+  door + 0.3 m each side, clear) and the §5.11 table ×0.8 (stool pitch, table-to-table and
+  behind-a-seated-diner clearance, seat front to coffee table 0.45–0.55 m). Stools 0.44 m apart,
+  dining tables 1.0 m apart and a chaise inside a door zone each cost a review round.
+- **Ground contact on slopes.** A flat-based, base-centred structure (platform, slab, pad, stair
+  foot) floats 0.1–0.3 m on its downhill side when placed on sloping ground. Either model a footing
+  skirt reaching ~0.35 m below z 0 (inner faces deleted) or state in the handoff that the world
+  needs plinths under it.
 - **Always check for z-fighting before export.** Any two faces that share a plane
   and overlap in that plane will shimmer in Unity — the artefact is invisible in
   Blender's viewport and only shows up in-world, at an angle, sometimes only when
@@ -241,6 +272,10 @@ When the user or WORLD.md supplies a reference image for the asset:
     be seen should be deleted, not buried inside another one.
   - The same check applies **across objects** in a multi-part asset and to the
     seat/contact faces where a prop meets a floor or wall; lift by the same offset rule.
+- **Plank and tile fields built as separate faces with gaps** need a backing face about 8 mm under
+  the planks, in a dark or stone region of the atlas; otherwise the 4–6 mm joints show whatever is
+  behind them (sky or water lines along a deck's seams that look like texture bleed). The coplanar
+  check can't see this; render the field from a low angle against a bright background.
 
 ## Verify with your eyes, every time
 
@@ -254,8 +289,26 @@ Numbers lie; renders don't.
 
 ## Export for Unity (Built-in RP)
 
-- Export **FBX** (or GLB when the pipeline calls for it), **selected object
-  only**, with **Apply Transform / apply modifiers** on.
+- Export **FBX** (or GLB when the pipeline calls for it), **selected objects
+  only**, with **Apply Transform / apply modifiers** on. Include empties, or slot transforms are
+  dropped:
+
+  ```python
+  bpy.ops.export_scene.fbx(filepath=path, use_selection=True, apply_unit_scale=True,
+      apply_scale_options='FBX_SCALE_ALL', bake_space_transform=True,
+      object_types={'MESH', 'EMPTY'}, axis_forward='-Z', axis_up='Y', use_mesh_modifiers=True,
+      mesh_smooth_type='FACE', add_leaf_bones=False, path_mode='AUTO', use_tspace=False)
+  ```
+- **Structure:** a root empty named `<Piece>`, the mesh child `<Piece>_Mesh`, water or other
+  separate-material parts as their own meshes, and slot empties parented to the root. No colliders
+  or stations in the FBX.
+- **Slot empties** carry position (and facing in their Z rotation, also written in the handoff):
+  `Slot_<Kind>_<n>` at the standing surface z (`Slot_Plant_n` at the soil top, `Slot_Lounger_n`,
+  `Slot_Table_n`), `StoolSpot_nn`, `BottleSlot_<shelf>_<k>`, `PendantLight_n`, `AttachA`/`AttachB`
+  (hammock or rope ends), `FlameSocket`, `WaterLevel`.
+- **Several props in one FBX** are laid out along +X, each at its own base-centre origin;
+  instantiating the file gives a row. Say so in the handoff: the importer picks the child and zeroes
+  its local X.
 - Blender→Unity axis: FBX Forward `-Z`, Up `Y` (Blender's Unity preset). Heads
   up: models frequently **import 180° rotated about Y** in these projects — note
   it so the main session can zero it at the root, or pre-rotate + re-apply.
@@ -311,6 +364,11 @@ When done, report back concisely:
 - The exported file path(s) (`.fbx`/`.glb` + `.blend` source), expected import
   **scale** and **rotation** on the Unity side, and whether UV2 exists.
 - Any budget trade-offs or follow-ups (e.g. "needs LOD", "AO not baked yet").
+- **Surface tops, read from the build script, not eyeballed boxes:** every walkable and lie-down
+  surface as name, centre, size and top z (lie-down box centre = top − size/2). A bed spec with its
+  box centre at 1.12 against a mattress top of 1.226 sank the beds 0.09 m. Stairs: "one rotated
+  ramp box per flight" only; offering "or per-tread boxes" got per-tread colliders built.
+- Pieces that need plinths on sloping ground, and any slot facing not stored in the empties.
 - **Trial runs:** append an `attempt` event per model or revision (what, result, render paths) to
   `<project>/Trial/log.jsonl` with `.omp/skills/pipeline-trial/scripts/trial_report.py --append`;
   schema in `.omp/skills/pipeline-trial/SKILL.md` "Event log".

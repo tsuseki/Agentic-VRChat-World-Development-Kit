@@ -9,11 +9,11 @@ Views: full tree at eye height from 2 sides; 1.6 m standing under the crown look
 3. **Full crown:** reads as foliage masses, sky only at edges and small gaps; no stacked-texture look.
 4. **Leaf size:** real size for the species, measured against the reference avatar.
 5. **Trunk:** bark not stretched or smeared on thick trunks, no visible seam; root flare smooth, no plinth or crease.
-6. **Ground:** sits on the ground; nothing but the root flare goes below it; no floating base.
+6. **Ground:** sits on the ground; nothing but the root flare (and deep pillar-root shafts) goes below it; no floating base; seen from below on a slope, no buried end cone shows. Aerial roots reach the soil or end at least 2.2 m up.
 7. **Silhouette:** matches the species and the user's reference photos (e.g. cypress tall and narrow with a soft pointed top).
 8. **Joints:** no spikes, elbows or loose cones at forks.
-9. **No crossing branches:** limbs don't pass through each other or the trunk (the Penthouse olives have this).
+9. **No crossing branches:** limbs don't pass through each other or the trunk, and stems don't read as an X on screen from any eye-height direction or in-world camera (multi-stem trees).
 10. **Cards:** no edge-on streaks, white slivers or key-colour fringe.
-11. **Colour:** leaves one natural green that matches the species; twigs match the bark.
+11. **Colour:** leaves one natural green that matches the species; twigs match the bark (neither red nor pale silver).
 12. **Budget:** tris in budget, one mesh, one material, no colliders, no stations.
 13. **Variants:** clearly different shapes within the family.

@@ -1,0 +1,367 @@
+using System.Collections.Generic;
+using System.Globalization;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+// GroundCells (template): copy to Assets/<World>/Editor/GroundCells.cs, add your world to Worlds, recompile.
+// D.2 perf lever: probe-lit ground-cover clumps (prefab instances with one single-LOD LODGroup each, GPU-instanced)
+// merged into 16 m cells. Measured cost of the per-clump path (33.7k clumps at the worst pose of an outdoor world):
+// LOD.ComputeLOD ~1.5 ms plus ~2 ms of renderer culling / instancing prep on the main thread, and per-instance
+// light-probe sampling on the worker threads, paid even where few clumps are visible.
+//   Build(world):        (re)build <parent>/GroundCells from the world's source roots, then hide the sources
+//                        (inactive + EditorOnly: kept in the scene as source data, stripped from the upload).
+//   UseOriginals(world): show the source clumps again, cells inactive (edit planting, then Build() again).
+//   UseCells(world):     the shipped state (cells on, sources off).
+//   Remove(world):       delete the cells and their generated assets, restore the sources (full rollback).
+// Worlds and their roots are in Worlds below; the call must run with that world's scene active, in edit mode.
+// Each cell is one mesh per (16 m square, reflection-probe set), one submesh per material, drawn with world-owned
+// material copies (<Root>Materials/<name>_Cell.mat; pack materials are never written; a trailing "_W" world-copy
+// suffix is dropped from the name) on ShaderName, a cell variant of the clumps' own shader (contract in
+// references/merging.md "Probe-lit single-LOD clumps: vertex-pulled cells"). Fully merged vertex data cost +22 MB of
+// bundle in the measured world, so the cells use vertex pulling: a cell vertex is 4 bytes of ids (clump index lo/hi,
+// prototype vertex, prototype) and the shader rebuilds it from three small point-sampled tables in <Root>Generated/:
+//   GroundCells_Proto  RGBAFloat  3 texels per prototype vertex: position.xyz + uv.x, normal.xyz + uv.y, colour
+//   GroundCells_Clump  RGBAFloat  2 texels per clump: cell-space origin + hash input, rotation quaternion * sqrt(scale)
+//   GroundCells_SH     RGBAHalf   7 texels per clump: the clump's interpolated light-probe SH as Unity's unity_SH* constants
+// so geometry, the per-object hash tint and the probe lighting are the instanced clump's own. Re-run Build() after a
+// planting change or ANY bake (the SH table is a copy of the baked probes). The three tables are uncompressed,
+// point-sampled data by design: never compress, resize or mip them (texture audits flag them; that is expected).
+// Cull: one LOD per cell, culled where its farthest clump would have been culled (each clump's own LODGroup cull
+// height, lodBias 2 / 90 deg), plus the cell radius.
+// Build log to check: maxPosErr ~1e-6 m and maxShErr 0; a hashMode other than 0 only if a reference render of the
+// original clumps shows a different tint pattern (see HashInput).
+public static class GroundCells
+{
+    public class World
+    {
+        public string Scene;        // scene path; Build refuses any other active scene
+        public string Parent;       // scene path of the object that holds the GroundCells root ("" = scene root)
+        public string[] Sources;    // scene paths of the clump roots (found even when inactive; every renderer below
+                                    // must be a single-LOD clump with uniform positive scale)
+        public string Root;         // world folder with a trailing slash, e.g. Assets/MyWorld/
+    }
+
+    // One entry per world. Example (replace with your own scene and roots):
+    public static readonly Dictionary<string, World> Worlds = new Dictionary<string, World>
+    {
+        { "MyWorld", new World { Scene = "Assets/MyWorld/MyWorld.unity", Parent = "Planting", Sources = new[] { "Planting/GroundCover" }, Root = "Assets/MyWorld/" } },
+    };
+
+    const float CellSize = 16f;
+    const int TexW = 2048;
+    const string CellsName = "GroundCells";
+    const string ShaderName = "World/SoftCrownCell";   // the cell variant of the clumps' shader
+    const float H1 = 12.9898f, H2 = 78.233f;
+    static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+    static readonly VertexAttributeDescriptor[] Layout =
+    {
+        new VertexAttributeDescriptor(VertexAttribute.Position, VertexAttributeFormat.UNorm8, 4),
+    };
+
+    static string MeshAsset(World w) { return w.Root + "Generated/GroundCells.asset"; }
+    static string ProtoAsset(World w) { return w.Root + "Generated/GroundCells_Proto.asset"; }
+    static string ClumpAsset(World w) { return w.Root + "Generated/GroundCells_Clump.asset"; }
+    static string SHAsset(World w) { return w.Root + "Generated/GroundCells_SH.asset"; }
+
+    static string Check(string world, out World w)
+    {
+        if (!Worlds.TryGetValue(world, out w)) return "ERROR unknown world " + world;
+        if (EditorApplication.isPlaying) return "ERROR playing";
+        if (EditorSceneManager.GetActiveScene().path != w.Scene) return "ERROR active scene is not " + w.Scene;
+        if (w.Parent.Length > 0 && GameObject.Find(w.Parent) == null) return "ERROR parent " + w.Parent + " missing";
+        return null;
+    }
+    static void Dirty() { EditorSceneManager.MarkSceneDirty(EditorSceneManager.GetActiveScene()); }
+    static Transform Cells(World w)
+    {
+        if (w.Parent.Length == 0) { var g = FindPath(CellsName); return g != null ? g.transform : null; }
+        return GameObject.Find(w.Parent).transform.Find(CellsName);
+    }
+
+    // inactive objects are invisible to GameObject.Find: resolve a scene path through the scene roots
+    static GameObject FindPath(string path)
+    {
+        var parts = path.Split('/');
+        foreach (var r in EditorSceneManager.GetActiveScene().GetRootGameObjects())
+        {
+            if (r.name != parts[0]) continue;
+            var t = r.transform;
+            for (int i = 1; i < parts.Length && t != null; i++) t = t.Find(parts[i]);
+            if (t != null) return t.gameObject;
+        }
+        return null;
+    }
+
+    static void SetSources(World w, bool shown)
+    {
+        foreach (var p in w.Sources)
+        {
+            var g = FindPath(p); if (g == null) continue;
+            g.SetActive(shown); g.tag = shown ? "Untagged" : "EditorOnly";
+        }
+    }
+
+    public static string UseOriginals(string world)
+    {
+        var e = Check(world, out var w); if (e != null) return e;
+        SetSources(w, true);
+        var c = Cells(w); if (c != null) c.gameObject.SetActive(false);
+        Dirty(); return "originals on, cells " + (c == null ? "absent" : "off");
+    }
+
+    public static string UseCells(string world)
+    {
+        var e = Check(world, out var w); if (e != null) return e;
+        var c = Cells(w); if (c == null) return "ERROR no cells: run Build()";
+        c.gameObject.SetActive(true);
+        SetSources(w, false);
+        Dirty(); return "cells on (" + c.childCount + "), sources off + EditorOnly";
+    }
+
+    public static string Remove(string world)
+    {
+        var e = Check(world, out var w); if (e != null) return e;
+        var c = Cells(w); if (c != null) Object.DestroyImmediate(c.gameObject);
+        foreach (var a in new[] { MeshAsset(w), ProtoAsset(w), ClumpAsset(w), SHAsset(w) }) AssetDatabase.DeleteAsset(a);
+        SetSources(w, true);
+        Dirty(); return "cells removed, sources restored";
+    }
+
+    static Material CellMaterial(World w, Material src, Dictionary<Material, Material> map)
+    {
+        if (map.TryGetValue(src, out var m)) return m;
+        string name = src.name.EndsWith("_W") ? src.name.Substring(0, src.name.Length - 2) : src.name;
+        string path = w.Root + "Materials/" + name + "_Cell.mat";
+        m = AssetDatabase.LoadAssetAtPath<Material>(path);
+        if (m == null) { m = new Material(src); AssetDatabase.CreateAsset(m, path); }
+        else m.CopyPropertiesFromMaterial(src);
+        var kw = src.shaderKeywords; m.shader = Shader.Find(ShaderName); m.shaderKeywords = kw;
+        m.renderQueue = src.renderQueue; m.enableInstancing = false;
+        map[src] = m; return m;
+    }
+
+    // the shader's dot(origin.xz, (H1, H2)) as the GPU rounds it (mode 0 = mul(x) then fused z, 1 = mul(z) then fused x,
+    // 2 = two rounded products and a rounded sum); the fused step is emulated in double (the exact 48-bit product fits)
+    static float HashInput(float x, float z, int mode)
+    {
+        if (mode == 0) { float p = (float)((double)x * H1); return (float)((double)z * H2 + p); }
+        if (mode == 1) { float p = (float)((double)z * H2); return (float)((double)x * H1 + p); }
+        return (float)((double)(float)((double)x * H1) + (double)(float)((double)z * H2));
+    }
+
+    // Unity's SphericalHarmonicsL2 -> the 7 unity_SHAr..unity_SHC constants ShadeSH9 reads
+    static Vector4[] ShConstants(SphericalHarmonicsL2 sh)
+    {
+        var c = new Vector4[7];
+        for (int i = 0; i < 3; i++)
+        {
+            c[i] = new Vector4(sh[i, 3], sh[i, 1], sh[i, 2], sh[i, 0] - sh[i, 6]);
+            c[i + 3] = new Vector4(sh[i, 4], sh[i, 5], sh[i, 6] * 3f, sh[i, 7]);
+        }
+        c[6] = new Vector4(sh[0, 8], sh[1, 8], sh[2, 8], 1f);
+        return c;
+    }
+
+    static Color ShadeSH9(Vector4[] c, Vector3 n)
+    {
+        var n4 = new Vector4(n.x, n.y, n.z, 1f);
+        var vB = new Vector4(n.x * n.y, n.y * n.z, n.z * n.z, n.z * n.x);
+        float vC = n.x * n.x - n.y * n.y;
+        return new Color(Vector4.Dot(c[0], n4) + Vector4.Dot(c[3], vB) + c[6].x * vC,
+                         Vector4.Dot(c[1], n4) + Vector4.Dot(c[4], vB) + c[6].y * vC,
+                         Vector4.Dot(c[2], n4) + Vector4.Dot(c[5], vB) + c[6].z * vC);
+    }
+
+    static Texture2D SaveTable(string path, TextureFormat fmt, int texels, System.Action<Texture2D> fill)
+    {
+        int h = Mathf.Max(1, (texels + TexW - 1) / TexW);
+        var t = new Texture2D(TexW, h, fmt, false, true) { filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, anisoLevel = 0, name = System.IO.Path.GetFileNameWithoutExtension(path) };
+        fill(t); t.Apply(false, false);   // stays readable so CreateAsset serializes the data
+        AssetDatabase.DeleteAsset(path); AssetDatabase.CreateAsset(t, path);
+        return AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+    }
+
+    class Group { public Vector2Int cell; public string probes; public List<MeshRenderer> rs = new List<MeshRenderer>(); }
+
+    public static string Build(string world) { return Build(world, 0); }
+
+    public static string Build(string world, int hashMode)
+    {
+        var e = Check(world, out var w); if (e != null) return e;
+        if (Shader.Find(ShaderName) == null) return "ERROR shader " + ShaderName + " missing";
+        var srcs = new List<GameObject>();
+        foreach (var p in w.Sources) { var g = FindPath(p); if (g == null) return "ERROR source " + p + " missing"; srcs.Add(g); }
+        SetSources(w, true);
+
+        // every renderer under a source must be a clump: a MeshRenderer whose LODGroup has exactly one LOD
+        var rends = new List<MeshRenderer>(); var bad = new List<string>();
+        foreach (var s in srcs) foreach (var r in s.GetComponentsInChildren<Renderer>())
+        {
+            if (!r.enabled) continue;
+            var mr = r as MeshRenderer; var mf = r.GetComponent<MeshFilter>(); var lg = r.GetComponentInParent<LODGroup>();
+            if (mr == null || mf == null || mf.sharedMesh == null || lg == null || lg.lodCount != 1) { if (bad.Count < 10) bad.Add(r.name); continue; }
+            rends.Add(mr);
+        }
+        if (bad.Count > 0) { SetSources(w, Cells(w) == null); return "ERROR not single-LOD mesh clumps: " + string.Join(", ", bad); }
+
+        // prototypes, clumps, groups (16 m square by clump bounds centre, split by the clump's blended reflection probes)
+        var protoIdx = new Dictionary<Mesh, int>(); var protos = new List<Mesh>(); int stride = 0;
+        var groups = new Dictionary<string, Group>();
+        var probeList = new List<ReflectionProbeBlendInfo>();
+        int clumps = 0;
+        foreach (var r in rends)
+        {
+            var m = r.GetComponent<MeshFilter>().sharedMesh;
+            if (!protoIdx.ContainsKey(m)) { protoIdx[m] = protos.Count; protos.Add(m); stride = Mathf.Max(stride, m.vertexCount); }
+            var c = r.bounds.center;
+            var cell = new Vector2Int(Mathf.FloorToInt(c.x / CellSize), Mathf.FloorToInt(c.z / CellSize));
+            r.GetClosestReflectionProbes(probeList);
+            var names = new List<string>(); foreach (var p in probeList) if (p.weight > 0.001f) names.Add(p.probe.name);
+            names.Sort(System.StringComparer.Ordinal);
+            string probes = string.Join("+", names);
+            string key = cell.x + "_" + cell.y + "|" + probes;
+            if (!groups.TryGetValue(key, out var g)) { g = new Group { cell = cell, probes = probes }; groups[key] = g; }
+            g.rs.Add(r); clumps++;
+        }
+        if (protos.Count > 255 || stride > 255) { SetSources(w, Cells(w) == null); return "ERROR prototype table too large for byte ids: " + protos.Count + " x " + stride; }
+        if (clumps > 65535) { SetSources(w, Cells(w) == null); return "ERROR " + clumps + " clumps exceed 16-bit ids"; }
+
+        var old = Cells(w); if (old != null) Object.DestroyImmediate(old.gameObject);
+        if (!AssetDatabase.IsValidFolder(w.Root + "Generated")) AssetDatabase.CreateFolder(w.Root.TrimEnd('/'), "Generated");
+        if (!AssetDatabase.IsValidFolder(w.Root + "Materials")) AssetDatabase.CreateFolder(w.Root.TrimEnd('/'), "Materials");
+        AssetDatabase.DeleteAsset(MeshAsset(w));
+
+        // prototype table
+        var proto = SaveTable(ProtoAsset(w), TextureFormat.RGBAFloat, protos.Count * stride * 3, t =>
+        {
+            var px = new Color[t.width * t.height];
+            for (int p = 0; p < protos.Count; p++)
+            {
+                var m = protos[p]; var v = m.vertices; var n = m.normals; var uv = m.uv; var col = m.colors;
+                for (int i = 0; i < v.Length; i++)
+                {
+                    int k = (p * stride + i) * 3;
+                    px[k] = new Color(v[i].x, v[i].y, v[i].z, uv[i].x);
+                    px[k + 1] = new Color(n[i].x, n[i].y, n[i].z, uv[i].y);
+                    px[k + 2] = col.Length == v.Length ? col[i] : Color.white;
+                }
+            }
+            t.SetPixels(px);
+        });
+
+        var root = new GameObject(CellsName).transform;
+        if (w.Parent.Length > 0) root.SetParent(GameObject.Find(w.Parent).transform, false);
+        var matMap = new Dictionary<Material, Material>();
+        var clumpTex = new Color[((clumps * 2 + TexW - 1) / TexW) * TexW];
+        var shTex = new ushort[((clumps * 7 + TexW - 1) / TexW) * TexW * 4];
+        Mesh container = null; int cells = 0, verts = 0, tris = 0, ci = 0; float maxCull = 0, maxPosErr = 0, maxShErr = 0;
+        var dirs = new Vector3[1]; var irr = new Color[1];
+        var keys = new List<string>(groups.Keys); keys.Sort(System.StringComparer.Ordinal);
+        foreach (var key in keys)
+        {
+            var g = groups[key];
+            var b = g.rs[0].bounds; foreach (var r in g.rs) b.Encapsulate(r.bounds);
+            var go = new GameObject("c" + g.cell.x + "_" + g.cell.y + (g.probes.Length > 0 ? "_" + g.probes : ""));
+            go.transform.SetParent(root, false);
+            go.transform.SetPositionAndRotation(b.center, Quaternion.identity);
+            var w2l = go.transform.worldToLocalMatrix; var invRot = Quaternion.Inverse(go.transform.rotation);
+
+            var ids = new List<Color32>(); var subIdx = new Dictionary<Material, List<int>>(); var subOrder = new List<Material>();
+            float maxClumpDist = 0, maxRad = 0;
+            foreach (var r in g.rs)
+            {
+                var m = r.GetComponent<MeshFilter>().sharedMesh; int p = protoIdx[m];
+                var tr = r.transform; var ls = tr.lossyScale; float s = ls.x;
+                if (Mathf.Abs(ls.y - s) > 1e-4f * Mathf.Abs(s) || Mathf.Abs(ls.z - s) > 1e-4f * Mathf.Abs(s) || s <= 0) { Object.DestroyImmediate(root.gameObject); SetSources(w, true); return "ERROR non-uniform or mirrored clump scale on " + tr.name; }
+                var lp = w2l.MultiplyPoint3x4(tr.position); var q = invRot * tr.rotation; float sq = Mathf.Sqrt(s);
+                var o = tr.position;
+                clumpTex[ci * 2] = new Color(lp.x, lp.y, lp.z, HashInput(o.x, o.z, hashMode));
+                clumpTex[ci * 2 + 1] = new Color(q.x * sq, q.y * sq, q.z * sq, q.w * sq);
+                SphericalHarmonicsL2 shp;
+                LightProbes.GetInterpolatedProbe(r.probeAnchor != null ? r.probeAnchor.position : r.bounds.center, r, out shp);
+                var shc = ShConstants(shp);
+                for (int k = 0; k < 7; k++) { int o4 = (ci * 7 + k) * 4; shTex[o4] = Mathf.FloatToHalf(shc[k].x); shTex[o4 + 1] = Mathf.FloatToHalf(shc[k].y); shTex[o4 + 2] = Mathf.FloatToHalf(shc[k].z); shTex[o4 + 3] = Mathf.FloatToHalf(shc[k].w); }
+                // self-checks on the first vertex: rebuilt cell-space position vs Unity's matrix, ShadeSH9 vs SphericalHarmonicsL2.Evaluate
+                var v0 = m.vertices[0]; var l2c = w2l * r.localToWorldMatrix;
+                maxPosErr = Mathf.Max(maxPosErr, ((q * v0) * s + lp - l2c.MultiplyPoint3x4(v0)).magnitude);
+                dirs[0] = r.localToWorldMatrix.MultiplyVector(m.normals[0]).normalized; shp.Evaluate(dirs, irr);
+                var mine = ShadeSH9(shc, dirs[0]); maxShErr = Mathf.Max(maxShErr, Mathf.Abs(mine.r - irr[0].r) + Mathf.Abs(mine.g - irr[0].g) + Mathf.Abs(mine.b - irr[0].b));
+
+                int baseV = ids.Count;
+                for (int i = 0; i < m.vertexCount; i++) ids.Add(new Color32((byte)(ci & 255), (byte)(ci >> 8), (byte)i, (byte)p));
+                var mats = r.sharedMaterials;
+                for (int sm = 0; sm < m.subMeshCount; sm++)
+                {
+                    var cm = CellMaterial(w, mats[Mathf.Min(sm, mats.Length - 1)], matMap);
+                    if (!subIdx.TryGetValue(cm, out var list)) { list = new List<int>(); subIdx[cm] = list; subOrder.Add(cm); }
+                    foreach (var t in m.GetTriangles(sm)) list.Add(baseV + t);
+                }
+                // the clump's own cull distance (lodBias 1, tan(fov/2) = 1): size / 2 / its single LOD's cull height
+                var lg = r.GetComponentInParent<LODGroup>();
+                float cullH = lg.GetLODs()[0].screenRelativeTransitionHeight;
+                maxClumpDist = Mathf.Max(maxClumpDist, lg.size * Mathf.Abs(lg.transform.lossyScale.x) * 0.5f / Mathf.Max(cullH, 1e-4f));
+                maxRad = Mathf.Max(maxRad, Vector3.Distance(r.bounds.center, b.center));
+                ci++;
+            }
+
+            var mesh = new Mesh { name = go.name };
+            mesh.SetVertexBufferParams(ids.Count, Layout);
+            mesh.SetVertexBufferData(ids, 0, 0, ids.Count, 0, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
+            int nIdx = 0; foreach (var cm in subOrder) nIdx += subIdx[cm].Count;
+            bool big = ids.Count > 65535;
+            mesh.SetIndexBufferParams(nIdx, big ? IndexFormat.UInt32 : IndexFormat.UInt16);
+            mesh.subMeshCount = subOrder.Count;
+            int start = 0;
+            for (int sm = 0; sm < subOrder.Count; sm++)
+            {
+                var list = subIdx[subOrder[sm]];
+                if (big) mesh.SetIndexBufferData(list, 0, start, list.Count, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
+                else { var u16 = new ushort[list.Count]; for (int i = 0; i < u16.Length; i++) u16[i] = (ushort)list[i]; mesh.SetIndexBufferData(u16, 0, start, u16.Length, MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices); }
+                mesh.SetSubMesh(sm, new SubMeshDescriptor(start, list.Count), MeshUpdateFlags.DontRecalculateBounds | MeshUpdateFlags.DontValidateIndices);
+                start += list.Count;
+            }
+            mesh.bounds = new Bounds(Vector3.zero, b.size + Vector3.one * 0.02f);   // the ids carry no positions: bounds from the clumps
+            if (container == null) { AssetDatabase.CreateAsset(mesh, MeshAsset(w)); container = mesh; }
+            else AssetDatabase.AddObjectToAsset(mesh, container);
+
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            var r0 = g.rs[0];
+            go.layer = r0.gameObject.layer;
+            mr.sharedMaterials = subOrder.ToArray();
+            mr.shadowCastingMode = ShadowCastingMode.Off;
+            mr.receiveShadows = r0.receiveShadows;
+            mr.lightProbeUsage = LightProbeUsage.Off;
+            mr.reflectionProbeUsage = r0.reflectionProbeUsage;
+            mr.motionVectorGenerationMode = r0.motionVectorGenerationMode;
+            mr.allowOcclusionWhenDynamic = r0.allowOcclusionWhenDynamic;
+            GameObjectUtility.SetStaticEditorFlags(go, 0);
+
+            var cl = go.AddComponent<LODGroup>();
+            cl.fadeMode = LODFadeMode.CrossFade; cl.animateCrossFading = true;
+            cl.SetLODs(new[] { new LOD(0.01f, new Renderer[] { mr }) });
+            cl.RecalculateBounds();
+            float cellDist = maxClumpDist + maxRad * 0.5f;   // bias-1 units; at lodBias 2 the radius term is maxRad metres
+            cl.SetLODs(new[] { new LOD(cl.size * 0.5f / cellDist, new Renderer[] { mr }) });
+            maxCull = Mathf.Max(maxCull, cellDist * 2);
+
+            cells++; verts += ids.Count; tris += nIdx / 3;
+        }
+
+        var clumpT = SaveTable(ClumpAsset(w), TextureFormat.RGBAFloat, clumps * 2, t => t.SetPixels(clumpTex));
+        var shT = SaveTable(SHAsset(w), TextureFormat.RGBAHalf, clumps * 7, t => t.SetPixelData(shTex, 0));
+        foreach (var cm in matMap.Values)
+        {
+            cm.SetTexture("_CellProto", proto); cm.SetTexture("_CellClump", clumpT); cm.SetTexture("_CellSH", shT);
+            cm.SetFloat("_ProtoStride", stride); EditorUtility.SetDirty(cm);
+        }
+        AssetDatabase.SaveAssets();
+        SetSources(w, false);
+        Dirty();
+        return string.Format(Inv, "cells={0} clumps={1} protos={2}x{3} verts={4} tris={5} materials={6} hashMode={7} maxPosErr={8:0.000000}m maxShErr={9:0.000000} maxCull(lodBias2,90deg)={10:0}m raw={11:0.0} MB",
+            cells, clumps, protos.Count, stride, verts, tris, matMap.Count, hashMode, maxPosErr, maxShErr, maxCull, (verts * 4f + tris * 6f + clumps * (32 + 56)) / 1048576f);
+    }
+}

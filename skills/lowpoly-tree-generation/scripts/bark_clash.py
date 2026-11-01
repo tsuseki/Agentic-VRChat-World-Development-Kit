@@ -27,9 +27,15 @@ picture). 8 eye-height azimuths by default plus any set camera (a vignette); pos
 BoothAssets 87c9724a, 0 clashes in 3D but an X from the vignette 05 camera (2 crossings there). `az_step` / `dists`: the
 any-direction ring (Main's acceptance for groves: 36 azimuths x 8, 12, 20 m + set cameras, 0 crossings; positive control
 the BanyanGrove of BoothAssets 3a5e68b4: 24 crossings, 1 at the World_Tropical grove 2 camera).
+Blind spot: only projected stem / limb AXES are tested, so a stem rising from behind another (a silhouette overlap with
+no axis crossing) scores 0; review the in-world frames by eye as well.
 `ground_contact(bm, k)` -> hanging tips (aerial roots: FLOAT when they end 0.1-2.2 m up, shipped) as a height histogram,
 and every pillar's burial depth below z 0 at full girth (SHALLOW under 1.4 m: on a slope its end cone shows); positive
 control the Banyans of 3a5e68b4 (4 / 8 / 8 FLOAT tips, burial 0.06 m).
+`elbow_sockets(bm, k)` -> limbs socketed into a host whose axis turns more than ELBOW_TURN deg across the socket
+(tangents at +-ELBOW_W x the host radius from where the limb's base sits on it): a side limb on the outside of a stem's
+sharp elbow reads as a sawn beam on a bent pipe, which the clash check allows (socket zone). Positive control the
+BanyanGrove of BoothAssets 31b9338d (4 sockets at 65-66 deg; every other Tropical tree surveyed <= 42 deg).
 """
 import math
 from mathutils import Vector
@@ -268,6 +274,36 @@ def ground_contact(bm, k=1.0, lo=TIP_LO, hi=TIP_HI, bury=BURY_MIN, bins=(0.1, 0.
                 tip_min=min([x["z"] for x in tips], default=None), bury=bur,
                 n_shallow=sum(1 for x in bur if x["cls"] == "SHALLOW"),
                 bury_min=min([x["bury"] for x in bur if x["kind"] == "pillar"], default=None))
+
+
+# ---- elbow sockets: a limb socketed into a host that bends sharply right there (review banyan_v3: the BanyanGrove's
+# back stem turns ~66 deg into its merged in-plane limb and the side limbs leave the outside of that elbow: "a sawn
+# beam on a bent pipe"; bark_clash allows it as socket overlap and base_cones sees every base ring buried)
+ELBOW_TURN = 45.0  # deg: the host axis may turn at most this much across a socket
+ELBOW_W = 1.5      # x host radius each side of the socket: the tangents compared
+
+
+def elbow_sockets(bm, k=1.0, max_turn=ELBOW_TURN, w=ELBOW_W):
+    """Every limb (non-ground, not a K3 pillar) whose base end is socketed in a host: the angle between the host's ring
+    axis tangents w x the host radius before and after the point nearest the limb's base ring centre (clipped to the
+    host's ends). ELBOW = more than max_turn. -> dict(sockets=[...] worst first, n_elbow, turn_max)."""
+    C = _Check(bm, k); rows = []
+    for (tid, end), (h, zone, lv, E) in C.hosts.items():
+        t = C.tubes[tid]
+        if end != 0 or t["ground"] or len(h["RP"]) < 3: continue
+        _, rh, s, _, _ = _near(h["RP"], h["RR"], h["RS"], t["RP"][0])
+        L = h["RS"][-1]; ww = min(w * rh, s, L - s)
+        def tan(x):
+            for i in range(len(h["RP"]) - 1):
+                if h["RS"][i + 1] >= x: return (h["RP"][i + 1] - h["RP"][i]).normalized()
+            return (h["RP"][-1] - h["RP"][-2]).normalized()
+        turn = math.degrees(tan(max(s - ww, 1e-6)).angle(tan(s + ww))) if ww > 0 else 0.0
+        rows.append(dict(limb=_label(t, C), host=_label(h, C), turn=round(turn, 1), r=round(t["RR"][0] / k, 3),
+                         r_host=round(rh / k, 3), at=[round(x / k, 2) for x in t["RP"][0]],
+                         cls="ELBOW" if turn > max_turn else "ok"))
+    rows.sort(key=lambda x: -x["turn"])
+    return dict(sockets=rows, n_elbow=sum(1 for x in rows if x["cls"] == "ELBOW"),
+                turn_max=rows[0]["turn"] if rows else 0.0)
 
 
 # ---- silhouette crossings (screen space): two trunks crossing in a picture read as one through the other, whatever

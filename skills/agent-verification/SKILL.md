@@ -41,7 +41,9 @@ have caught. Editor tooling (`WorldCapture`, `ZFightScan`, `ZFightRender`, `Worl
 | 10 | Same pass: print median, p90 and **worst** nearest-light-probe distance with the object name. A worst far above p90 is a coordinate bug (often a position applied twice, every component exactly 2×), not a probe-density problem |
 | 11 | Clearances from `Renderer.bounds` (encapsulated over children) with `Intersects` and the gap on every axis, never from transform positions: a position is an anchor, not an extent |
 | 12 | Key verification lookups by object identity (the `Renderer` reference or instance ID), not name. A defect larger than the world it lives in means the check is broken |
-| 13 | Z-fighting: the stage gate and its scanner control are in `.omp/skills/world-pipeline/SKILL.md` "Z-fighting gate" |
+| 13 | Z-fighting: the stage gate and its scanner control are in `.omp/skills/world-pipeline/SKILL.md` "Z-fighting gate". When verifying a fix, scope `ZFightScan` to the changed roots: a whole world takes minutes (≈ 330 s) |
+| 14 | Settle the LOD cross-fade before every capture you compare (review-protocol "Capture rig"): `LODGroup.crossFadeAnimationDuration = 0.001f`, render each pose twice and keep the second, restore the old value. The first render after a camera jump can catch a mid-fade dithered level |
+| 15 | After an asset change, find the stored camera shots it affects instead of re-shooting all or eyeballing: render every camera small with the asset's renderers `forceRenderingOff` on vs off and threshold the changed-pixel share; inspect the mask, because animated water and sun glitter give false positives |
 
 ## 3. Positive controls: a zero is not evidence on its own
 
@@ -63,6 +65,9 @@ mask selected nothing, threshold typo. A zero arrives exactly when you most want
   before/after difference means anything.
 - **Pipelines that write files.** After writing, re-check every output (e.g. re-hash all stored
   images and assert no duplicate pairs).
+- **Walk tests.** A walk test must fail when the feet are over water with no active renderer below
+  them, and runs with an invisible-platform control: an inactive dock deck with a live collider
+  once passed as walkable floor.
 
 ## 4. Checks that cannot see their defect
 
@@ -88,6 +93,10 @@ mask selected nothing, threshold typo. A zero arrives exactly when you most want
 | One shot per room | lighting (facing dominates) | at least 4 yaws, mean and spread |
 | Level camera sweep | undercroft and overhang ceilings | sweep pitched up (about -22°) as well |
 | Capture with occlusion culling on | moved static objects | `useOcclusionCulling = false` |
+| % of frame pixels clipped or changed | *where* the pixels are (clouds vs cushions; one lost object vs speckle) | locate by row or region and by the largest connected blob before quoting a whole-frame % |
+| Viewing a PNG downscaled (an image viewer fitting it to the window) | true edge pixels: resampling paints a pale net (fake halo) around every leaflet | inspect 1:1 and 4× nearest-neighbour crops, and a magenta-sky render, before blaming crunch, alpha-to-coverage, cutoff or mips |
+| Frozen stills (wind off, one pose) | wind motion, walking cull and pop-in | wind A/B with the keyword on, a `lodBias` step for walking distance; list what stays unchecked |
+| Geometric visibility model (crown rays, bounds) to choose what to cull | real occlusion (it over-culled 6× and exposed skyline objects) | the id-buffer hide-and-diff (§5) |
 
 ## 5. Measuring rendered frames
 
@@ -108,6 +117,18 @@ mask selected nothing, threshold typo. A zero arrives exactly when you most want
   never by re-typing values; select by material, not by name.
 - **Camera placement.** Raycast to the ground for height and linecast eye-to-target, rejecting
   blocked bearings; offsets from a bounds centre on a slope put cameras inside rocks.
+- **Hide-and-diff (prove a cull or a hidden set changes nothing).** Render per-object ids with a
+  replacement shader from every reachable eye point × 8 headings × 2 pitches (e.g. 0° and 30° up);
+  objects never present in any id buffer are the unseen set. Hide that set, then diff beauty renders
+  of sampled views with it shown vs hidden, LOD cross-fade frozen first (§2 step 14), and run a
+  positive control (hide one known-visible object) through the same diff. Pass: no pair ≥ 30 px
+  while the control trips. A geometric crown-ray model chose 799 objects where the id buffer found
+  131 truly unseen.
+- **Retouch verification (2-D edits to a still).** Diff the final against the graded raw and render
+  the changed pixels (> 8/255) as a magenta overlay: only the title block and the named spots may
+  change. For streak removal, compare the high-pass column-profile std and peak
+  (`col_mean − uniform_filter1d(col_mean, 41)`) in the treated band before and after, against an
+  untreated control band.
 
 ## 6. Handing work to a reviewer
 
@@ -124,7 +145,9 @@ give you" and "For the agent that dispatches reviewers". On top of that, the bui
 - In a sunlit exterior, says up front that no artificial lights are expected; "enough lights, each
   with a fixture" is an interior criterion.
 - Sends screenshots as JPEG (quality ~85) or with the long edge capped near 1600 px, attaching only
-  the ones discussed: request limits are in bytes, not tokens, and a PNG can trip HTTP 413.
+  the ones discussed: request limits are in bytes, not tokens, and a PNG can trip HTTP 413. Review
+  sheets you read back yourself: save with `optimize=True` and downscale when the file is over
+  19 MB; the image reader refuses files over 20 MB.
 - Before any commit, bake or build: deletes every `__*__` capture object and asserts the
   realtime/mixed light count is 0; both checks, since either can miss alone, and the SDK saves the
   open scene on build.
@@ -167,6 +190,20 @@ review-protocol. Per finding:
   render is the proof, and route the result to a separate reviewer.
 - **Reviewer briefs come from the dispatcher,** quoted from the design document; mid-run
   corrections go to the running reviewer as a message, with the difference called out as a finding.
+- **Shared working tree.** Commit by pathspec (`git add -A -- <paths>`, `git commit -m … --
+  <paths>`), never stage files another agent modified, and check `git status` on the folders a
+  package export includes before exporting: exports carry uncommitted foreign edits.
+- **Long jobs.** Use the host's async/background job facility and wait for its completion notice;
+  a job started with `cmd &` inside a tool's shell dies with the call (a backgrounded `git add`
+  once never landed: confirm with `git log --oneline -1`). Eval kernels die on long calls and lose
+  their state, so write specs and survey results to disk as you go.
+- **Re-read images under a new name.** Reading an image regenerated at the same path can show the
+  old picture; copy it to a new file name before viewing, and retry once if the first read of the
+  copy fails.
+- **Store and gallery copies as hardlinks.** Keep copies of one render as hardlinks so a re-render
+  updates every copy. Writing in place (PIL `save` to the same path) keeps the link;
+  delete-and-recreate (`os.replace`, temp-then-rename, `git checkout`) silently breaks it. Verify
+  with `os.path.samefile` or matching hashes; re-link with `os.link`.
 
 ## 9. What a "done" report carries
 
@@ -177,3 +214,5 @@ review-protocol. Per finding:
 - Findings closed, already-closed (with the proving measurement), pre-existing (with numbers from
   the other state), and deviations from reviewer numbers with the reason.
 - The stage reviewer's verdict. Without SHIP IT the work is not done.
+
+Verification lessons checklist: [references/lessons-verification.md](references/lessons-verification.md).

@@ -205,10 +205,22 @@ Once the real objects exist:
 ## Lighting (D.1)
 
 Lay out VRC Light Volumes over every playable area (overlapping neighbours, ≤ 32 active) and a
-simple coarse light-probe grid → draft bake → final-reviewer's mood check against the lighting
+simple coarse light-probe grid; check volume coverage at feet, eye and head over every reachable ground cell (re-check
+after adding any structure) → draft bake → final-reviewer's mood check against the lighting
 board → final bake (the full render bakes the volumes) → reflection probes **immediately**
-(renderers flagged `ReflectionProbeStatic`). Light to the boards' lighting character and the
-archetypes' light rows; never raise a level the user approved.
+(renderers flagged `ReflectionProbeStatic`; box-projected probes under closed canopy). Light to the boards' lighting
+character and the archetypes' light rows; never raise a level the user approved.
+
+- **Launch** each Bakery render through exactly one queued `delayCall` from a short call and poll; the start signal is
+  the active scene turning into `Assets/Bakery/_tempScene.unity` (`bakery-light-baking` "Scripted bakes"). Never
+  re-queue because `bakeInProgress` still reads false.
+- **After every bake** run `bakery-light-baking` "Post-bake sequence" in order: finished → reflection probes →
+  restore the project-wide Bakery storage → re-run the world's bake-dependent levers (clump cells, probes Off on
+  lightmapped renderers) → verify (lightmap count, bindings incl. any re-imported prefab family, Light Volumes,
+  0 non-Baked lights) → guarded save.
+- **LV materials:** a `Light Volume PBR` metallic map is packed R = √metallic, G = AO (255), A = smoothness; a Standard
+  map with metallic in G turns non-metals black. Emitters moved to LV PBR need their emission recalibrated
+  (`materials-shaders` §2 F).
 
 ## D → C loop-back
 
@@ -232,7 +244,7 @@ invalidates (rebake the area, rebake the probes, re-measure, rerun the final rev
    each route/door/toggle → pass/fail with positions; this is the play-test evidence
    dressing-reviewer's C.2 review needs (reviewers never enter play mode).
 4. **D.1 only:** report the newest lightmap file timestamp and every reflection-probe texture
-   timestamp (probes must be newer); final-reviewer requires both.
+   timestamp (probes must be newer), and the post-bake verify numbers; final-reviewer requires them.
 5. Save the scene; report: what changed (object paths), scan output, audit output, the furniture
    record (plan JSON `furniture` entries and prop schedule rows written this pass, C.1), the
    door-zone, spacing and LOD-ghost check output (C.1), unfinished work for the next pass plan,

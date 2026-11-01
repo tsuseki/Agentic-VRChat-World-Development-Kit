@@ -27,3 +27,9 @@ Cost: A2C's 4-level dither raises the whole-pixel crawl (about 4 → 10–20), s
 - Coverage = the target alone over a black and a white clear, alpha = 1 − (white − black). A luminance-difference proxy disagreed with this by ~3 points.
 - Check 6, 9, 20 and 40 m, plus a 1.5 m close-up to confirm near leaves are unchanged.
 - Implementation: `ShimmerLab.cs`, kept in the tree-pack project's `_Dev/Editor`.
+
+**Bare-twig (winter) atlases:** at 25 m a card is ~37 px tall for ~1000 texels, so 2–8 px twigs mip to alpha 0.1–0.3 and Preserve Coverage keeps only the densest texels: the fans break into dots that pop as the head turns.
+- Thinning the atlas itself cut flicker most: 48.6 → 35.2 at 25 m, i.e. above the supersampled floor +24.6 → +6.0 (the pruned atlas: about 0.013–0.03 opaque per cell).
+- A sub-cutoff far-mip haze (alpha below the cutoff around the twigs, plus Preserve Coverage with alpha reference 0.50 on the winter atlas) keeps thin twigs from breaking into dots at 25 m, but it adds perceived mass. On a bare tree keep only a trace: amplitude 0.22 instead of 0.38, max alpha 56/255 (`.omp/skills/lowpoly-tree-generation/scripts/twig_prune.py --haze 0.22`).
+- With no haze at all flicker is lower still, but the fringe becomes dots.
+- Alpha-blend shaders show the haze as a grey glow.

@@ -82,6 +82,9 @@ Run them after save, close and reopen, so you check what will ship:
   - Renderers placed or cloned since the last bake are unbaked, whatever their copied index says. A
     clone keeps its source's serialized index and offset; Bakery's storage has no row for it.
   - Renderers moved to P need their storage row removed, or Bakery restores the old binding at load.
+  - **Re-imported prefab families** get new LOD child IDs, so every placed instance loses its binding
+    (`lightmapIndex < 0`) until a re-bake. After any re-import count unbound renderers under the family
+    (78 unbound before the re-bake, 0 of 117 after).
 - **Never hard-code lightmap ids.** Adding a group adds a map and shifts the ids after it; an emptied
   group drops out. Check by renderer path ("bound to some valid map"), never "bound to id 5".
 - **Expected atlases:** compare the count with the plan. One extra map is the first sign of an orphan
@@ -113,3 +116,7 @@ Nothing here replaces final-reviewer criterion 2; it is the builder's own eviden
    - A colour shift between bakes can be a repack moving a chart, not a lighting change. Confirm with
      a render.
    - A prop that reads cold may simply be unbaked (index −1).
+6. **Comparing two bakes** (atlas size, settings, source scene vs world copy): beauty renders stay ~18 %
+   different for every variant (wind, LOD fade, textures), so render each fixed pose with a replacement shader
+   that outputs only the decoded lightmap (keep the cutout alpha clip) and report the % of pixels more than 24/255
+   off. Keep the pose list in a file; a variant against itself must read 0 %.

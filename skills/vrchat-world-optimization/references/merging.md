@@ -142,6 +142,69 @@ zones the player is not in to save CPU). Prove every change below with the on/of
 - Occlusion is also a layout tool: a corner or dogleg in a long corridor and a wall where no view is
   wanted cut more draws than any bake setting (`layout-reviewer` criterion 9).
 
+## Per-instance data a merge destroys
+
+Before merging instanced or prefab clumps, list what the shader derives **per object**; a merge (and static batching)
+removes the object:
+
+1. **Variation hashed from the object origin** (`unity_ObjectToWorld` translation, e.g.
+   `frac(sin(dot(o.xz, float2(12.9898, 78.233))) * 43758.5453)`). Static batching already collapses it.
+2. **Per-instance probe SH.** One probe per cell or an LPPV is not close enough: inside 16 m cells the SH spread was
+   median 45 % (21 % at 8 m), with 26.5k clumps more than 10 % off their cell mean. Reproduce Unity's exact sample with
+   `LightProbes.GetInterpolatedProbe(r.probeAnchor ? r.probeAnchor.position : r.bounds.center, r, out sh)` (SH error 0).
+
+Fix: a world-owned shader copy that reads both from vertex data or a table. **A hash input precomputed on the CPU must
+reproduce the GPU's rounding exactly**, because `sin(...) * 43758` turns a 1-ulp difference into a different value:
+emulate the `dp2` fused order in double (mode 0: `p = (float)(x*H1); (float)(z*H2 + p)`) and test the candidate orders
+against a reference render. Mode 0 matched on the development GPU; [INFERENCE] other vendors may differ, which only
+reshuffles the tint pattern, never the geometry.
+
+## Probe-lit single-LOD clumps: vertex-pulled cells
+
+For thousands of GPU-instanced single-LOD clump prefabs (each one LODGroup costs main-thread time every frame, visible or
+not). Builder template: `../scripts/GroundCells.cs.txt`.
+
+- **Why not a plain merge:** baked vertex data inflates the upload and LZ4 compresses quantized vertices poorly:
+  1.225 M vertices took a scene bundle 182.5 → 218.0 MB at 48 B/vertex, 205.0 MB at 28 B (F16 position, SNorm8 normal,
+  UNorm16 UV, RGBM8 irradiance); vertex pulling 189.1 MB.
+- **Cells:** 16 m squares by clump bounds centre, split per blended reflection-probe set, one mesh per cell, one submesh
+  per material (world-owned `<name>_Cell.mat` copies on the cell shader), shadows off, `lightProbeUsage` Off (the SH
+  comes from the table), no static flags.
+- **Vertex format:** one `VertexAttribute.Position`, `UNorm8 × 4` = (clump index lo, clump index hi, prototype vertex,
+  prototype). Bounds from the clumps (the ids carry no positions), padded 1 cm.
+- **Tables** (point-sampled, clamp, no mips, 2048 texels wide, one linear texel index per item, uncompressed by
+  design; audits will flag them, never compress them):
+  - prototypes `RGBAFloat`, 3 texels per prototype vertex: position.xyz + u, normal.xyz + v, vertex colour;
+  - clumps `RGBAFloat`, 2 texels: cell-space origin + hash input, rotation quaternion × √scale (|q|² = scale);
+  - SH `RGBAHalf`, 7 texels: `unity_SHAr, Ag, Ab, Br, Bg, Bb, C` of the clump's interpolated probe.
+- **Shader contract** (vertex function of a copy of the clumps' shader; material gets `_CellProto`, `_CellClump`,
+  `_CellSH`, `_ProtoStride`):
+  ```hlsl
+  float4 CellFetch(sampler2D t, float4 ts, float i) {       // ts = _TexelSize
+      float y = floor(i * ts.x); float x = i - y * ts.z;
+      return tex2Dlod(t, float4((x + 0.5) * ts.x, (y + 0.5) * ts.y, 0, 0)); }
+  float4 id = round(v.vertex * 255);
+  float clump = id.x + id.y * 256, pv = (id.w * _ProtoStride + id.z) * 3;
+  float4 p0 = CellFetch(_CellProto, _CellProto_TexelSize, pv), p1 = CellFetch(_CellProto, _CellProto_TexelSize, pv + 1);
+  float4 c0 = CellFetch(_CellClump, _CellClump_TexelSize, clump * 2), c1 = CellFetch(_CellClump, _CellClump_TexelSize, clump * 2 + 1);
+  float qq = c1.w * c1.w - dot(c1.xyz, c1.xyz);              // rotate by q and scale by |q|^2
+  v.vertex = float4(qq * p0.xyz + 2 * dot(c1.xyz, p0.xyz) * c1.xyz + 2 * c1.w * cross(c1.xyz, p0.xyz) + c0.xyz, 1);
+  v.normal = normalize(qq * p1.xyz + 2 * dot(c1.xyz, p1.xyz) * c1.xyz + 2 * c1.w * cross(c1.xyz, p1.xyz));
+  v.texcoord = float4(p0.w, p1.w, 0, 0); v.color = CellFetch(_CellProto, _CellProto_TexelSize, pv + 2);
+  // hash: frac(sin(c0.w) * 43758.5453); probes: evaluate the 7 SH texels at clump*7 like ShadeSH9 at the
+  // (wind-bent) world normal and add as indirect diffuse with `noambient` on the surface pragma
+  ```
+- **Limits** (the builder refuses): ≤ 255 prototypes, ≤ 255 vertices per prototype, ≤ 65,535 clumps, uniform positive
+  scale, single-LOD clumps only. Probe-lit clumps only: lightmapped ground cover would lose its lightmap.
+- **Cull:** cell cull height = the cull distance of the farthest clump in the cell (its own LODGroup cull height at
+  lodBias 2, 90° FOV) plus the cell radius, so no clump culls earlier than before; the cost is a band of extra far
+  clumps up to ~11 m past the old cull (≤ 0.14 % of pixels). Keep cross-fade.
+- **Lifecycle:** sources stay in the scene inactive + `EditorOnly` (source data, stripped from the upload); `UseOriginals`
+  to edit planting, `Build` again after every planting edit and every bake.
+- **Proof:** build self-check position error ~1 µm, SH error 0; same-camera diff ≤ 0.14 % of pixels > 18/255 with wind
+  frozen; bundle-size A/B. ~13 point fetches per vertex can't be measured in the editor: confirm with a client capture
+  on a weak GPU.
+
 ## Proof
 
 - Same-camera before/after captures with stable content (downloaded images loaded or hidden in

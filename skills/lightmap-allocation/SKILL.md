@@ -83,6 +83,11 @@ Full table with reasons and settings: [references/reception-and-density.md](refe
   - P renderers carry no selector.
 - **Padding:** gutters measured in texels at the final resolution ≥ padding + 1. Bakery texel
   padding 8 on hero groups.
+- **Atlas size from need:** sum the chart texels a fixed group needs before picking its resolution; an
+  oversized atlas is upload size for nothing (an 8192² group holding 17.1 M needed texels cost ~47 MB of bundle
+  against 4096²). Shared LOD UVs leave atlas size as the only density lever.
+- **First-bake floor for small props:** `SIL_min = ((target + 6) / (tpu × √(2A)))²`, so no chart rect falls under
+  Bakery's padding.
 
 Maths, per-class table and VRAM: [references/reception-and-density.md](references/reception-and-density.md) §2–§4.
 
@@ -134,12 +139,15 @@ renderer with the metrics above. Metric definitions and the time-budgeted loop:
   - nothing sits on a 16×16 map;
   - the storage `maps` count equals the live count;
   - clones and renderers placed since the bake count as unbaked;
-  - never hard-code lightmap ids, which shift when a group is added or emptied.
+  - never hard-code lightmap ids, which shift when a group is added or emptied;
+  - prefab families re-imported since the bake are unbound (new LOD child IDs) until a re-bake: count
+    `lightmapIndex < 0` under them.
 - **Visual:**
   - a lightmap-only render of each room;
   - near-reach shots (≤ 0.6 m, eye height) of every soft or organic piece and every audit-flagged
     renderer;
-  - merged vs unmerged originals from the same views.
+  - merged vs unmerged originals from the same views;
+  - comparing two bakes: lightmap-only renders and % of pixels > 24/255 off, never beauty renders.
 - **Positive control:** the same rig on one known-bad piece (an unfixed flagged renderer, or a copy
   at Scale In Lightmap 0.1) must show the defect. Quote both results.
 - **Gate:** the final-reviewer is the gate.

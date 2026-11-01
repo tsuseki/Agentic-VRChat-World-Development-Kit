@@ -93,8 +93,18 @@ yaw), never from pixels, and quote the measured value in each finding.
 - **Door zones**: per door, a box ≥ 1.2 m deep into the room × (door width + 0.3 m each side) holds
   no furniture in the body-height band, and a ≥ 0.9 m route leads on into the room. Run the check
   yourself (read-only) when the builder's output is missing or stale; any intrusion is a **blocker**.
+  - **Doors inside one imported model** (a cabin or villa delivered as one mesh) have no door
+    object. Find the opening with horizontal rays through the door plane about 1.8 m above the
+    floor, stepping 0.02 m along it. Then scan the zone (opening ± 0.3 m, 0–1.2 m deep, 0.12–2.0 m
+    above the floor) with a 0.04–0.06 m grid of downward rays against temporary `MeshCollider`s on
+    the model's meshes, and cast an upward ray from each hit to tell a hanging pendant (a nit) from
+    floor furniture (a blocker). Furniture baked into such a model once stood 0.86 m inside the zone.
 - **Group spacing**: sofa ends ≥ 0.35 m apart or a side table between them (touching ends are a
   should-fix); seat fronts ≈ 0.45–0.55 m from the coffee table.
+- **Dining and bar clearance**: measure piece to piece with convex temporary `MeshCollider`s,
+  alternating `ClosestPoint` 8 times between the two pieces, and read the horizontal distance.
+  Thresholds are §5.11 ×0.8: behind a seated diner ≥ 0.65 m, walk past ≈ 0.90 m, bar stool pitch
+  ≥ 0.49 m (0.61 ×0.8; wing stools 0.44 m apart failed).
 - **Decor on archived pieces**: nothing left lying on a bed or seat (books, trays, cushions out of
   place) where the piece under it was archived or replaced; a should-fix.
 - **LOD ghosts**: after pieces were archived out of perf merges or LOD groups, no enabled LOD-copy
@@ -140,6 +150,18 @@ yaw), never from pixels, and quote the measured value in each finding.
      back plate ≤ 3 mm off the wall face; layered soft goods (duvet, throw, blanket, sheet) do not
      interpenetrate each other or the frame. Then take a close-up from 0.6–1.0 m of every bathroom
      fixture, every bed and every counter top. Any miss is a should-fix; several are a blocker.
+   - **Ground contact on terrain, measured.** Platforms, pads, slabs, decks, stair feet and
+     dressing props standing on sloping ground get the same sweep against the **visible** terrain
+     mesh: add temporary `MeshCollider`s to its readable children and take the base-vertex gap
+     (vertices within 0.03 m of the piece's lowest local y, deduplicated on a 5 cm grid; negative
+     = buried). A flat base on a slope floats on its downhill side (platforms 0.18–0.30 m, pads
+     4–9 cm); the fix is a plinth skirt, not a nudge. Also sweep each piece against its neighbours'
+     colliders with the piece itself excluded.
+   - **Props against tree trunks.** Check every renderer under 3.6 m tall against every trunk
+     `CapsuleCollider` within 12 m: sample heights 0.05 m to min(height, 2.6 m) in 0.25 m steps,
+     take `ClosestPoint` and the 2-D gap from the prop's box to the trunk, and flag gaps under
+     0.5 m (skip rope or cable meshes meant to touch). A trunk capsule doesn't cover visible prop
+     roots or flared bases: a shower stood built through a pandanus.
    - **Imported multi-part models placed "as in" another world**: compare the active children,
      uniform scale and material slots with the source scene's prefab instance; extra or
      reactivated layers and non-uniform scale are findings.
@@ -161,7 +183,10 @@ yaw), never from pixels, and quote the measured value in each finding.
    - **A4** (§3.4): row pitch and seat width; sightlines clear over the row in front; sociopetal
      sofas or a social bar at the back so the room works when nothing plays.
    - **A5** (§3.5): a stop at the §3.5 interval; seats at vegetation edges with a view, never back
-     to back or far apart; no open lawn with nothing to sit next to.
+     to back or far apart; no open lawn with nothing to sit next to. Measure isolation, don't
+     eyeball it: the distance from each site centre to the nearest tall trunk (a tree renderer
+     ≥ 4 m) and to the water (terrain rays every 5–10° until terrain y < water level); sites 23–75 m
+     from any tree on open sand read as stranded.
 6. **Conversation seating and edges** (§5.1, §5.2): groups within reach of a wall, rail or window,
    room centres free; ≥1 seat per group sees the entrance; groups sociopetal (corner-to-corner beats
    facing beats side by side), facing distance, group diameter, neighbour spacing, yaw toward a
@@ -199,6 +224,18 @@ yaw), never from pixels, and quote the measured value in each finding.
     parts and other dynamic props use an LV-compatible shader (`<name>_LV.mat`;
     `.omp/skills/lightmap-allocation/SKILL.md` §1); a Standard-shader dynamic prop is a should-fix.
     Check the shader assignment only; never judge their lighting, and never by probe light.
+    - **Lie-down fit, measured:** the median of (box top − mattress or seat surface) is within
+      ±4 mm. Method: temporary `MeshCollider`s on every `MeshFilter` under the slab's owning prefab
+      except the slab's own children, `Physics.SyncTransforms()`, then a 5×5 ray grid over 90 % of
+      the box footprint cast along `-t.up` from 0.4 m above the box top (top = `center.y +
+      size.y/2` in the box's local frame, max distance 0.8 m); take the median per slab (it
+      absorbs a back-rest row), then destroy the colliders. Work from the transform plus
+      `center`/`size`: `Collider.bounds` of an inactive slab has zero extents. Beds 0.09 m below the
+      mattress and sofas 0.07 m above the seat were blockers.
+    - **Lie-down census:** count every `LieDownCollider` in the scene; each is inactive or has its
+      collider disabled, each is listed in the world toggle's collider array, and that array holds
+      0 nulls. `WorldAudit`'s `[LIE_DOWN_COLLIDERS]` line only counts them and checks the off state,
+      so check membership and nulls yourself.
 11. **In-world UI** (C.2): show, don't tell. Text that explains how to
     operate the UI, or ON/OFF words beside a toggle that already shows its state, is a finding
     (rule: `.omp/agents/world-builder.md` "In-world UI").
@@ -214,6 +251,11 @@ looking out at the reference eye height; seated from one seat per group; the lyi
 bed or mat; each threshold between archetypes; each view end (corridor ends, the entry facing the
 release). Measure seat-group centres, yaw error, spacing and distance to the nearest edge (§8.3
 scene data) rather than estimating them from pixels.
+
+Put the protocol's scale figure (`__RevPerson__`, 1.4 m) beside every piece you call over- or
+undersized, and take a top-down shot per site (protocol "Capture rig"); settle the LOD cross-fade
+first so tree dither isn't read as a defect. Remove the figure and every temporary collider before
+the state report.
 
 ## Lock gaps
 

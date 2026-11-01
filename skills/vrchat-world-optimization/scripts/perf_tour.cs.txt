@@ -1,0 +1,43 @@
+// perf_tour: multi-pose PerfSample tour in ONE play session (Unity MCP execute_code body, play mode, ClientSim).
+// Replace the three marked lines (output dir, tag, poses, variants), send it once, then poll from separate calls:
+//     return SessionState.GetString("PerfTour","none") + " | " + AWDK.AgentTools.PerfSample.Status();
+// until it reads COMPLETE (or ERROR ...). One JSON per pose x variant: <dir>/<tag>_<pose>_<variant>.json.
+// A variant is (name, disableRootsCsv): "" = baseline; take two baselines per pose ("now", "now2") for the noise floor.
+// Poses are PLAYER stand points (feet on a walkable surface, checked by a downward raycast first), not capture-camera
+// positions; the look point sets yaw and pitch (eye = feet + 1.3 m in a 1.4 m-avatar world).
+// Each tick re-sets ClientSim's private _mouseReleased flags so desktop mouse-look can't override the pose
+// [field names read from ClientSim; re-check them after a ClientSim update].
+if (!EditorApplication.isPlaying) return "NOT PLAYING";
+string dir = "Design/perf/json"; string tag = "T0";                                                    // <-- edit
+var poses = new (string, Vector3, Vector3)[] { ("S0_spawn", new Vector3(0f, 0.02f, 0f), new Vector3(0f, 1.3f, 50f)) };  // <-- edit: (name, feet, look point)
+var variants = new (string, string)[] { ("now", ""), ("now2", "") };                                     // <-- edit
+System.IO.Directory.CreateDirectory(dir);
+var ctl = System.Linq.Enumerable.First(Resources.FindObjectsOfTypeAll<VRC.SDK3.ClientSim.ClientSimDesktopTrackingProvider>(), x => x.gameObject.activeInHierarchy);
+var controller = System.Linq.Enumerable.First(Resources.FindObjectsOfTypeAll<VRC.SDK3.ClientSim.ClientSimPlayerController>(), x => x.gameObject.activeInHierarchy);
+var flags = BindingFlags.Instance | BindingFlags.NonPublic;
+var mouseController = controller.GetType().GetField("_mouseReleased", flags);
+var mouseTracking = ctl.GetType().GetField("_mouseReleased", flags);
+int step = -1; bool sampling = false;
+EditorApplication.CallbackFunction tick = null;
+System.Action finish = () => { EditorApplication.update -= tick; };
+tick = () => { try {
+    if (!EditorApplication.isPlaying) throw new System.Exception("play ended");
+    mouseController.SetValue(controller, true); mouseTracking.SetValue(ctl, true);
+    if (sampling) {
+        var s = AWDK.AgentTools.PerfSample.Status();
+        if (!s.Contains("COMPLETE") && !s.Contains("ERROR")) return;
+        if (s.Contains("ERROR")) throw new System.Exception(s);
+        sampling = false;
+    }
+    step++;
+    if (step >= poses.Length * variants.Length) { finish(); SessionState.SetString("PerfTour", "COMPLETE"); return; }
+    var p = poses[step / variants.Length]; var v = variants[step % variants.Length];
+    var pl = VRC.SDKBase.Networking.LocalPlayer;
+    pl.SetVelocity(Vector3.zero);
+    pl.TeleportTo(p.Item2, Quaternion.LookRotation(new Vector3(p.Item3.x - p.Item2.x, 0f, p.Item3.z - p.Item2.z)));
+    ctl.LookTowardsPoint(p.Item3);
+    var res = AWDK.AgentTools.PerfSample.Start(dir + "/" + tag + "_" + p.Item1 + "_" + v.Item1 + ".json", 15, 40, 200, v.Item2.Length > 0 ? v.Item2 : null);
+    if (res.StartsWith("ERROR")) throw new System.Exception(res);
+    sampling = true; SessionState.SetString("PerfTour", step + " " + p.Item1 + " " + v.Item1);
+} catch (System.Exception e) { AWDK.AgentTools.JobRunner.Cancel("PerfSample"); finish(); SessionState.SetString("PerfTour", "ERROR " + e.Message); } };
+EditorApplication.update += tick; SessionState.SetString("PerfTour", "STARTED"); return "STARTED";

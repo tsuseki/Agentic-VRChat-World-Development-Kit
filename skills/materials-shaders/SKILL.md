@@ -71,6 +71,7 @@ The builder checks every row that applies to the pass; the reviewer can verify e
 | PBR set (e.g. ambientCG) into Standard | `_MetallicGlossMap` = metallic in R, inverted roughness (255 − v) in A; GL normal (Y+), NormalMap type; mask and AO `sRGB` off, mask `alphaSource = FromInput` or the smoothness is discarded. Prefer a set whose own albedo mean sits near the target; a strong `_Color` correction erases its pattern |
 | Polished stone floor turns into a black mirror | With a gloss map bound, `_GlossMapScale` (not `_Glossiness`) rules: honed stone ≈ 0.35, plaster ≈ 0.45, wood ≈ 0.50 |
 | HDRI skybox blurry through big windows | A visible skybox stays at full resolution and is never reduced or lossy-compressed (user 2026-10-26: it is a big part of the world); only a fully enclosed world with no sky visible may reduce it. Imported as a cubemap, an 8192×4096 equirect keeps its full detail at 2048 per face (one 90° face); 1024 halves it. Preview many via an ffmpeg contact sheet; hide the glass before blaming import |
+| HDR sky shows bands in smooth gradients | BC6H at 4096 bands; a world-owned RGB9E5 copy (shared-exponent, not block-compressed) fixes it for ~2.5 MB of bundle and 4 B/texel of VRAM. Sky format changes only toward fidelity |
 | Generated night panorama reads as dusk | Prompt for "deep night, moonless, no twilight", drop orange-cloud wording; darken the sky but protect lights by local contrast, not raw luminance; draw stars as ellipses widened by 1/cos(elevation), after any upscale, with an HDR boost to survive BC6H |
 
 ### C. Mapping and tiling
@@ -93,6 +94,7 @@ The builder checks every row that applies to the pass; the reviewer can verify e
 | Baked scene: metal black in a sealed dark room; dark prop black against a bright window | Once baked, metals take all brightness from the reflection probe: dark room → metallic ~0.3, saturated warm albedo, smoothness ~0.6; bright probe → metallic is the fix. Diffuse ≈ albedo × (1 − metallic): change albedo and metallic one at a time |
 | New prop reads cold/blue beside an identical baked one | `lightmapIndex == -1` (added after the bake, skybox ambient): bake it, don't re-tint |
 | Big near-white surface makes a sealed room bake blown | Bounce gain ≈ 1/(1 − albedo): lower the albedo of the big bright surface, not the lights |
+| Large white atlas cells read as flat white patches in sun | Albedo ~sRGB 241 × a baked sun at 1.4 clips (26.7 % of one view). A world-owned atlas copy with a soft knee (above 185 compressed into 185–210, hue kept); a `_Color` tint also dims the dark cells. Author big whites at ≤ ~200 |
 
 ### E. Emission, property blocks, colour maths
 | Trap | Rule / pass |
@@ -116,6 +118,9 @@ The builder checks every row that applies to the pass; the reviewer can verify e
 | Contour bands on big dark surfaces | 8-bit quantization, not the bake: count distinct values in 8-bit vs float renders of one camera. Fix with a static multiplicative, one-sided screen-space dither (~0.06, interleaved-gradient noise) on a head-locked quad that also carries any dimmer |
 | Distant building windows flat and dead | Built-in RP interior-mapping shader (per-pixel ray vs room planes on a grid), emissive interior term; never for rooms players can reach |
 | First-pass emissive flames cartoonish | Gas fire pit: ~30 blades 45–145 mm tall, emission ≈ (1.85, 0.52, 0.09) deep orange, glow card sunk ~65 mm below the stones, dark burner body |
+| Every non-metal renders black on `Light Volume PBR` | Its `_MetallicGlossMap` ("Metal AO Smoothness") is metallic = `(R × _Metallic)²`, AO = `lerp(1, G, _OcclusionStrength)` on indirect + speculars, smoothness = `A × _Glossiness`; a Standard map with metallic copied into G zeroes AO. Pack R = √metallic, G = 255, B = 0, A = smoothness, `_Metallic 1`; `_OcclusionStrength 0` is only a stopgap (it drops AO on metals too) |
+| Glow halves after a Standard → `Light Volume PBR` swap | Clear `_SPECULARS_ON` (`_Speculars 0`), `_Glossiness 0`, recalibrate `_EmissionColor` by same-camera glowing-pixel count (2.2 → 5.5 matched Standard) |
+| Flame card or water quad renders as a chequered atlas cube after a blanket `_LV.mat` swap | A multi-material FBX's second material (flame, water) needs its own world-side material, e.g. `Legacy Shaders/Particles/Alpha Blended` at render queue 3000 for a flame card; swap only the opaque atlas material |
 
 ## 3. Diagnose in this order
 

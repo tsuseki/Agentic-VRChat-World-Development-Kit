@@ -111,6 +111,13 @@ Choose one, per piece:
    - smoothed first;
    - then Scale In Lightmap until the audit passes (≤ 30 % triangles under 0.01 texel², ≤ 50 % of charts
      under 4 texels).
+3. **Box-projection UV2 in Unity** for photoscan rocks and other noisy hard shapes, where
+   `Unwrapping.GenerateSecondaryUVSet` cuts ~1,150 charts at every setting: six planar charts by each
+   triangle's dominant world-normal axis, vertices split per (vertex, chart), charts shelf-packed with the
+   scale found by bisection (margin 0.04); fill 0.23–0.43 in ~19 ms per mesh, written to a world-owned mesh copy.
+   Then Scale In Lightmap = `max((13/tpu)² / (2·fill), ((10 + 6)/(tpu·√(2A)))²)` (tpu texels per unit, A world
+   area) via `SerializedObject` + `PrefabUtility.RecordPrefabInstancePropertyModifications`; read the baked
+   rect sizes back (≥ ~11 texels across).
 
 Never answer a fragmented UV2 with a higher Scale In Lightmap: the chart count stays, and the atlas
 cost grows with the square of the scale.

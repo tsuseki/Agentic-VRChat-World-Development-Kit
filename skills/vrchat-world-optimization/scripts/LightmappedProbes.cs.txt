@@ -1,0 +1,41 @@
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+// LightmappedProbes (template): copy to Assets/<World>/Editor/LightmappedProbes.cs. No-bake D.2 lever, scene-side only.
+// Acts on the active scene, in edit mode; save the scene afterwards. Skips __*__ roots (capture rigs, helpers).
+//   Off() / On(): lightProbeUsage on every lightmapped MeshRenderer (0 <= lightmapIndex < 65534) of the active scene.
+//     A lightmapped renderer never reads probes in Standard-type shaders, but Unity still computes its probe sampling
+//     every frame on the worker threads (10.7k tree LOD renderers: ~10 ms of worker time per frame). Off was
+//     pixel-identical in every measured world; prove it with a same-camera 0-px diff, because a custom shader may read
+//     unity_SH* under LIGHTMAP_ON. Only renderers with a lightmap are touched (Off on a probe-lit renderer binds a zero
+//     SH and renders it black), so re-run after any bake. On restores BlendProbes; Off reports the modes it found.
+public static class LightmappedProbes
+{
+    static bool Lightmapped(Renderer r) { return r.lightmapIndex >= 0 && r.lightmapIndex < 65534; }
+
+    public static string Off() { return Set(LightProbeUsage.Off); }
+    public static string On() { return Set(LightProbeUsage.BlendProbes); }
+
+    static string Set(LightProbeUsage mode)
+    {
+        if (EditorApplication.isPlaying) return "ERROR playing";
+        var scene = EditorSceneManager.GetActiveScene();
+        int n = 0, lm = 0; var before = new System.Collections.Generic.SortedDictionary<string, int>();
+        foreach (var root in scene.GetRootGameObjects())
+        {
+            if (root.name.StartsWith("__")) continue;
+            foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                if (!Lightmapped(r)) continue;
+                lm++; string k = r.lightProbeUsage.ToString(); before.TryGetValue(k, out int c); before[k] = c + 1;
+                if (r.lightProbeUsage != mode) { Undo.RecordObject(r, "LightmappedProbes"); r.lightProbeUsage = mode; n++; }
+            }
+        }
+        if (n > 0) EditorSceneManager.MarkSceneDirty(scene);
+        var sb = new System.Text.StringBuilder();
+        foreach (var kv in before) sb.Append(" " + kv.Key + "=" + kv.Value);
+        return "lightProbeUsage " + mode + " set on " + n + " of " + lm + " lightmapped renderers (before:" + sb + ")";
+    }
+}

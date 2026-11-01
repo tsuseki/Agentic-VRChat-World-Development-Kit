@@ -40,7 +40,8 @@
 #       hanging that far and ending in the air (>= floor (1.2) m up; tip < 1 thins it); sides: tube sides.
 #       deep=<m> (opt-in, pillars): a straight full-girth shaft that far on below the flared ground ring, so a pillar
 #       stays in the soil when the tree is planted on a slope (else its buried end cone shows as a spike over the
-#       grass downhill). hard=True (opt-in, hang): the floor also holds after the avoid slide / late re-seat (a
+#       grass downhill); a pack step that scales x/y but keeps underground depths ships it unscaled (2.5 m built =
+#       2.5 m shipped, not x0.7). hard=True (opt-in, hang): the floor also holds after the avoid slide / late re-seat (a
 #       curtain moved down is squeezed toward its top); check with `bark_clash_check.py --tips` (FLOAT 0.1-2.2 m
 #       shipped, pillar burial). Off = identical builds.
 #   levels[i] wave=dict(amp, n, side) (opt-in): sinuous limbs: each step tilted up/down by amp x sin over n cycles
@@ -689,6 +690,7 @@ def merge_continuations(branches, M):
         if not cand: continue
         pm = [x for x in cand if getattr(x[2], "plane_mid", False)]  # opt-in plane_mid: the stem continues into its
         a, k, c = min(pm or cand, key=lambda x: x[0])  # in-plane middle limb whatever the wave tilts (BanyanGrove v3)
+        if b.depth == 0 and os.environ.get("TFB_DBG"): print("STAT TFB_DBG merge", tuple(round(v, 2) for v in b.pts[-1]), "klast", klast, "/", len(b.pts), [(round(math.degrees(x[0])), x[1], bool(getattr(x[2], "plane_mid", False)), tuple(round(v, 2) for v in x[2].pts[1])) for x in [(e[0], e[1], e[2]) for e in cand]], "all kids", [(k2, bool(getattr(c2, "plane_mid", False))) for k2, c2 in kids])
         q = None
         a_lim = ang if b.depth > 0 or M.get("ang0") is None else math.radians(M["ang0"])  # ang0: stems never swing
         if a > a_lim:
@@ -710,11 +712,13 @@ def merge_continuations(branches, M):
             g0 = axis_gap(x.pts[0], b.pts, b.radii)
             return g0 <= MERGE_ATTACH and axis_gap(x.pts[0], new_p, new_r) > max(g0, 0.0) + x.radii[0]
         if any(x is not c and getattr(x, "merged_into", None) is None and orphaned(x) for x in kids_of.get(id(b), [])):
+            if b.depth == 0 and os.environ.get("TFB_DBG"): print("STAT TFB_DBG skip orphan")
             MERGE_SKIPPED[0] += 1; continue
         moved = {id(y) for y in subtree(c)} if q is not None else set()  # the swing would move these rigidly
         if any(getattr(x, "prop", False) and not getattr(x, "hang", False) and (getattr(x, "par", None) is b and
                min(range(len(b.pts)), key=lambda i: (b.pts[i] - x.pts[0]).length) >= k
                or id(getattr(x, "par", None)) in moved) for x in branches):
+            if b.depth == 0 and os.environ.get("TFB_DBG"): print("STAT TFB_DBG skip pillar", "swing", q is not None, round(math.degrees(a)), round(math.degrees(a_lim)))
             MERGE_SKIPPED[0] += 1; continue  # a K3 pillar hangs on the stub the merge would drop, or on a swung limb
             # (aerial roots don't block it: they move with their re-seated top)
         if q is not None:

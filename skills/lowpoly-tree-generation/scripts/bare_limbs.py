@@ -52,7 +52,8 @@
 # Output: BARE_END / BARE_RUN / FLOAT lines and per tree
 #   BARELIMBS <Sp> PASS|WARN|FAIL ends <n> (minor <m>) runs <k> interior <i> floating <f>/<cards> (<pct>%) PASS|FAIL|VOLUME ...
 #   PASS = no bare end >= 0.25 m, no bare run, floating ok; WARN = only interior spots; FAIL otherwise.
-# Blender coordinates; Unity local = (-x, z, -y).
+# Blender coordinates of the packed mesh, i.e. x the pack scale (e.g. 0.7) of the built model (divide by it to find the
+# skeleton branch behind a BARE_END); Unity local = (-x, z, -y).
 import sys, os, json, re, subprocess
 
 CUT = 0.45

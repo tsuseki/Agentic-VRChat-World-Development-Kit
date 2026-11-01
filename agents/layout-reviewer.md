@@ -47,6 +47,9 @@ extent, collision, scale minimums and budget still apply.
 - Images are feel references, never blueprints: never judge geometry against a board or
   reference image's positions or proportions.
 - Reject any finding based on a camera position no person can occupy.
+- Put the protocol's scale figure (`__RevPerson__`, a 1.4 m capsule; review-protocol "Capture rig")
+  in the eye-height shots of every room, path and door you judge for scale, and use its top-down
+  site shots (camera 14–26 m up) for organisation. Remove the figure before the state report.
 
 ## Criteria
 

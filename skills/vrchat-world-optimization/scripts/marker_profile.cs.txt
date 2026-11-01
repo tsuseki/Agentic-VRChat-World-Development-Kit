@@ -1,0 +1,30 @@
+// marker_profile: per-marker CPU breakdown over 200 frames (Unity MCP execute_code body, play mode, player at the pose).
+// Poll from separate calls: return SessionState.GetString("MarkerProfile","none");  -> "RUN" or "name=ms;name=ms;..."
+// Use it for COMPOSITION only (what the frame is made of). Take ms deltas from separate PerfSample runs: ~25 enabled
+// recorders inflated Camera.Render from 6.4 to 10.5 ms in one run, which swamps any lever's delta.
+// main[] markers are filtered to the main thread; worker[] markers are summed over all threads (probe sampling runs on
+// jobs, so a main-thread-only sample shows no change for a 12 ms/frame worker saving on a many-core CPU).
+var main = new string[] { "Camera.Render", "Culling", "LOD.ComputeLOD", "RenderForwardOpaque.Prepare", "RenderForwardOpaque.Render", "Render.OpaqueGeometry", "Render.TransparentGeometry", "BatchRenderer.Flush", "Batch.DrawInstanced" };   // <-- edit
+var worker = new string[] { "CalculateLightProbeSamplingCoordinates", "GetLightProbeInterpolationWeights" };   // <-- edit
+int frames = 200;
+var names = main.Concat(worker).ToArray();
+for (int i = 0; i < names.Length; i++) {
+    var r = UnityEngine.Profiling.Recorder.Get(names[i]); if (!r.isValid) continue;
+    if (i < main.Length) r.FilterToCurrentThread(); else r.CollectFromAllThreads();
+    r.enabled = true;
+}
+var acc = new double[names.Length]; int fr = 0; int last = Time.frameCount;
+EditorApplication.CallbackFunction tick = null;
+tick = () => {
+    if (Time.frameCount == last) return; last = Time.frameCount; fr++; if (fr < 20) return;   // 20 warm-up frames
+    for (int i = 0; i < names.Length; i++) { var r = UnityEngine.Profiling.Recorder.Get(names[i]); if (r.isValid) acc[i] += r.elapsedNanoseconds; }
+    if (fr < 20 + frames) return;
+    EditorApplication.update -= tick;
+    var sb = new System.Text.StringBuilder();
+    for (int i = 0; i < names.Length; i++) {
+        sb.Append(names[i] + "=" + (acc[i] / frames / 1e6).ToString("0.000", System.Globalization.CultureInfo.InvariantCulture) + ";");
+        var r = UnityEngine.Profiling.Recorder.Get(names[i]); r.enabled = false; r.CollectFromAllThreads();
+    }
+    SessionState.SetString("MarkerProfile", sb.ToString());
+};
+SessionState.SetString("MarkerProfile", "RUN"); EditorApplication.update += tick; return "RUN";

@@ -65,8 +65,11 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
   (Game view size, Scene view closed, no RDP/Parsec); state any deviation.
 - **Report every editor timing as in-game FPS too** (user, 2026-10-14: "report in those fps always
   from now on"). `perf_grade.py` prints it: in-game desktop FPS ≈ 1000 / (1.12 × editor
-  `mainThreadMs`) (profile `machine.editorToInGame`), placed among the user's 8 reference worlds
-  (the profile's `machine.editorToInGame.scale`, `reference: true`). For a spot that
+  `mainThreadMs`) (profile `machine.editorToInGame`), placed among the scale's reference-marked worlds
+  (`reference: true`; every world when none is marked). **A world's rank is its worst pose placed on the full
+  worst-spot scale** (every world in `worstSpotScale.worlds` of the file the profile's `machine.editorToInGame.scale`
+  points at, plus this one, quoted as "N/M"); `perf_grade.py` does not print that place yet, so compute it from that
+  list. For a spot that
   has an in-game measurement, scale from it instead (in-game FPS × baseline / variant main thread),
   which cancels editor drift between sessions. Quote the FPS first, then the raw editor stats.
   Method, the scale, the translation pairs, past experiments and capture gotchas:
@@ -79,14 +82,20 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
 
 ## Procedure
 
-1. **Setup and baseline.** Apply the profile's `standardSetup`. Enter play mode, wait for ClientSim
-   to initialize. For each viewpoint: move the ClientSim player (or the main camera if there is
-   none) to the exact position and look direction via `execute_code`, wait a few frames, then
-   `PerfSample.Start(outJson)` / poll `PerfSample.Status()` (15 s settle, 40 warm-up, 200 frames).
+1. **Setup and baseline.** Apply the profile's `standardSetup`. **Quiet machine only**: before every timing block no
+   `blender` process and a quiet `Get-Counter "\Process(*)\% Processor Time"`; ask the orchestrator to hold GPU- or
+   CPU-heavy agents (Blender renders) for the whole timing window, and do builds, captures and bundles outside it. A
+   run whose `gpuFrameMs` jumps off its floor (~0.15 → 2.6–4.7 ms) was contended: throw it away and repeat; contended
+   runs only rank (±1 ms). Enter play mode, wait for ClientSim to initialize. Poses are **player stand points**:
+   derive each from its camera pose and check it with a downward raycast (grounded, walkable; capture cameras have
+   sat on a roof and over the sea). Drive all poses in one play session with
+   `.omp/skills/vrchat-world-optimization/scripts/perf_tour.cs.txt` (teleport + look per pose, then
+   `PerfSample.Start(outJson)` / poll, 15 s settle, 40 warm-up, 200 frames), two baselines per pose (`now`, `now2`).
    Record the exact pos/look and **which content was live** (active roots, treadmill phase,
    instance counts) so every later sample reuses them. Sample spawn, the busiest room and the
-   longest sightline; the worst viewpoint is the one you attribute. Take a second baseline at the
-   end of the session: the two give the noise floor.
+   longest sightline; the worst viewpoint is the one you attribute. Rank by `mainThreadMs`. Noise floor:
+   back-to-back baselines differed 0.01–0.47 ms, the same pose 6.79–8.07 ms across sessions, so compare only within one
+   session and run the final before/after as interleaved A/B/A passes (after, before, after), each pose twice.
 2. **Exact draw-call listing** (one frame, at the worst viewpoint). Enable the Frame Debugger
    (`manage_profiler` `frame_debugger_enable`, then page `frame_debugger_get_events`) and group the
    events by the GameObject/renderer they name, mapped to its top-level root. This gives exact
@@ -107,9 +116,13 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
      `Camera.Render` or ≥ 0.5 ms GPU gets the same sweep over its children, recursively, until
      one leaf explains the cost (a material, an object class, a terrain setting). Stop a branch
      when its children each cost under the noise floor.
+   - **LODGroup-heavy roots** (thousands of clump prefabs): turning renderers off leaves `LOD.ComputeLOD` running
+     (1.73 ms stayed), so the sweep under-reports them; compare marker breakdowns
+     (`scripts/marker_profile.cs.txt`; job markers from all threads) or a session with the LODGroups disabled.
    - **Texture memory per component** (no rendering needed): for each root, collect the unique
-     textures referenced by its renderers' materials and sum `Profiler.GetRuntimeMemorySizeLong`
-     (play mode) or the imported size; textures used by more than one root go in a `shared` row.
+     textures referenced by its renderers' materials and sum their size; textures used by more than one root go in a
+     `shared` row. In the editor `Profiler.GetRuntimeMemorySizeLong` over-counts (an 8192² BC6H lightmap read 128 MB):
+     compute format bytes × pixels × 4/3 for mips as the VRAM estimate, or label the editor figure as such.
      Flag uncompressed formats, missing mipmaps and textures > 2048 on small props.
    - Build the table with `perf_grade.py --baseline first.json --baseline last.json <variant
      JSONs> --label file.json=Name` (name the hand-toggled variants); `--sort drawCalls` by
@@ -137,20 +150,28 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
      nothing: list them, measure the delta with the attribution sweep, and fix at the importer
      (Rig → Animation Type None, Import Animation off).
      Removing the components is a delete: ask first.
-   - **Upload size** (≤ 200 MB): attribute it per asset with VRWorld Toolkit's Build Report, and
-     diff before/after builds with its Build Report Comparison (skill references/texture-caps.md
-     "Upload size"). Size and frame cost are separate findings; never quote one for the other.
+   - **Upload size** (≤ 200 MB): measure it with a scene AssetBundle per lever
+     (`scripts/bundle_size.cs.txt`, skill references/bundle-size.md; SDK `.vrcw` ≈ 0.85 × raw), attribute it per
+     asset with VRWorld Toolkit's Build Report after an SDK build (references/texture-caps.md "Upload size"). Size and
+     frame cost are separate findings; never quote one for the other.
 5. **Fix**, cheapest wins first, only after showing the attribution table, aimed at the top rows.
    Allowed without asking (reversible): texture max size / compression / mip settings within the
-   selective rule in step 4, LODGroup add/tune, cull distances and layer cull distances, static
-   flags, occlusion bake, disabling per-instance terrain paths when replaced, merged static cells
-   (keep the source data). **Ask the orchestrator first** for: deleting objects, decimating meshes,
-   changing materials' look.
+   selective rule in step 4 (through world-owned copies when the texture is shared), LODGroup add/tune, cull distances
+   and layer cull distances, static flags (incl. clearing `BatchingStatic` on GPU-instanced LODGroup foliage),
+   `Terrain.drawInstanced`, occlusion bake, `lightProbeUsage = Off` on lightmapped renderers
+   (`scripts/LightmappedProbes.cs.txt`), disabling per-instance terrain paths when replaced, merged static cells and
+   vertex-pulled clump cells (`scripts/GroundCells.cs.txt`; keep the source data). **Ask the orchestrator first** for:
+   deleting objects, decimating meshes, changing materials' look.
+   **After any bake** these levers must be re-run: rebuild clump cells (their SH table copies the probes), then probes
+   Off on lightmapped renderers; record that in WORLD.md.
 6. **Prove each fix**:
    - Performance: re-run the same viewpoint sample on the same content; quote before/after values
      and both bands from `perf_grade.py`.
    - Visuals: same-camera before/after screenshots, programmatic pixel diff (expect < 0.5 %
-     scattered speckle for removals, < 0.01 % for merges), **then look at both images**.
+     scattered speckle for removals, < 0.01 % for merges), **then look at both images**. Foliage worlds: deterministic
+     captures first (wind frozen by property block, `LODGroup.fadeMode = None`, water and particles hidden; recipe in
+     the skill's "The structural fix" step 7); two consecutive "before" sets must match at 0 px; report % > 18 summed
+     RGB plus "any change".
    - Decimation: signed-volume ratio ≥ 0.8 and zero-length normals swept to 0.
    - Client check: after structural fixes (merges, LODs, Udon gating), confirm in the real VRChat
      client with the autonomous Build & Test capture (skill references/client-capture.md),

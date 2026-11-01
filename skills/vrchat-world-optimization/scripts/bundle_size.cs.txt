@@ -1,0 +1,24 @@
+// bundle_size: measure a world's upload size without the SDK (Unity MCP execute_code body, edit mode, scene saved).
+// Builds the saved scene into one LZ4 (ChunkBased) AssetBundle for the active build target, the way the SDK does.
+// The build blocks the editor for ~35-90 s, so it is queued with ONE EditorApplication.delayCall: the call returns at
+// once, and the result lands in <outDir>/result.txt ("OK <MB> MB <s>s" or "ERR ..."). Poll for that file from the
+// shell (it appears after the build); never re-send while it runs. Edit the three marked values first.
+// Reading: raw MB; the SDK .vrcw has come out at ~0.85x of it (two worlds: 168.2/197.6 and 142.4/164.8 MB). Compare
+// runs only with each other (A/B one lever at a time; there is no per-asset report). Per-asset-class bundles hung for
+// 9+ minutes on a "Moving file failed" modal: build the whole scene only.
+string scene = "Assets/MyWorld/MyWorld.unity";   // <-- edit: saved scene path
+string outDir = "C:/Temp/bundle_A";              // <-- edit: scratch folder outside the project
+string tag = "A";                                // <-- edit: run label
+var target = EditorUserBuildSettings.activeBuildTarget;
+System.IO.Directory.CreateDirectory(outDir);
+EditorApplication.delayCall += () => {
+    var t0 = System.DateTime.Now; string res;
+    try {
+        var b = new AssetBundleBuild { assetBundleName = tag + ".vrcw", assetNames = new[] { scene } };
+        BuildPipeline.BuildAssetBundles(outDir, new[] { b }, BuildAssetBundleOptions.ChunkBasedCompression | BuildAssetBundleOptions.ForceRebuildAssetBundle, target);
+        var fi = new System.IO.FileInfo(System.IO.Path.Combine(outDir, tag + ".vrcw"));
+        res = "OK " + (fi.Exists ? (fi.Length / 1048576.0).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB" : "missing") + " " + (System.DateTime.Now - t0).TotalSeconds.ToString("0") + "s";
+    } catch (System.Exception e) { res = "ERR " + e.Message; }
+    System.IO.File.WriteAllText(outDir + "/result.txt", res);
+};
+return "queued target=" + target;

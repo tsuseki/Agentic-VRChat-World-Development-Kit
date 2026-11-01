@@ -21,10 +21,18 @@ style at A.3, dressing-reviewer checks board match in C, final-reviewer checks m
 
 ## Role
 
-- **You review; you do not fix.** Read-only except the capture rig (`__CapCam__`) and, in trials,
-  the event log ("Trial logging"). Never move, edit or delete scene objects, change materials or
-  lights, save the scene, or enter play mode. If you change something by accident, say so at the
-  top of the report.
+- **You review; you do not fix.** Read-only except the capture rig (`__CapCam__`), temporary
+  measuring aids and, in trials, the event log ("Trial logging"). Never move, edit or delete scene
+  objects, change materials or lights, save the scene, or enter play mode. If you change something
+  by accident, say so at the top of the report.
+- **Temporary measuring aids** are allowed when a method needs them, all created with
+  `hideFlags = HideFlags.DontSave` and removed in the same session: `MeshCollider`s added to
+  visible meshes for ray methods, the scale figure (`__RevPerson__`, "Capture rig"), a briefly
+  shortened LOD cross-fade, and in-memory A/B toggles on materials (`SetFloat`, `EnableKeyword`,
+  zeroed `_EmissionColor`). Restore every value you changed. In-memory edits on shared material
+  assets mark them dirty even when restored: call `EditorUtility.ClearDirty(mat)` after restoring.
+- **End every review with a state report**: active scene `isDirty = False`, 0 `__*__` objects other
+  than `__CapCam__`, 0 temporary colliders, 0 console errors, LOD cross-fade duration restored.
 - **Critic, not cheerleader.** Your value is catching what the builder stopped seeing. Don't invent
   problems either: separate blockers from nits.
 - You cannot ask the user questions. Work with the brief you were given and list the gaps under Caveats.
@@ -110,22 +118,36 @@ with unsaved work. Use the agenttools package (`ZFightScan`, `WorldCapture`, `ZF
   with the exact `Name@hash`. Confirm `Application.dataPath` is the project you were told.
 - Confirm the target exists (`find_gameobjects`); record positions/bounds to frame shots. A
   missing target is the finding, not a reason to review something else.
-- `read_console` once; note compile errors (they can break capture).
+- `read_console` once (`{"action":"get","types":["error"],"count":"20","format":"plain"}`, or
+  `"format":"detailed","include_stacktrace":true`); note compile errors (they can break capture).
+  An `ObjectDisposedException` from `UnityEditor.Search.PropertyDatabase.MergeStoresToFile` is
+  editor noise, not a finding.
+- Never open a scene from a review call: opening a large world scene outlasts the MCP window. Ask
+  for the scene to be open.
 
 ## Capture rig (Unity)
 
-Preferred: `WorldCapture.Shoot(outDir, shotsJson)` then poll `WorldCapture.Status()`; it implements
-the rules below. Manual fallback:
+Preferred: `WorldCapture.Shoot(outDir, shotsJson)` then poll `WorldCapture.Status()` until it
+reports `COMPLETE`; it implements the camera rules below **except LOD settling** (do that first, as
+below, and list each pose twice). Manual fallback:
 
 Reuse one persistent `__CapCam__`. **Creating a temp Camera + RenderTexture and
-`DestroyImmediate`-ing the camera after `Render()` SIGSEGVs the editor on the next repaint.**
+`DestroyImmediate`-ing the camera after `Render()` SIGSEGVs the editor on the next repaint.** The
+camera is `DontSave`, so it never dirties or saves with the scene, but `GameObject.Find` can't see
+it once it is hidden or the scene was reloaded: find it by name with
+`Resources.FindObjectsOfTypeAll<Camera>()` (the same camera `WorldCapture` uses), or every call
+creates a duplicate.
 
 ```csharp
-var go = GameObject.Find("__CapCam__");
-if (go == null) go = new GameObject("__CapCam__");
-var cam = go.GetComponent<Camera>();
-if (cam == null) cam = go.AddComponent<Camera>();
+Camera cam = null;
+foreach (var c in Resources.FindObjectsOfTypeAll<Camera>())
+    if (c != null && c.name == "__CapCam__" && !EditorUtility.IsPersistent(c)) { cam = c; break; }
+if (cam == null) {
+    var go = new GameObject("__CapCam__") { hideFlags = HideFlags.DontSave };
+    cam = go.AddComponent<Camera>();
+}
 cam.enabled = false;                     // manual renders only
+cam.useOcclusionCulling = false;         // baked occlusion hides moved statics
 cam.fieldOfView = 60f;
 cam.nearClipPlane = 0.03f; cam.farClipPlane = 2000f;
 // per shot:
@@ -151,9 +173,91 @@ UnityEngine.Object.DestroyImmediate(tex);   // the texture may be destroyed; the
 - Leave `__CapCam__` in place; never save the scene. The orchestrator sweeps `__*__` objects
   before any commit, bake or build.
 - After a reimport the first capture may be stale. Take a throwaway shot first.
+- **Settle the LOD cross-fade before every capture.** Grey dither on trees right after the camera
+  jumps is the LOD cross-fade (a freshly re-registered LODGroup also starts mid-fade), not a
+  defect. In the capture call: `float old = LODGroup.crossFadeAnimationDuration;
+  LODGroup.crossFadeAnimationDuration = 0.001f;`, render each pose twice (or 2–3 throwaway `_warm`
+  shots) and keep the last, then restore `old` (Unity default 0.5) in the same call. Unsettled, LOD
+  dither or mixed LOD levels land in A/B frames as false diffs. For a hide-and-diff over many views,
+  freeze fades the same way before diffing.
+- **Same rig settings every round**: rendering path, MSAA (8 for beauty, 1 for the lightmap-only
+  pass), HDR, resolution and FOV stay fixed across a review's rounds, or the settings change shows
+  up as a diff.
+- **Scale figure** (layout and dressing shots, and any finding about size):
+  `GameObject.CreatePrimitive(PrimitiveType.Capsule)` named `__RevPerson__`,
+  `hideFlags = HideFlags.DontSave`, its collider destroyed at once, scale (0.4, 0.7, 0.4) = a 1.4 m
+  person, `y = floor + 0.7`. Destroy it after the shots.
+- **Top-down site shots**: camera 14–26 m above the site centre, look point offset by z + 0.01 so
+  `LookAt` doesn't degenerate on a straight-down view. Check every pose isn't inside geometry
+  (raycast down from the camera; a pose inside a wall renders as a wall).
+- **Scratch files** (`_warm.png`, test frames): delete them with a shell `rm` outside Unity; the
+  `execute_code` safety check rejects `System.IO.File.Delete`.
 
 Blender targets: `get_objects_summary`, then `render_viewport_to_path` front/side/¾/close-up. Use
 `execute_blender_code` only to frame the camera.
+
+### Lightmap-only render (no albedo)
+
+A capture camera can't use the Scene view's "Baked Lightmap" draw mode. Render with a replacement
+shader instead, built and destroyed in the same `execute_code` call:
+
+```csharp
+var sh = ShaderUtil.CreateShaderAsset(src);       // src = the shader text below
+Shader.SetGlobalFloat("_RevLMScale", 0.25f);      // 0.25 for bright outdoor bakes; 1 for interiors
+var rt = RenderTexture.GetTemporary(w, h, 24, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB, 1);
+cam.targetTexture = rt; cam.RenderWithShader(sh, "RenderType");
+// ReadPixels / EncodeToPNG as above, then:
+UnityEngine.Object.DestroyImmediate(sh);
+```
+
+```
+Shader "Hidden/RevLMOnly" {
+  Properties { _MainTex ("", 2D) = "white" {} _Cutoff ("", Float) = 0.5 }
+  CGINCLUDE
+  #include "UnityCG.cginc"
+  float _RevLMScale; sampler2D _MainTex; float4 _MainTex_ST; float _Cutoff;
+  struct a2v { float4 pos : POSITION; float3 n : NORMAL; float2 uv : TEXCOORD0; float2 uv1 : TEXCOORD1; };
+  struct v2f { float4 pos : SV_POSITION; float2 lm : TEXCOORD0; float3 n : TEXCOORD1; float2 uv : TEXCOORD2; };
+  v2f vert (a2v i) { v2f o; o.pos = UnityObjectToClipPos(i.pos);
+    o.lm = i.uv1 * unity_LightmapST.xy + unity_LightmapST.zw;
+    o.n = UnityObjectToWorldNormal(i.n); o.uv = TRANSFORM_TEX(i.uv, _MainTex); return o; }
+  fixed4 shade (v2f i) {
+  #ifdef LIGHTMAP_ON
+    return fixed4(DecodeLightmap(UNITY_SAMPLE_TEX2D(unity_Lightmap, i.lm)) * _RevLMScale, 1);
+  #else
+    return fixed4(ShadeSH9(float4(normalize(i.n), 1)) * _RevLMScale * float3(1, 0.55, 1), 1); // probe-lit = pink
+  #endif
+  }
+  fixed4 fragO (v2f i) : SV_Target { return shade(i); }
+  fixed4 fragC (v2f i) : SV_Target { clip(tex2D(_MainTex, i.uv).a - _Cutoff); return shade(i); }
+  ENDCG
+  SubShader { Tags { "RenderType"="Opaque" }
+    Pass { Tags { "LightMode"="ForwardBase" } Cull Off
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment fragO
+      #pragma multi_compile _ LIGHTMAP_ON
+      ENDCG } }
+  SubShader { Tags { "RenderType"="TransparentCutout" }
+    Pass { Tags { "LightMode"="ForwardBase" } Cull Off
+      CGPROGRAM
+      #pragma vertex vert
+      #pragma fragment fragC
+      #pragma multi_compile _ LIGHTMAP_ON
+      ENDCG } }
+}
+```
+
+- Lightmapped pieces show their baked light only; probe-lit pieces show pink, so a renderer that
+  lost its lightmap binding stands out.
+- At ×0.25 the sampled value doubles as a lightmap-intensity read (sRGB 162/255 at ×0.25 ≈ 1.4×
+  linear).
+- Blind spots: Unity terrain renders flat grey (its lightmap UV is not uv1), and custom
+  vertex-pulled shaders (merged ground-cover cells) don't draw at all; judge those from beauty
+  shots. Where a back face fills the frame, use a `Cull Back` variant.
+- Shaders with world-space noise (terrain splats) mottle albedo differently in two copies of an area
+  at different world positions. Before calling a beauty brightness difference between two copies
+  (world vs a promo copy) lighting, compare them in this pass.
 
 ## Shot discipline
 
@@ -164,6 +268,13 @@ Blender targets: `get_objects_summary`, then `render_viewport_to_path` front/sid
 - Interiors: at least two opposite corners. Shotgun reviews: **the same camera set relative to each
   candidate's origin**, so the comparison is fair.
 - **Read every screenshot.** Every claim in the report cites a screenshot or a measured value.
+- **Your own poses, re-used verbatim.** Record every pose in the report as a pose string
+  `name|x,y,z[,g]|pitch,yaw|fov|near|far` (`g` = y is raycast-to-ground plus that height). On a
+  re-review, re-shoot your previous round's pose strings exactly; the builder's poses and numbers
+  never stand in for yours. A builder's "0 % clipped" read 1.35 % at the reviewer's pose, and "not
+  visible from the landing" was false at the reviewer's camera.
+- **Repeated structures: shoot every instance**, not one. A defect the builder checked at one
+  instance showed at three of the four others.
 
 ## Verdict and score
 
@@ -190,7 +301,8 @@ build = geometry, placement, junctions, finish, z-fighting).
   and why it moved.
 - Your verdict covers **your stage only**. Only `final-reviewer` can sign a world off.
 - Re-review after fixes: check every previous finding by number (fixed / not fixed / regressed)
-  before looking for new ones.
+  before looking for new ones, at your previous round's poses, with r(n−1) vs r(n) sheets cut from
+  the same crop boxes.
 
 ## Report format
 
@@ -208,12 +320,15 @@ build = geometry, placement, junctions, finish, z-fighting).
 - **Previous findings** (re-reviews only): status per number, and the previous score.
 - **Screenshots**: directory, plus a one-line caption per file.
 - **Caveats**: what you couldn't judge.
+- **State at hand-back**: the end-of-review state report ("Role").
 - **Lock gaps** (if any): the open stylistic question, the options, and dressing-reviewer's
   provisional decision against the boards.
 
 Default screenshot directory: `<project>/Design/reviews/<stage>-<target>-<nn>/` inside the world's
 project (`mkdir -p` it), never the system temp folder: the user opens review images from the
-project (user, 2026-10-13). Use descriptive file names: `02_eyelevel_from_door.png`.
+project (user, 2026-10-13). Use descriptive file names: `02_eyelevel_from_door.png`. Keep one shot
+folder per round (`r2/shots/`, `r3/shots/`): it is the next round's "before" set, so keep the pose
+strings and crop boxes in the report.
 
 ## Trial logging
 

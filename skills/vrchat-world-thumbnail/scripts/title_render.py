@@ -8,10 +8,14 @@ Examples
   python title_render.py --base shot.png --rows "Mountain" "Lodge" --out-dir out --preview
   # Final:
   python title_render.py --base shot.png --rows "Mountain" "Lodge" --out-dir out --font cormorant
-  # Optional small second-language row under the title, a quiet credit in the bottom band (full view only) and the
+  # Optional small second-language row under the title (stronger glow for busy edges) and the
   # crop previews (full / world-menu tile with the platform badge / hover zoom / portal):
   python title_render.py --base shot.png --rows "Maple Lake" --sub "紅葉の湖" --sub-font klee_one \
-      --credit "Trees: Temperate Forest Tree Pack · BOOTH" --out-dir out --font fraunces --crops
+      --sub-scale 0.5 --sub-glow-alpha 0.85 --sub-glow-blur 0.3 --out-dir out --font fraunces --crops
+  # Pale sky: dark fill, light glow, no shadow:
+  python title_render.py --base shot.png --rows "Olive Coast" --out-dir out --font cormorant \
+      --fill 2c3a1e --glow fbf3e2 --glow-alpha 0.85 --shadow-alpha 0
+  # --credit TEXT adds a quiet bottom-band line; use it only when the owner asks for one.
 
 Run with any Python that has Pillow.
 """
@@ -24,6 +28,15 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 FONT_DIR = Path(__file__).parent / "fonts"
 GF = "https://github.com/google/fonts/raw/main/"
 WIN = Path("C:/Windows/Fonts")
+
+
+def label_font(size):
+    """Contact-sheet label font: a CJK-capable face first, so Japanese names don't render as empty boxes."""
+    for name in ("YuGothB.ttc", "msgothic.ttc", "arialbd.ttf"):
+        if (WIN / name).exists():
+            return ImageFont.truetype(str(WIN / name), size)
+    return ImageFont.load_default()
+
 
 # Layout standard (fixed; matched to the approved "Cozy Airship" thumbnail):
 ROW_WIDTH = 0.57   # widest row = 57% of image width, ~21% margin each side
@@ -289,7 +302,7 @@ def crop_views(img):
 
 def crop_sheet(img, title=""):
     v = crop_views(img)
-    lab = ImageFont.truetype(str(WIN / "arialbd.ttf"), 22)
+    lab = label_font(22)
     pw = 600
     panels = [("Full view (website, loading screen)", v["full"]), ("World menu tile (badge see-through)", v["tile"]),
               ("Hover zoom (badge nearly opaque)", v["hover"]), ("Portal (squashed; dim ring = seen at an angle only)", v["portal"])]
@@ -367,7 +380,7 @@ def main():
         rows_n = (len(made) + cols - 1) // cols
         sheet = Image.new("RGB", (tw * cols + 10 * (cols + 1), (th + 40) * rows_n + 10), (18, 18, 22))
         d = ImageDraw.Draw(sheet)
-        lab = ImageFont.truetype(str(WIN / "arialbd.ttf"), 26)
+        lab = label_font(26)
         for i, (k, p) in enumerate(made):
             x, y = 10 + (i % cols) * (tw + 10), 10 + (i // cols) * (th + 40)
             sheet.paste(Image.open(p).resize((tw, th), Image.LANCZOS), (x, y))

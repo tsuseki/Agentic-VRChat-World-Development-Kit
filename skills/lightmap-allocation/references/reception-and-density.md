@@ -89,6 +89,16 @@ gapTexels    = minGapBetweenChartsInUV × T
   still 5 texels.
 - A UV-space share gain is not a texel gain when total fill changes: normalise by
   √(fill_after / fill_before).
+- **First-bake floor for small props** (Bakery's packer takes 3 texels of padding per side, so a rect narrower
+  than the padding bakes to a few texels or a negative scale-offset): `SIL_min = ((target + 6) / (tpu × √(2A)))²`,
+  with `target` the texels wanted across, `tpu` the texels per unit and `A` the world surface area; e.g. a floor of
+  14 texels across at 3 texels/unit.
+- **Atlas size from need:** `neededTexels = Σ chartRect texels` of the group's renderers (post-bake
+  `so.x × so.y × atlasW × atlasH`, or the pre-bake estimate). Pick the smallest fixed resolution and map count that
+  holds it at the target density. An 8192² trees group allocated 67 M texels for 17.1 M needed; 4096² took the
+  bundle from 224.3 to 177.3 MB. With shared LOD UVs (`BakerySharedLODUV`) only LOD0 charts count and far LODs give
+  nothing back, so atlas size is the only lever: median LOD0 density 4.59 → 2.10 texels/m going to one 4096², with
+  visibly weaker canopy self-shadowing. Judge candidate sizes with lightmap-only renders (audit.md §3).
 
 ## 4. Groups, padding and memory
 

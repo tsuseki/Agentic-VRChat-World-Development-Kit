@@ -14,9 +14,10 @@ connect to 2022.3. Install and editor preferences: `.omp/docs/bootstrap.md` §3.
 
 **Drive the live editor, never the files.** Hand-edited `.unity` YAML needs a manual reload, is
 clobbered when the editor saves its in-memory state, and cannot add DLL-based components (e.g.
-`VRCUiShape`). Reading old YAML out of git to *re-apply* values through the editor is fine: index the
-committed scene by fileID, follow the GameObject's Transform, match by `m_Name`, then set the values
-by script.
+`VRCUiShape`). Reading YAML is fine: re-apply old values from git by indexing the committed scene by fileID,
+following the GameObject's Transform, matching by `m_Name`, then setting the values by script. While another agent
+owns the editor, plan offline with `python .omp/skills/unity-mcp-scripting/scripts/scene_tree.py <scene.unity>`
+(roots, and prefab-instance counts by source prefab per second-level path, ~2 s per scene; read-only).
 
 ## 1. Connect and pin the instance
 
@@ -72,11 +73,32 @@ call for the 10 s window. Without Roslyn installed it silently falls back to a C
 - **Measure across calls**, e.g. FPS from `Time.frameCount` / `Time.realtimeSinceStartup` deltas ~8 s
   apart; tris and draw calls from `UnityEditor.UnityStats` via reflection.
 - **Delete assets with the Unity MCP `manage_asset` tool's `delete` action, never from `execute_code`**:
-  `AssetDatabase.DeleteAsset` there hung and killed the calling session, and `MoveAssetToTrash` can
-  trip the server's safety blocklist.
+  `AssetDatabase.DeleteAsset` there hung and killed the calling session.
+- **Blocked text patterns.** The server refuses any body containing `System.IO.File.Delete`,
+  `System.IO.Directory.Delete`, `FileUtil.DeleteFileOrDirectory`, `AssetDatabase.DeleteAsset`,
+  `AssetDatabase.MoveAssetToTrash`, `EditorApplication.Exit`, `Process.Start`, `Process.Kill`, `while(true)` or
+  `for(;;)` (a substring check, case-insensitive). Delete scratch files from the shell, run exes from the shell or
+  PowerShell, and use bounded loops or an `EditorApplication.update` job. Methods of a compiled editor script are not
+  scanned.
 - **Embedding C# in a Python/IPython cell:** never start a line with `ident = !expr`; IPython rewrites
   it as a shell capture even inside a string literal. Write `ident = (!expr);`. Passing C# through a
-  shell: use `unity_mcp.py --args-file` to avoid quoting damage.
+  shell: use `unity_mcp.py --args-file` to avoid quoting damage. A cell that blocks ~30 s on a recompile or
+  reconnect can kill the kernel and every helper defined in it: keep helpers in a file and
+  `exec(open(path).read())` at the top of each cell, and pass an explicit `timeout` to every MCP call.
+
+### C# traps in the `execute_code` wrapper
+
+The body is compiled inside a class with exactly `using System; System.Collections.Generic; System.Linq;
+System.Reflection; UnityEngine; UnityEditor;`.
+
+| Trap | Rule |
+|---|---|
+| "Ambiguous reference between UnityEngine.Object and object" (also `Random`) | Write `UnityEngine.Object.FindObjectsOfType<T>()`, `UnityEngine.Random` |
+| Type not found: `EditorSceneManager`, `LightProbeUsage`, kit tools | Qualify: `UnityEditor.SceneManagement.EditorSceneManager`, `UnityEngine.Rendering.*`, `AWDK.AgentTools.ZFightScan` / `.WorldAudit` |
+| `System.Tuple` ambiguous (a second definition ships in an editor assembly) | Value tuples `(a, b)` or `KeyValuePair` |
+| `Renderer` has no `receiveGI` / `scaleInLightmap` | Both are `MeshRenderer` members: `(r as MeshRenderer)`, or `SerializedObject` `m_ScaleInLightmap` (+ `PrefabUtility.RecordPrefabInstancePropertyModifications` on prefab instances) |
+| "Cannot convert double to float" | `f` literals for float parameters; C# never narrows double implicitly, lambdas included |
+| A one-line body with a `//` comment compiles to nonsense or masks the real error | Newlines between statements, or `/* */` comments |
 
 ## 3. Long jobs: Start / Status
 
@@ -92,8 +114,15 @@ bakes, play-mode sampling) runs time-sliced on `EditorApplication.update`:
   `job.Result` at the end; poll with `JobRunner.Status(kind)`. Jobs live in memory only.
 - Third-party long operations follow the same shape: trigger in one call, poll a flag across separate
   calls, then re-verify scene state. Bakery: open the `ftRenderLightmap` window instance,
-  `LoadRenderSettings` then `RenderButton`, poll `bakeInProgress` (details:
-  `.omp/skills/bakery-light-baking/SKILL.md`).
+  `LoadRenderSettings` then `RenderButton` (details: `.omp/skills/bakery-light-baking/SKILL.md`).
+- **Jobs that block the editor for minutes** (a Bakery `RenderButton`, `BuildPipeline.BuildAssetBundles` ~55 s, a
+  big crunch reimport): invoked directly they hold the MCP call until it times out, with "started or not" unknown.
+  Check the job isn't already running (Bakery: `bakeInProgress == false`), queue **exactly one**
+  `EditorApplication.delayCall += () => ...;` from a short call and return; poll the job's own signal from later
+  calls (Bakery: the active scene becomes `Assets/Bakery/_tempScene.unity`, then `bakeInProgress`; a bundle: its
+  result file). `bakeInProgress` can read false for ~100 s after queueing: never queue a second launch on that. A
+  `delayCall` waits for an editor tick, so an unfocused or busy editor can delay it for minutes; check the window
+  before re-queuing, and clear a stale queue with `EditorApplication.delayCall = null`.
 
 ## 4. Dirty-marking, saving and recovery
 
@@ -117,17 +146,25 @@ bakes, play-mode sampling) runs time-sliced on `EditorApplication.update`:
   alpha 1, and defaults can rewrite `m_LightmapFlags`. For tracked files prefer
   `git checkout <commit> -- <files>`, and check `git diff` (alpha changes are invisible in renders).
 - Exit play mode before relying on edits; play-mode edits revert.
+- **Moving or renaming a shader:** `git mv` the `.shader` together with its `.meta` (the GUID is what materials
+  reference), then edit `Shader "A/B"`; every material stays bound. Verify `material.shader.name` and
+  `Shader.Find("A/B").isSupported` in a later call.
 
 ## 5. Compile-error checks
 
 After **every** script change (yours or written to disk by anyone): the Unity MCP `refresh_unity`
-tool (the editor auto-refreshes only on focus), wait for compilation, then the Unity MCP
-`read_console` tool, and resolve every `error CS` before anything else.
+tool with `{"compile": "request", "wait_for_ready": false}` (the editor auto-refreshes only on focus;
+`wait_for_ready: true` has blocked past the client timeout and killed the calling kernel), then poll
+`EditorApplication.isCompiling` / `isUpdating` from short `execute_code` calls until both stay false, then the
+Unity MCP `read_console` tool, and resolve every `error CS` before anything else. Same shape for
+`AssetDatabase.ImportAsset(path, ForceUpdate)`: import in one call, check the result in a later one.
 
 - Play mode **silently refuses** to start with compile errors: the request reports success, then the
   editor drops back to edit mode. Compile errors block every other agent on the editor too.
 - Read the messages, not just the type filter: `read_console` has mislabeled ordinary logs as
-  exceptions in some versions.
+  exceptions in some versions. Errors only: `{"action": "get", "types": ["error"], "count": "20", "format": "plain"}`
+  (`"format": "detailed", "include_stacktrace": true` for stacks). An `ObjectDisposedException` from
+  `UnityEditor.Search.PropertyDatabase.MergeStoresToFile` is harmless editor noise.
 - `refresh_unity` reporting `recovered_from_disconnect` means the compile was interrupted; treat
   UdonSharp programs as stale (the VM can run the old program while exposing new variables) and
   force `UdonSharpCompilerV1.CompileSync(new UdonSharpCompileOptions())`. `CompileSync()` returns
@@ -140,8 +177,8 @@ tool (the editor auto-refreshes only on focus), wait for compilation, then the U
   GUI repaint dereferences the freed camera and the editor segfaults a few calls later. Reuse one
   persistent `__CapCam__` (`WorldCapture` does this). Inherited code that already destroys a temp
   camera: `Camera.SetupCurrent(null)`, `RenderTexture.active = null`, `cam.targetTexture = null`
-  before the destroy, then move it to the persistent camera; `delayCall` deferral may never fire.
-  Save the scene before a screenshot pass.
+  before the destroy, then move it to the persistent camera; a `delayCall`-deferred destroy is no fix (it waits for
+  an editor tick that can come minutes later). Save the scene before a screenshot pass.
 - **Sweep `__*__` objects and assert zero realtime/mixed lights** before every save, commit, bake or
   build; review tools may leave a realtime `__CapLight__`, and the SDK saves the open scene on build.
   Run both checks; either can miss on its own.

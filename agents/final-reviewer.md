@@ -1,20 +1,22 @@
 ---
 name: final-reviewer
 description: >-
-  Last gate before a VRChat world is presentable, in three modes. DRAFT MOOD (D.1 draft): mood,
+  Last gate before a VRChat world is presentable, in four modes. DRAFT MOOD (D.1 draft): mood,
   exposure, contrast and colour temperature of a draft bake against the locked boards and the
   archetypes; nothing else. FINAL (D.1 final bake, D.3 upload gate): lighting first (mood, bake
   quality object by object, shadows, UV2 audit, Light Volumes, reflections, emissives), then final
   polish, texture and skybox fidelity and world extent, from the reviewer's own captures; the only
   reviewer whose SHIP IT clears a world for upload. PERF REGRESSION (D.2): judges what perf work
-  changed (texture reductions, the skybox, merges, LODs, mirrors) from same-camera before/after
-  pairs. Composition and object choice are dressing-reviewer's and are not re-judged. Routes
-  findings to D (lighting), → C (build) or perf-optimizer (restore textures). Review only, never
-  fixes. PASS: (1) mode (draft mood / final / perf regression), (2) world brief path (WORLD.md),
-  (3) target area or "whole world" with spawn location, (4) final: bake timestamp, reflection-probe
-  re-bake confirmation with file timestamps, the UV2 audit TSV; perf regression: the list of changed
-  textures, merges, LODs and mirrors with their before/after captures, (5) concerns, (6) previous
-  report if a re-review.
+  changed (texture reductions, the skybox, merges, LODs, mirrors, merged ground cover) from
+  same-camera before/after pairs. PROMO IMAGES: judges a store or listing image set (stills, crops,
+  captions, thumbnails) from the images. Composition and object choice are dressing-reviewer's and
+  are not re-judged. Routes findings to D (lighting), → C (build) or perf-optimizer (restore
+  textures). Review only, never fixes. PASS: (1) mode (draft mood / final / perf regression /
+  promo images), (2) world brief path (WORLD.md), (3) target area or "whole world" with spawn
+  location (promo: the image paths and the commit that changed them), (4) final: bake timestamp,
+  reflection-probe re-bake confirmation with file timestamps, the UV2 audit TSV; perf regression:
+  the list of changed textures, merges, LODs and mirrors with their before/after captures, (5)
+  concerns, (6) previous report and its pose strings if a re-review.
 ---
 
 # Final reviewer: lighting, final polish and perf losses
@@ -90,6 +92,60 @@ Called after any perf change that altered pixels beyond speckle: textures, merge
 - **Evidence:** same-camera before/after pairs for each change, plus your own near-reach (≤ 1 m)
   and normal-distance shots of every reduced hero texture and of the sky.
 
+**Merged probe-lit ground cover (vertex-pulled cells replacing clumps):**
+
+1. **Noise floor:** two "before" captures are 0 px apart.
+2. **Lighting:** originals vs cells with wind and tremble frozen. Report % px > 18/255, max Δ and
+   the **largest connected > 18 blob**: a lost or added clump is tens to hundreds of px, ≤ 12 px is
+   edge speckle. Pass: ≤ 0.02 % px and largest blob ≤ ~12 px.
+3. **Expected signature:** 1–2-code changes on 90–100 % of grass pixels (per-clump SH vs per-pixel
+   probe blending) with no net signed shift. It also proves the after frame really draws the cells.
+4. **Wind:** toggle the wind keyword on both. Wind off vs on must move the cells (≈ 5 % px);
+   originals vs cells with wind on match (≈ 0.002 %).
+5. **Pop-in:** cells with their LODGroups disabled vs normal (what culling removes, ≤ 0.05 %), and a
+   `QualitySettings.lodBias` step 2.0 → 1.9 (≈ 7 m of walking) with trees hidden (≤ 0.005 %).
+6. **Light probes off on lightmapped renderers:** 0 px.
+
+**Images-only variant** (another agent owns the editor): judge the builder's lossless PNGs only
+after `before1` vs `before2` = 0 px, and recompute every claimed % yourself. Verify wind parity from
+files: the cell material's keywords and wind values vs the source material, and the shader GUID in
+its `.meta` against every material that references it. List what frozen stills can't show (wind
+motion, walking cull) as caveats; score at most 8 until an editor A/B closes them.
+
+### PROMO IMAGES (store or listing set)
+
+Judge **from the images only**; never re-render.
+
+- **Before frames:** `git show <commit>~1:<path>` for every changed file. Per changed image: % px
+  > 18/255 and mean absolute difference; mean Δ in unchanged regions (≤ 0.15/255 = no regrade); a
+  side-by-side sheet.
+- **Grade consistency** against the unchanged stills of the set: a row per still with mean luma,
+  p99 luma, mean HSV saturation, vegetation % (hue 25–170°, sat > 0.18), clip % (min channel ≥ 250)
+  and crush % (max channel ≤ 8), plus per-region mean colours (foliage, sky, ground). Flag only
+  values outside the set's spread.
+- **Full size and phone size:** Lanczos-resample to 1170 px and 390 px wide (390 pt × 3 DPR);
+  store thumbnails also at 300 px.
+- **Captions:** each line's ink height as % of image width against the catalogue's own secondary
+  captions (≈ 1.8–2.1 %); text-vs-band contrast ≈ 9:1; band colour = the catalogue background. A
+  pale, textureless strip in the photo's last rows (row std < 8) next to the band dissolves the
+  photo into the caption.
+- **Square and up-scaled crops:** the bottom ~200 px above the band for out-of-focus foreground
+  (row luma std vs the rows above). For crops up-scaled from the render, horizontal gradient energy
+  on foliage vs the source still (≈ −10 % at 1.17× is fine), and at 1:1 leaflets resolve with no
+  ringing.
+- **"Dot pattern" / LOD-stipple claims:** before agreeing, zoom ×3 and ×6 at the spot and run a
+  periodic-dither detector: per 32 px tile, Hann window, FFT energy at the period-2 and period-4
+  lattice points over the total; compare max and p99 with clean stills of the set (clean ≈
+  0.02–0.07). Round leaves silhouetted against a pale background read as grey dots at display size
+  with no dither at all.
+- **Hero-model defects builders miss in stills:** zoom ×3 at every limb junction and root tip of the
+  hero model, on both the scene still and the white-background page where nothing hides
+  intersections: roots ending in spikes just above the soil with no contact shadow, two limb bases
+  crossing through a trunk top, a new crown hiding a landmark in the thumbnail.
+- **Thumbnails:** also run `.omp/skills/vrchat-world-thumbnail/SKILL.md` "Review checks".
+- **Routing:** a defect already present in the raw render → C or D; a grade, crop or caption defect
+  → the image script's owner.
+
 ## Preconditions (final mode): verify, don't trust
 
 Check via `execute_code`. If any fails, don't grade lighting: return **NEEDS WORK** ("not in final
@@ -99,8 +155,11 @@ state") with the failure at the top.
 - No realtime or Mixed lights (`Light.lightmapBakeType`), no leftover `__CapLight__` or other `__*__`
   objects (`WorldAudit.Run()`); the sun stays Baked
   (`.omp/skills/bakery-light-baking/SKILL.md` "Workspace lighting standard").
-- Reflection probes re-baked after the lightmaps (compare timestamps). Identical `.exr` checksums
-  across probes mean skybox-only captures (renderers missing `ReflectionProbeStatic`): a blocker.
+- Reflection probes re-baked after the lightmaps (compare timestamps). The box probes that cover
+  structures must differ from each other and from the sky cube; identical `.exr` checksums across
+  them mean skybox-only captures (renderers missing `ReflectionProbeStatic`): a blocker. On an
+  outdoor world the default reflection cube is sky-only by design and may stay byte-identical
+  across bakes; that alone is not a failure.
 - VRC Light Volumes baked with this bake and covering every playable area; a `LightProbeGroup`
   exists as the coarse fallback (check it exists, never grade its placement).
 - The post-bake binding checks of lightmap-allocation §5 pass.
@@ -148,8 +207,19 @@ builder's wide shots and area means. So:
 - **UV2 audit:** run the measured audit of lightmap-allocation §4 on every lightmapped renderer in
   the area, or check the attached TSV is from this bake. Shoot every flagged renderer at near reach
   and list the flagged count with its shots. An audit nobody ran fails this focus.
-- **Lightmap-only render:** each room once in the Scene view **Baked Lightmap** draw mode (or an
-  unlit lightmap-only material), so albedo can't hide a torn chart.
+- **Lightmap-only render:** each room once with the review-protocol replacement shader ("Capture
+  rig" → "Lightmap-only render"), so albedo can't hide a torn chart or a blotch. Probe-lit pieces
+  show pink. Compare two copies of an area (world vs a promo copy) in this pass before calling a
+  beauty brightness difference lighting.
+- **Vegetation through walls:** for every tree within ~5 m of a structure, compare the crown's
+  `Renderer.bounds` with the building mesh's bounds. A crown poking through a wall bakes a "shadow
+  from nothing" blotch on the interior wall and leaves leaf sprigs on counters; confirm in the
+  lightmap-only render. Route → C (move the tree), then re-bake and redo probes. Find the tree by
+  mesh and position: `GameObject.Find(path)` returns the first of several same-named siblings.
+- **Terrain-lightmap colour smudges:** red, green or violet tints on sand or terrain at the feet of
+  repeated structures (boardwalk ends, bollard bases) show in the lightmap-only render and faintly
+  in beauty. Shoot every instance looking down, not one. A nit (route D; untested fix: more terrain
+  lightmap resolution or less bounce).
 - **Merged vs original:** where post-bake merges exist, render the unmerged originals from the
   same cameras. A defect present only when merged means the merge broke UV2 or scale-offset: a
   blocker against the whole merge chain.
@@ -179,6 +249,15 @@ never used to judge our props.
 - **Lamps look lit:** every lamp's shade or bulb reads as glowing, with a pool and falloff that match
   it; no dark lamp next to a bright pool, no blown-out emissive. "Lamp too bright" usually means its
   spill (light intensity), not the shade's emission: name which.
+- **Sunlit white clipping:** measure the % of frame pixels with min(R,G,B) ≥ 250 and render a
+  magenta overlay of them. Locate the clipped rows or regions first: clouds clip too, so mask the
+  sky out by row or region before quoting a number. A sunlit seat, cushion or wall that renders as a
+  flat 255 shape is a should-fix (→ C, texture). To tell emission from albedo, zero every
+  `_EmissionColor` in memory, re-measure and restore (then `EditorUtility.ClearDirty`): an
+  unchanged % means albedo. Cause: with no tonemapper, an albedo above about sRGB 215 exceeds 1.0
+  under a bright baked sun (baked sun plus GI reached ≈ 1.4× linear). The fix is whites at about
+  sRGB 205–210 (compress texels above 185 into 185–210 with a soft knee, hue kept), not a re-bake;
+  it took one close-up from 26.7 % clipped to 0 %.
 
 ### F5. Texture and skybox fidelity
 
@@ -196,6 +275,13 @@ Perf work may reduce textures only to a degree; the world still has to look nice
   restore).
 - **Fine to reduce** when no difference shows: things seen only from afar, hidden backs, small
   props, tiling detail maps, roughness/metal maps.
+- **After an albedo or atlas change** (e.g. a whites fix), check the fix didn't dull the look, at
+  about 7 poses: mask the warm-wood or coloured pixels present in both frames (e.g.
+  `R > B + 50 and 110 < R < 235`) and compare mean RGB (Δ ≤ 3/255 = unchanged); sample an untouched
+  surface in the same frame (sand, stone) as the control that lighting didn't move; whites still
+  read white (≈ sRGB 230–240 in render). Take tele shots (10–14° FOV) of the changed surfaces and
+  ≤ 0.6 m near-reach shots to look for DXT or crunch blocks, and compare the new texture's importer
+  settings with the original's.
 
 ### F6. Final polish
 
@@ -227,7 +313,9 @@ fog mode and density, sightline D, island bounds, per spatial-design §8.3 scene
 
 ## Evidence standard
 
-- **Your own captures.** Never judge from the builder's shots alone.
+- **Your own captures.** Never judge from the builder's shots alone. Record pose strings and re-use
+  them verbatim on re-reviews (review-protocol "Shot discipline"); the builder's poses and numbers
+  don't count.
 - **Room coverage:** each room from its entrance, then one view per wall and furniture group at
   1.3 m eye height, 1.0–1.5 m from surfaces.
 - **Near-reach:** ≤ 0.6 m shots of every soft or organic piece (pillows, cushions, throws, bedding,
@@ -254,8 +342,8 @@ fog mode and density, sightline D, island bounds, per spatial-design §8.3 scene
 | Severity | Examples |
 |---|---|
 | **Blocker** | failed precondition; lightmap or shadow defects across several pieces in one room; a defect only when merged; a visible sky reduced or compressed; a visible far-clip cut, hard horizon or ground gap; skybox-only probes; mood clearly off the board; no own captures, no UV2 audit or no positive control |
-| **Should-fix** | any visible lightmap or shadow defect on a piece a player can walk up to; same-object parity mismatch; a Standard-shader LV prop; a missing inner face; a visibly degraded hero texture; a lamp that doesn't read lit; wrong-room or skybox reflections; over-lit against the darker-than-instinct default |
-| **Nit** | defects seen only from unreachable spots or at extreme grazing angles; minor tint or exposure preference within the board |
+| **Should-fix** | any visible lightmap or shadow defect on a piece a player can walk up to; a crown through a wall baking a blotch; same-object parity mismatch; a Standard-shader LV prop; a missing inner face; a visibly degraded hero texture; a sunlit white surface clipped to flat 255; a lamp that doesn't read lit; wrong-room or skybox reflections; over-lit against the darker-than-instinct default |
+| **Nit** | defects seen only from unreachable spots or at extreme grazing angles, or only looking down (terrain-lightmap tints at structure feet); minor tint or exposure preference within the board |
 
 Standing user decisions are never findings.
 

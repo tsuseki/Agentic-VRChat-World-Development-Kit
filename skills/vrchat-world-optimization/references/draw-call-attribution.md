@@ -35,8 +35,8 @@ Read the table with its limits:
   ("static batches, not attributable"); never spread them over categories. A large row means
   Unity already merged a lot; what is left in the named rows is what it could *not* batch.
 - **Events ≠ `UnityStats` draw calls.** Quote both; rank with events, budget with draw calls.
-- Keyword rules misfile a few objects (a `MidRail` under lights, a light switch under fixtures).
-  Spot-check every category's examples before you quote it, and say "approximately".
+- Keyword rules misfile a few objects (a `MidRail` under lights, a light switch under fixtures, outdoor loungers
+  under light fixtures). Spot-check every category's examples before you quote it, and say "approximately".
 - A category count is not a saving. Confirm the top categories with the toggle sweep (disable the
   category's renderers in play mode, re-sample) before promising a number.
 
@@ -50,9 +50,10 @@ For each top category, sample its renderers and record what breaks batching:
 | Different materials per piece (trim + emissive diffuser, per-room tuned material variants) | distinct `sharedMaterial` per renderer | one merged mesh per material per room |
 | Different lightmap pages | `lightmapIndex` differs | split merges per lightmap index |
 | Not static / batching flag off | `GameObjectUtility.GetStaticEditorFlags` | set flags only where the object never moves |
-| Different reflection probes / probe anchors | `probeAnchor`, blended probes | group per probe zone |
+| Different reflection probes / probe anchors | `probeAnchor`, blended probes | group per probe zone; for instanced trees far from play, `reflectionProbeUsage = Off` on groups beyond ~30 m of every walk-zone eye point (1,116 → 787 draws; probes Off on every tree brightened the woods 16 %, rejected), keep a rollback, re-check after probe re-bakes |
 | Same probe on paper, different in the shader | Frame Debugger "different reflection probe"; `unity_SpecCube0_BoxMin.w` reads e.g. 0.9999998 vs 1 | set `Renderer.probeAnchor` to one shared point per group (no re-bake) |
-| Instanced repeats not instancing | lightmapped instances on > 1 lightmap index; terrain trees under a `WindZone` (per-tree `_Wind`); renderer also static-batched | one lightmap page for the group (one 2K beat two 1K); hand-placed prefabs + sway shader instead of terrain trees; choose instancing OR static batching per asset, never both [Chrono Cabin 2024] |
+| Instanced repeats not instancing | lightmapped instances on > 1 lightmap index; terrain trees under a `WindZone` (per-tree `_Wind`); renderer also static-batched | one lightmap page for the group (one 2K beat two 1K); hand-placed prefabs + sway shader instead of terrain trees; choose instancing OR static batching per asset, never both [Chrono Cabin 2024]. Instanced LODGroup foliage: clear `BatchingStatic` (tree LODs 7,123 → 1,248 draws; static batching also stores LOD0 copies in the build), no rebake; instancing still batches lightmapped trees on one lightmap index |
+| Terrain patches | `Terrain.drawInstanced` false | set it true on every tile (−1,400 draws over 9 tiles, pixels identical) |
 | Multi-part assets (post, cap, shoe, rail as separate objects) | child count under one asset | merge per assembly run |
 
 Typical expensive classes, all invisible in triangle counts: modular railings, lamp hardware

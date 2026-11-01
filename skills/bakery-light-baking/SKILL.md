@@ -86,8 +86,16 @@ Static `ftRenderLightmap.RenderLightmap()` **silently does nothing**. The workin
 
 1. `EditorWindow.GetWindow(ftRenderLightmap type)`
 2. Invoke `LoadRenderSettings()`
-3. Invoke `RenderButton(false)`
-4. Poll static field `ftRenderLightmap.bakeInProgress`; completion also rewrites the configured output's lightmaps (`Assets/BakeryLightmaps/*_final.hdr` in the verified project; inspect Output path and format before watching files).
+3. Invoke `RenderButton(false)`. **From MCP, queue it**: check `bakeInProgress == false`, then
+   `EditorApplication.delayCall += () => <RenderButton(false) by reflection>;` exactly once in a short
+   `execute_code` call, and return. A direct call blocks through the export (or on a modal) and times the MCP
+   call out with "started or not" unknown.
+4. Poll from separate calls. Started = the active scene becomes `Assets/Bakery/_tempScene.unity` (and
+   `bakeInProgress` true); the first polls can read `bakeInProgress == false` for up to ~100 s, so never
+   re-queue on that. A `delayCall` waits for an editor tick: an unfocused or busy editor can delay it for
+   minutes, so check the window before re-queuing. Done = `bakeInProgress` false again, the scene back, and the
+   configured output's lightmaps rewritten (`Assets/BakeryLightmaps/*_final.hdr` in the verified project;
+   inspect Output path and format before watching files). Then run the post-bake sequence below.
 
 Selective bake: use the installed version's **Render Selected Groups** path with `Selection.objects` set to the area's renderers/roots. **Bakery 1.96 `RenderButton(false)` resets `selectedOnly=false`; setting the flag beforehand silently requests a full bake.** Inspect the native button implementation and verify unrelated atlas hashes/timestamps remain unchanged. Per-area `BakeryLightmapGroup` assets make subset rebakes cheap. Selector fields: `active`, `lmgroupAsset` (NOT `lmgroup`), `instanceResolutionOverride`, `instanceResolution`.
 
@@ -122,7 +130,7 @@ So the two knobs serve different loops. Use `sampleDivisor` for the tight inner 
 
 Rules that make the two-stage loop actually work:
 
-- **After switching presets the next bake must be a full Render.** Changing texel density or atlas size sets `ftBuildGraphics.sceneNeedsToBeRebuilt`, and *Render selected groups* aborts ~40 s in with `Scene geometry/layout changed since last full bake. Use Render button instead.` Per-area selected bakes work fine **within** one preset — that is the fast inner loop: switch to draft once, then rebake single areas as you move lights.
+- **After switching presets the next bake must be a full Render.** Changing texel density or atlas size sets `ftBuildGraphics.sceneNeedsToBeRebuilt`, and *Render selected groups* is refused ~40 s in with `Scene geometry/layout changed since last full bake. Use Render button instead.` The refusal is a **modal dialog**: the editor main thread blocks and every MCP call times out until someone presses Enter (find it with a desktop screenshot; send Enter to the editor window; unattended bakes need a watcher that answers "Bakery" / "Bakery error" windows). A scene that never had its own full bake (e.g. one sharing another scene's lightmaps) is refused the same way. Per-area selected bakes work fine **within** one preset — that is the fast inner loop: switch to draft once, then rebake single areas as you move lights.
 - **A draft bake overwrites the final atlases.** Both presets write to the same `renderSettingsOutPath`, so the shipped bake is gone until re-baked at final. Giving draft its own output folder is worse than it sounds: the scene rebinds renderers to whatever was baked last, so you end up with half-draft/half-final bindings and no way to restore without baking anyway.
 - **Capture FINAL from the live storage, never hardcode it.** Settings get tuned constantly; a hardcoded "final" silently reverts that tuning the first time someone applies it.
 - **Applying a preset in play mode is a silent no-op** — the storage is a scene component, so the change is discarded on play-mode exit. Guard on `EditorApplication.isPlaying`.
@@ -139,6 +147,24 @@ What a draft bake can and cannot tell you:
 - **Light probes can fail SILENTLY.** In the verified workflow `RenderLightProbesButton` aborts if geometry changed since the last full bake (console: "Scene geometry/layout changed since last full bake. Use Render button instead"), leaving `bakeInProgress = false` — indistinguishable from success. L1/L2 normally bake with full lightmaps; Legacy is separate. Verify probe data at deliberately differently lit positions and on a dynamic receiver; identical coefficients alone are not proof of failure in a uniformly lit space. Run any required separate pass immediately after a full bake, never standalone after geometry edits.
 
 Code: `reference/examples.md` (Snippets 4–5).
+
+### Post-bake sequence (in this order)
+
+1. **Finished:** the bake log's finished line, `bakeInProgress` false, the active scene back from
+   `_tempScene`, lightmap files newer than the launch.
+2. **Reflection probes** (cube and box-projected), file mtimes newer than the lightmaps. Under closed canopy,
+   box-projected Custom probes over the woods plus a sky-only default probe (`cullingMask = 0`); also re-bake
+   them after any fog change.
+3. **Restore the project-wide storage** if version control tracks it and the change was not intended:
+   `git restore -- Assets/Bakery/ftGlobalStorage.asset`.
+4. **Re-sample whatever copies baked data**: merged probe-lit cells' SH tables, the lightmapped-renderers probes-Off
+   lever (`lightProbeUsage = Off` on `0 <= lightmapIndex < 65534`; `vrchat-world-optimization`
+   `scripts/LightmappedProbes.cs.txt`), baked lookups.
+5. **Verify:** expected lightmap count; every lightmapped renderer bound with a finite, non-negative scale-offset
+   (`.omp/skills/lightmap-allocation/SKILL.md` §5); renderers of any prefab family re-imported since the last bake
+   bound (a re-import gives new LOD child IDs and unbinds every instance until a re-bake); Light Volume count and
+   textures non-null; 0 lights that are not Baked.
+6. **Guarded save:** active scene path is the world scene, play mode off, `MarkSceneDirty`, save, commit.
 
 ### Emissive fixtures and SSS
 
