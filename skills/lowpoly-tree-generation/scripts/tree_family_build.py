@@ -158,6 +158,18 @@
 #       is unchanged. Off = identical builds.
 #       follow=True: the spray is first turned outward (away from the trunk), and `rise` (use <= 0) is measured from the
 #       limb tangent's own slope clamped to <= horizontal, so sprays drape out and down along the arch, never above it.
+#   avoid=dict(depth=1, clear=0.1, step=12, max=90, stems=False, stem_r=1.0, stem_lean=(1.2, ..., 2.0), plate=flare h,
+#       props=True, prop_clear=0.1, prop_depth=2, late_seat=True) (opt-in; bark through bark at the source, while the
+#       skeleton grows; checked on the mesh by `bark_clash.py`): every limb of depth <= `depth` is tested against the
+#       tubes grown before it (capsules: radii + clear m; not its parent / ancestors within its fork zone, not a sibling
+#       where both lie in their fork zones = the crotch) and, if it runs into one, swung round its parent by
+#       +-step, +-2 step, ... up to max deg (same draws, seed and noise), first clear wins, else the least overlap.
+#       stems: a ground stem that shares space with an earlier one above `plate` m (the fused root foot) leans further
+#       out (drawn lean x stem_lean); stem_r scales its test radius (fluted stems). props: each K3 limb group (pillars,
+#       aerial-root curtains) must clear every other tube of depth <= prop_depth and every prop placed before it, else
+#       slides along its limb to the nearest clear spot within `at`, else is dropped. late_seat: the K3 tops re-seat on
+#       the meshed chain head after merge, sag, smooth and taper (not before the smooth). STAT avoid {...} counts what
+#       moved. Off = identical builds (no extra draws).
 #   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
 #       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
 #       ground-stem root crown below `fuse` m are allowed overlap); see BoothAssets/Tools/trees/declip.py. Off = identical builds.
@@ -536,6 +548,69 @@ def axis_gap(p, pts, radii):
         best = min(best, (p - (a + e * t)).length - (radii[i] + (radii[i + 1] - radii[i]) * t))
     return best
 
+AVOID_STATS = {}  # CFG avoid: per skeleton build, what the clash avoidance changed (STAT avoid)
+
+def _axis_samples(pts, radii, ds):
+    """(point, radius, arc length) every <= ds m along the polyline, both ends included"""
+    out, acc = [], 0.0
+    for i in range(len(pts) - 1):
+        a, e = pts[i], pts[i + 1] - pts[i]; L = e.length; n = max(1, int(math.ceil(L / ds)))
+        for k in range(n):
+            t = k / n; out.append((a + e * t, radii[i] + (radii[i + 1] - radii[i]) * t, acc + L * t))
+        acc += L
+    out.append((pts[-1], radii[-1], acc)); return out
+
+def _near_axis(p, pts, radii):
+    """(distance to the axis, radius there, arc length there, unit tangent) of the polyline point nearest p"""
+    best, acc = None, 0.0
+    for i in range(len(pts) - 1):
+        a, e = pts[i], pts[i + 1] - pts[i]; ll = e.length_squared; L = math.sqrt(ll)
+        t = 0.0 if ll < 1e-12 else max(0.0, min(1.0, (p - a).dot(e) / ll))
+        d = (p - (a + e * t)).length
+        if best is None or d < best[0]:
+            best = (d, radii[i] + (radii[i + 1] - radii[i]) * t, acc + L * t, e / L if L > 1e-9 else UP)
+        acc += L
+    return best
+
+def fork_zone(c, par):
+    """declip's fork zone: the arc length a child tube needs to leave its parent's tube at its own angle"""
+    _, rp, _, tan = _near_axis(c.pts[0], par.pts, par.radii)
+    cd = (c.pts[1] - c.pts[0]).normalized()
+    return (rp + c.radii[0]) / max(cd.cross(tan).length, 0.35) + 0.05
+
+def _bbox(pts, radii):
+    r = max(radii)
+    return (Vector((min(p.x for p in pts) - r, min(p.y for p in pts) - r, min(p.z for p in pts) - r)),
+            Vector((max(p.x for p in pts) + r, max(p.y for p in pts) + r, max(p.z for p in pts) + r)))
+
+def tube_overlap(pts, radii, zc, others, clear, ds=0.25, plate=0.0):
+    """CFG avoid: how far the tube (pts, radii) runs into the others, + clear m (sum over its axis samples of the
+    capsule overlap). others: (branch, rel, zone): rel "anc" = its parent / an ancestor (its samples within its own fork
+    zone zc are its socket), "sib" = rooted on the same parent (skipped where both samples lie within their fork zones:
+    the crotch), "stem" = another ground stem (skipped below plate m: the shared root foot), None = must clear."""
+    lo, hi = _bbox(pts, radii); tot = 0.0
+    obs = []
+    for o, rel, zo in others:
+        olo, ohi = _bbox(o.pts, o.radii)
+        if all(lo[i] - clear <= ohi[i] and olo[i] <= hi[i] + clear for i in range(3)): obs.append((o, rel, zo))
+    if not obs: return 0.0
+    for p, r, s in _axis_samples(pts, radii, ds):
+        for o, rel, zo in obs:
+            if rel == "anc" and s <= zc: continue
+            if rel == "stem" and p.z < plate: continue
+            d, ro, so, _ = _near_axis(p, o.pts, o.radii)
+            if rel == "sib" and s <= zc and so <= zo: continue
+            g = r + ro + clear - d
+            if g > 0: tot += g
+    return tot
+
+def avoid_offsets(AV):
+    """azimuth offsets (rad) tried in order: 0, +step, -step, +2 step, ... up to max (deg)"""
+    st, mx = AV.get("step", 12), AV.get("max", 90)
+    out = [0.0]
+    for k in range(1, int(mx // st) + 1): out += [math.radians(k * st), -math.radians(k * st)]
+    return out
+
 def merge_continuations(branches, M):
     """Sympodial growth: a branch whose last fork sits near its end continues into that child (the best
     aligned one) as one tube. The parent drops its stub past the fork, takes the child's axis, and blends
@@ -710,7 +785,7 @@ def stem_layout_points(SL, cnt, seed):
     return sorted(pts, key=lambda p: p.length)
 
 def build_skeleton(seed):
-    rng = random.Random(seed); out = []
+    rng = random.Random(seed); out = []; AVOID_STATS.clear()
     cnt, lean, L, r0, r1, gn, spread = CFG["stems"]
     parents = []
     SL = CFG.get("stem_layout")  # opt-in (bamboo groves, screens): stem bases scattered over an area, not on a ring
@@ -737,8 +812,29 @@ def build_skeleton(seed):
             parents.append(grow_curve(base, az, math.atan(le) / max(lmid, 1e-3), rng.uniform(*L) * sc, r0 * sc, r1 * sc,
                                       CFG.get("stem_segs", 6), out, gn, seed + k, SC))
         else:
-            parents.append(grow(base, d, rng.uniform(*L) * sc, r0 * sc, r1 * sc, CFG.get("stem_segs", 6), 0, out, gn,
-                                CFG.get("bend", 0.0), seed + k, up_end=CFG.get("bend_end")))  # bend_end: stem bend ramps to it (nodding tips)
+            Ld = rng.uniform(*L) * sc   # (drawn here, as the argument was: the same draw order)
+            def mk_stem(dd):
+                tmp = []
+                b0 = grow(base, dd, Ld, r0 * sc, r1 * sc, CFG.get("stem_segs", 6), 0, tmp, gn, CFG.get("bend", 0.0),
+                          seed + k, up_end=CFG.get("bend_end"))  # bend_end: stem bend ramps to it (nodding tips)
+                return b0, tmp
+            sb, tmp = mk_stem(d)
+            AV = CFG.get("avoid")
+            if AV and AV.get("stems") and k > 0 and sb is not None:
+                # opt-in: a stem that shares space with an earlier one above the root plate leans further out (its
+                # drawn lean x 1.2, 1.4, ... up to stem_lean max), the first clear one or the least overlap wins
+                plate = AV.get("plate", (CFG.get("flare") or {}).get("h", 0.35)); sr = AV.get("stem_r", 1.0)
+                others = [(o, "stem", 0.0) for o in parents if o is not None]
+                cost = lambda b0: tube_overlap(b0.pts, [x * sr for x in b0.radii], 0.0, others, AV.get("clear", 0.1), plate=plate)
+                best = (cost(sb), 1.0, sb, tmp)
+                for m in AV.get("stem_lean", (1.2, 1.4, 1.6, 1.8, 2.0)):
+                    if best[0] <= 1e-9: break
+                    b1, t1 = mk_stem(Vector((d.x * m, d.y * m, 1.0)))
+                    if b1 is not None and cost(b1) < best[0] - 1e-9: best = (cost(b1), m, b1, t1)
+                if best[1] != 1.0: AVOID_STATS["stems_leaned"] = AVOID_STATS.get("stems_leaned", 0) + 1
+                if best[0] > 1e-9: AVOID_STATS["stems_unresolved"] = AVOID_STATS.get("stems_unresolved", 0) + 1
+                sb, tmp = best[2], best[3]
+            out.extend(tmp); parents.append(sb)
         SP = CFG.get("stem_profile")
         if SP and parents[-1] is not None:  # opt-in: radius x a smoothstep profile over the arc fraction (palm swellings)
             st = parents[-1]; seg = [(st.pts[i + 1] - st.pts[i]).length for i in range(len(st.pts) - 1)]
@@ -876,9 +972,12 @@ def build_skeleton(seed):
                     f = min(1.0, f + rng.uniform(-0.04, 0.04))
                     p, r, d = point_at(b, f)
                     az = rng.uniform(0, 2 * math.pi) if n > 3 else (j / n) * 2 * math.pi + rng.uniform(-0.6, 0.6)
-                perp = d.orthogonal().normalized(); perp.rotate(__import__("mathutils").Quaternion(d, az))
-                outw = Vector((p.x, p.y, 0));
-                if outw.length > 0.05 and lv == 0 and n <= 3: perp = (perp + outw.normalized() * CFG.get("outward", 1.2)).normalized()
+                def mk_perp(azx):
+                    pp = d.orthogonal().normalized(); pp.rotate(__import__("mathutils").Quaternion(d, azx))
+                    outw = Vector((p.x, p.y, 0));
+                    if outw.length > 0.05 and lv == 0 and n <= 3: pp = (pp + outw.normalized() * CFG.get("outward", 1.2)).normalized()
+                    return pp
+                perp = mk_perp(az)
                 if "ang_end" in P:  # angle range moves from `ang` (at[0]) to `ang_end` (at[1]): drooping lower limbs
                     h = max(0.0, min(1.0, (f - P["at"][0]) / max(1e-6, P["at"][1] - P["at"][0])))
                     a = math.radians(rng.uniform(*(x + (y - x) * h for x, y in zip(P["ang"], P["ang_end"]))))
@@ -890,15 +989,44 @@ def build_skeleton(seed):
                 rr = min(r * P["r"], r * 0.9) if P["r"] < 1 else min(0.03, r * 0.6)
                 if CFG.get("clear") and (in_clear(p) or any(in_clear(p + e * (rr * 1.5 + 0.3)) for e in (UP, -UP, -cd))):
                     continue  # no branch starts in (or with its thickness / buried base cone reaching into) a volume
-                c = grow(p - d * min(0.03, r), cd, ln, rr, P["tip"] * rr if P["tip"] > 0.05 else P["tip"],
-                         P.get("segs", 4 if lv == 0 else 3), lv + 1, out, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
-                         up_end=P.get("up_end"), flat=P.get("flat", 0.0), wave=P.get("wave"))
+                def grow_at(off):  # the limb at its drawn azimuth + off (same draws, seed and noise), into a scratch list
+                    cdx = cd if off == 0.0 else (d * math.cos(a) + mk_perp(az + off) * math.sin(a)).normalized()
+                    tmp = []
+                    cx = grow(p - d * min(0.03, r), cdx, ln, rr, P["tip"] * rr if P["tip"] > 0.05 else P["tip"],
+                              P.get("segs", 4 if lv == 0 else 3), lv + 1, tmp, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
+                              up_end=P.get("up_end"), flat=P.get("flat", 0.0), wave=P.get("wave"))
+                    if cx and P.get("root_out"):  # opt-in: the whole limb shifted rigidly root_out x parent radius out along
+                        rad = cdx - d * cdx.dot(d)  # its own radial (same shape and noise), so a thick limb clears the parent wall sooner
+                        if rad.length > 1e-6:
+                            sh = rad.normalized() * r * P["root_out"]; cx.pts = [q + sh for q in cx.pts]
+                    return cx, tmp
+                c, tmp = grow_at(0.0)
+                AV = CFG.get("avoid")
+                if AV and c is not None and lv + 1 <= AV.get("depth", 1):
+                    # opt-in: a limb whose tube runs into another (not its parent at its socket, not a sibling in the
+                    # crotch) is swung round its parent to the first clear azimuth (avoid_offsets), else the least overlap
+                    anc, x = set(), b
+                    while x is not None: anc.add(id(x)); x = getattr(x, "par", None)
+                    others = []
+                    for o in out:
+                        if getattr(o, "prop", False) or o.depth > AV.get("depth", 1) or len(o.pts) < 2: continue
+                        if id(o) in anc: others.append((o, "anc", 0.0))
+                        elif getattr(o, "par", None) is b: others.append((o, "sib", fork_zone(o, b)))
+                        else: others.append((o, None, 0.0))
+                    cost = lambda cx: tube_overlap(cx.pts, cx.radii, fork_zone(cx, b), others, AV.get("clear", 0.1))
+                    best = (cost(c), 0.0, c, tmp)
+                    for off in avoid_offsets(AV)[1:]:
+                        if best[0] <= 1e-9: break
+                        c1, t1 = grow_at(off)
+                        if c1 is not None and cost(c1) < best[0] - 1e-9: best = (cost(c1), off, c1, t1)
+                    if best[1] != 0.0: AVOID_STATS["limbs_turned"] = AVOID_STATS.get("limbs_turned", 0) + 1
+                    if best[0] > 1e-9:
+                        AVOID_STATS["limbs_unresolved"] = AVOID_STATS.get("limbs_unresolved", 0) + 1
+                        AVOID_STATS["limb_overlap"] = round(AVOID_STATS.get("limb_overlap", 0.0) + best[0], 3)
+                    c, tmp = best[2], best[3]
+                out.extend(tmp)
                 if c and P.get("sides"): c.lsides = P["sides"]  # opt-in per-level tube sides (LOD0, LOD1)
                 if c and P.get("keep_rings"): c.keep_rings = True  # opt-in: the packed LOD1 meshes every ring (round elbows)
-                if c and P.get("root_out"):  # opt-in: the whole limb shifted rigidly root_out x parent radius out along
-                    rad = cd - d * cd.dot(d)  # its own radial (same shape and noise), so a thick limb clears the parent wall sooner
-                    if rad.length > 1e-6:
-                        sh = rad.normalized() * r * P["root_out"]; c.pts = [q + sh for q in c.pts]
                 if c: c.par = b; nxt.append(c)
         parents = nxt
     side_limbs(False)  # stubs etc.: no children
@@ -933,17 +1061,54 @@ def build_skeleton(seed):
             m = 3 if u < p3 else 2 if u < p3 + p2 else 1
             dl = Vector((d.x, d.y, 0.0)); dl = dl.normalized() if dl.length > 1e-6 else Vector((1, 0, 0))
             sd = Vector((-dl.y, dl.x, 0.0)); CO = PR.get("collar")
+            mem = []   # the group's members first (same draws, same order), then placed and meshed
             for e in range(m):
                 o = (e + 1) // 2 * (1 if e % 2 else -1)  # 0, +1, -1 along the limb
                 re = r0 if e == 0 else r0 * prng.uniform(0.5, 0.85)
-                st = p + dl * (o * r * PR.get("gap", 0.9))
                 ge = g + dl * (o * r * PR.get("gap", 0.9)) + (sd * (re * PR.get("fuse_spread", 1.8) * prng.uniform(0.7, 1.2)
                                                                  * (1 if prng.random() < 0.5 else -1)) if e else Vector())
                 rt = r0 * PR.get("tip", 1.2) if e == 0 else re * PR.get("tip", 1.2)
+                mem.append((e, o, re, ge, rt))
+            AV = CFG.get("avoid")
+            if AV and AV.get("props", True):
+                # opt-in: the group (pillars or an aerial-root curtain) must stand clear of every other tube (stems,
+                # limbs, shoots: not its host limb) and of the pillars / roots already placed: else it slides along its
+                # limb to the nearest clear spot within `at` (above minz), else it is dropped
+                pc = AV.get("prop_clear", 0.1)
+                obst = [(x, None, 0.0) for x in out if x is not b and len(x.pts) > 1 and getattr(x, "prop", False) is False
+                        and x.depth <= AV.get("prop_depth", 2)] + [(x, None, 0.0) for x in out if getattr(x, "prop", False)]
+                pj = _near_axis(p, b.pts, b.radii)[2] / max(sum((b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1)), 1e-9)
+                def gcost(pq, rq):
+                    dv = pq - p; tot = 0.0
+                    for e, o, re, ge, rt in mem:
+                        st = pq + dl * (o * rq * PR.get("gap", 0.9))
+                        gq = ge + Vector((dv.x, dv.y, dv.z if "hang" in PR else 0.0))
+                        tot += tube_overlap([st - UP * rq, gq], [max(re, rt), max(re, rt)], 0.0, obst, pc)
+                    return tot
+                best = (gcost(p, r), p, r)
+                if best[0] > 1e-9:
+                    s0, s1 = PR.get("slide", (a0, a1))  # slide range along the limb (default: the group's `at`)
+                    fs = sorted((s0 + (s1 - s0) * i / 24 for i in range(25)), key=lambda x: abs(x - pj))
+                    for fq in fs[1:]:
+                        pq, rq, _ = point_at(b, fq)
+                        if pq.z < PR.get("minz", 1.5): continue
+                        v = gcost(pq, rq)
+                        if v < best[0] - 1e-9: best = (v, pq, rq)
+                        if v <= 1e-9: break
+                kind = "roots" if "hang" in PR else "pillars"
+                if best[0] > 1e-9:
+                    AVOID_STATS[kind + "_dropped"] = AVOID_STATS.get(kind + "_dropped", 0) + 1; continue
+                if best[1] is not p:
+                    AVOID_STATS[kind + "_moved"] = AVOID_STATS.get(kind + "_moved", 0) + 1
+                    dv = best[1] - p; p, r = best[1], best[2]
+                    mem = [(e, o, re, ge + Vector((dv.x, dv.y, dv.z if "hang" in PR else 0.0)), rt) for e, o, re, ge, rt in mem]
+            for e, o, re, ge, rt in mem:
+                st = p + dl * (o * r * PR.get("gap", 0.9))
                 if CO:  # top on the limb axis, swelling to CO r x the limb radius inside it
                     rm = min(re, 0.5 * r); tr = min(0.62 * r, max(rm, CO["r"] * r))
                     x = prop_tube(st, ge, h, rm, rt, dict(PR, curve=PR.get("curve", 0.0)), j * 3 + e, b, top=(tr, r))
                     FW = CO.get("flare"); x.seat = (0.0, (CO.get("flare_at", 0.7) * r if FW else r) + CO["h"]); x.bury = 0.3
+                    x.rigid = (CO.get("flare_at", 0.7) * r + 0.35 * CO["h"]) if FW else 0.0  # late seat: collar kept whole
                     x.keep_rings = bool(FW)  # flared union: the packed LOD1 keeps every collar ring (no faceted cap)
                 else:
                     x = prop_tube(st - UP * r * 0.4, ge, h, re, rt, dict(PR, curve=PR.get("curve", 0.0)), j * 3 + e, b)
@@ -1969,22 +2134,36 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
     if CFG.get("merge"):  # each limb flows into its best-aligned last child: one tube, no tapered spike at the fork
         merge_continuations(branches, CFG["merge"])
         if CFG.get("sag"): sag_runs(branches, CFG["sag"])  # opt-in: before the K3 re-seat, so the pillar tops follow
-        for x in branches:  # K3 props: re-seat the top on the host's final axis (the merge's round moves the joint)
+    AVL = CFG.get("avoid") and CFG["avoid"].get("late_seat", True)
+    def reseat(head):  # K3 props: re-seat the top on the host's final axis (the merge's round moves the joint)
+        for x in branches:
             hb = getattr(x, "par", None)
+            while head and hb is not None and getattr(hb, "merged_into", None) is not None: hb = hb.merged_into
             if getattr(x, "pillar", False) and hb is not None and len(hb.pts) > 1:
                 i = min(range(len(hb.pts) - 1), key=lambda i: axis_gap(x.pts[0], hb.pts[i:i + 2], hb.radii[i:i + 2]))
                 a, b2 = hb.pts[i], hb.pts[i + 1]; ab = b2 - a
                 t = max(0.0, min(1.0, (x.pts[0] - a).dot(ab) / max(ab.length_squared, 1e-9)))
                 seat = getattr(x, "seat", None)  # collar pillars: top on the axis, the collar rings follow the move
-                nw = a + ab * t - UP * (hb.radii[i] * (0.4 if seat is None else seat[0]))
+                rh = hb.radii[i] + (hb.radii[i + 1] - hb.radii[i]) * t if head else hb.radii[i]
+                sk = (0.4 if seat is None else seat[0])
+                if head: sk = max(sk, CFG["avoid"].get("seat_drop", 0.0))  # late seat: the top that far under the
+                nw = a + ab * t - UP * (rh * sk)  # axis, a margin for the packed LOD1's chords between kept rings
                 if getattr(x, "hang", False): dv = nw - x.pts[0]; x.pts = [q + dv for q in x.pts]  # hangs plumb from there
                 elif seat is None: x.pts[0] = nw
+                elif head:  # late seat: the collar (top ring to flare ring) moves rigidly, so the flare stays its
+                    dv = nw - x.pts[0]; acc = [0.0]   # flare_at x r under the top; the shaft eases back below it
+                    for k in range(1, len(x.pts)): acc.append(acc[-1] + (x.pts[k] - x.pts[k - 1]).length)
+                    rg = min(getattr(x, "rigid", 0.0), seat[1] * 0.9)
+                    for k in range(len(x.pts)):
+                        if acc[k] >= seat[1]: break
+                        x.pts[k] = x.pts[k] + dv * (1.0 if acc[k] <= rg else 1.0 - (acc[k] - rg) / (seat[1] - rg))
                 else:
                     dv = nw - x.pts[0]; acc = 0.0
                     for k in range(len(x.pts)):
                         if k: acc += (x.pts[k] - x.pts[k - 1]).length
                         if acc >= seat[1]: break
                         x.pts[k] = x.pts[k] + dv * (1.0 - acc / seat[1])
+    if CFG.get("merge") and not AVL: reseat(False)
     sm = CFG.get("smooth")
     if sm and (not lod1 or sub):  # after the skeleton: child bases and card roots stay where the seed put them
         for b in branches:
@@ -2013,6 +2192,8 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
             for i in range(len(b.pts)):
                 f = max(0.0, (cum[i] / L - f0) / (1 - f0)) ** 1.5
                 b.radii[i] = b.radii[i] * (1 - f) + TIP_R * f
+    if AVL:  # CFG avoid (late_seat): the K3 tops re-seat on the meshed chain head's FINAL axis and radius, after the
+        reseat(True)  # merge, sag, smooth and taper (seated before the smooth, a corner-cut limb left tops 2-7 cm out on top)
     if CFG.get("declip"):  # opt-in: limbs that clash (bark through bark) are tilted apart about their bases, see CFG["declip"]["script"]
         if "mod" not in DECLIP_STATS:  # loaded once: its cache replays the same moves for every LOD
             import importlib.util as _ilu
@@ -2206,6 +2387,7 @@ def coplanar_pairs(obj, eps=1e-4):  # faces not above ground (flare skirt walls 
 print("STAT", NAME, "seed", SEED)
 for _n, _d in DECLIP_STATS.items():
     if _n != "mod": print("STAT", _n, "declip", _d)
+if CFG.get("avoid"): print("STAT avoid", dict(AVOID_STATS))  # the last skeleton built (every LOD redraws the same one)
 for o in LODS:
     print("STAT", o.name, "tris", tris(o), "bark", tris(o, 0), "leaf", tris(o, 1), "bounds", bounds(o))
 print("STAT coplanar-overlapping bark pairs LOD0:", coplanar_pairs(lod0))

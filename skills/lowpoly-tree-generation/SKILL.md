@@ -22,6 +22,7 @@ Everything is headless Blender **5.1** (run through the kit's `blender` tool, `p
 | `tree_family_textures.py` | Python | fallback textures from CC0 scans (Poly Haven + ambientCG), pre-gpt pass |
 | `crown_fullness.py` | Blender (+ numpy/scipy stage) | sky fraction inside the crown silhouette at eye level (`FULLNESS <Sp> sky_mean sky_max`, mask PNG) |
 | `bare_limbs.py` | Blender (+ numpy/scipy stage) | bare limb ends/runs outside the leaf mass and floating sprays (painted twig base off the bark) on the packed mesh (`BARELIMBS <Sp> PASS/WARN/FAIL`, renders of each spot) |
+| `bark_clash.py` | Blender (module: `scan(bm)`; runner `BoothAssets/Tools/trees/bark_clash_check.py`) | bark tubes passing through each other outside their sockets, sibling crotches and the root plate, and socket ends showing on the far side of their host (`BARKCLASH <obj> clashes N deepest_cm X pokes N`); the source fix is the builder's opt-in `avoid` |
 | `prompts/*.txt` | — | the exact image-gen prompts used |
 
 ## Scale: build for the world's reference avatar
