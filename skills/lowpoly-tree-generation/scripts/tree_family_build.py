@@ -141,8 +141,9 @@
 #       so its face turns toward the outward normal of that ellipsoid at the card root (k = share of the normal vs
 #       the drawn roll): a dense mound seen from outside shows card faces, not edge-on streaks (SeaGrape review
 #       2026-10-30). Applied after roll_tilt. No extra random draws: off = identical builds.
-#   crown fill up=0.6, minz=<crown minz> (opt-in): the fill cards' up lean (d*0.4 + to_axis*inward + UP*up; < 0 leans
-#       them down over the limbs) and the lowest fill root. Defaults = the old fixed values: off = identical builds.
+#   crown fill up=0.6, minz=<crown minz>, t=(0.35, 0.97) (opt-in): the fill cards' up lean (d*0.4 + to_axis*inward +
+#       UP*up; < 0 leans them down over the limbs), the lowest fill root and the arc-fraction range along each limb (a
+#       wide fork's bare limb roots: BanyanGrove t 0.15). Defaults = the old fixed values: off = identical builds.
 #   low_tips out=(lo, hi) (opt-in): each low_tips card is re-aimed tip-out: heading = radial from the trunk + its own
 #       drawn heading, elevation lo..hi deg (own random sequence 7937), so no low card hangs vertically (an edge-on
 #       hanging card reads as a stippled vertical stripe). Off = identical builds.
@@ -167,9 +168,15 @@
 #       stems: a ground stem that shares space with an earlier one above `plate` m (the fused root foot) leans further
 #       out (drawn lean x stem_lean); stem_r scales its test radius (fluted stems). props: each K3 limb group (pillars,
 #       aerial-root curtains) must clear every other tube of depth <= prop_depth and every prop placed before it, else
-#       slides along its limb to the nearest clear spot within `at`, else is dropped. late_seat: the K3 tops re-seat on
-#       the meshed chain head after merge, sag, smooth and taper (not before the smooth). STAT avoid {...} counts what
-#       moved. Off = identical builds (no extra draws).
+#       slides along its limb to the nearest clear spot within `at` (or the prop's own `slide`=(lo, hi) range), else is
+#       dropped. late_seat: the K3 tops re-seat on the meshed chain head after merge, sag, smooth and taper (not before
+#       the smooth), the flared collar moved whole (rigid), seat_drop x r under the axis. STAT avoid {...} counts what
+#       moved. Off = identical builds (no extra draws). A mesh clean in 3D can still read as clipping on screen: check
+#       multi-stem trees with `bark_clash_check.py --sil` (stems / big limbs crossing in silhouette).
+#   levels[0] fan=<deg> (opt-in, whorl levels on off-centre stems; multi-stem groves): the whorl opens away from the
+#       tree centre, its limbs spread fan deg around the stem's outward azimuth (drawn jitter x fan_jitter kept), so no
+#       limb (nor a stem's merged continuation) heads back over the centre across a neighbour stem: BanyanGrove r5 v2.
+#   yaw=<deg> (opt-in): the finished skeleton turned about z (no draws): a placed tree faced to its set camera.
 #   declip=dict(script=<declip.py>, margin=0.03, fuse=flare h, max_tilt=35, export=<dir>, apply=True)   bark-through-bark fix: after
 #       merge/smooth/taper, limbs whose meshed tubes clash are tilted apart rigidly about their bases (fork zones and the
 #       ground-stem root crown below `fuse` m are allowed overlap); see BoothAssets/Tools/trees/declip.py. Off = identical builds.
@@ -973,8 +980,17 @@ def build_skeleton(seed):
                     p, r, d = point_at(b, f)
                     az = rng.uniform(0, 2 * math.pi) if n > 3 else (j / n) * 2 * math.pi + rng.uniform(-0.6, 0.6)
                 def mk_perp(azx):
+                    outw = Vector((p.x, p.y, 0))
+                    if wk and P.get("fan") is not None and lv == 0 and outw.length > 0.05:
+                        # opt-in fan (multi-stem groves): the whorl opens away from the tree centre, its limbs spread
+                        # fan deg around the stem's outward azimuth (the drawn jitter kept), so no limb of a stem
+                        # (nor the stem's merged continuation) heads back across the centre over a neighbour stem
+                        jit = az - azw - 2 * math.pi * (j % wk) / wk
+                        th = (math.atan2(outw.y, outw.x) + math.radians(P["fan"]) * ((j % wk) / max(wk - 1, 1) - 0.5)
+                              + jit * P.get("fan_jitter", 1.0) + (azx - az))
+                        hz = Vector((math.cos(th), math.sin(th), 0.0)); pp = hz - d * hz.dot(d)
+                        return pp.normalized() if pp.length > 1e-6 else d.orthogonal().normalized()
                     pp = d.orthogonal().normalized(); pp.rotate(__import__("mathutils").Quaternion(d, azx))
-                    outw = Vector((p.x, p.y, 0));
                     if outw.length > 0.05 and lv == 0 and n <= 3: pp = (pp + outw.normalized() * CFG.get("outward", 1.2)).normalized()
                     return pp
                 perp = mk_perp(az)
@@ -1138,6 +1154,9 @@ def build_skeleton(seed):
                 t = i / 4; pts.append(Vector((p.x, p.y, 0)) + out_d * (r * 0.6 + R * t ** 0.8) + Vector((0, 0, z * (1 - t) ** 2.2)))
                 radii.append(B["r"] * (1 - 0.75 * t))
             out.append(Br(pts, radii, 1))
+    if CFG.get("yaw"):  # opt-in: the whole skeleton turned about z (deg; no draws): faces a placed tree's set camera
+        Rz = __import__("mathutils").Matrix.Rotation(math.radians(CFG["yaw"]), 3, 'Z')
+        for b in out: b.pts = [Rz @ q for q in b.pts]
     return out
 
 # --------------------------------------------------------------------------- meshing
@@ -1542,7 +1561,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         while len(cards) < target and tries < count * 20:
             tries += 1
             b = rng.choices(inner, ilens)[0]
-            t = rng.uniform(0.35, 0.97)
+            t = rng.uniform(*fill.get("t", (0.35, 0.97)))  # opt-in t: where along the limb (a fork's bare limb roots)
             A, _, d = point_at(b, t)
             if A.z < fill.get("minz", C["minz"]): continue
             # lean toward the crown axis and up, so fill cards close the hollow between splayed limbs

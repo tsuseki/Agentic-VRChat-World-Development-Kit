@@ -21,6 +21,10 @@ the host's axis (a hanging pillar whose top comes out through the top of its lim
 `scan(bm, k=1.0, plate=0.35)` -> dict(tubes, clashes=[...], pokes=[...], fused=[...], plate_top=z) in shipped metres
 (k = mesh units per shipped metre: 1 on a packed mesh, 1 / 0.7 on the builder's mesh). Pairs whose deepest sample is
 under TOL are not reported.
+`silhouettes(bm, k, plate, views, az=True)` -> per view: stems / big limbs crossing each other ON SCREEN near the fork
+and stem tops clear / hidden / partial (a clean mesh can still read as one trunk through another: the user judges the
+picture). 8 eye-height azimuths by default plus any set camera (a vignette); positive control: the BanyanGrove of
+BoothAssets 87c9724a, 0 clashes in 3D but an X from the vignette 05 camera (2 crossings there).
 """
 import math
 from mathutils import Vector
@@ -210,3 +214,128 @@ def scan(bm, k=1.0, plate=0.35):
           for (a, b), e in fused.items()]
     return dict(tubes=len(C.tubes), clashes=rows, pokes=pokes, fused=fz, plate_top=round(plate_top / k, 2),
                 hosts={f"{t}:{e}": H[0]["id"] for (t, e), H in C.hosts.items()})
+
+
+# ---- silhouette crossings (screen space): two trunks crossing in a picture read as one through the other, whatever
+# the depth gap between them (user on a BanyanGrove vignette whose stems were 0.1 m+ apart in 3D but formed an X)
+SIL_ABOVE = 3.0    # m shipped: stem axes may not cross from the root plate to this far (arc) past each stem's fork
+SIL_NEAR = 2.0     # m shipped: a big limb may not cross another stem's axis where it passes within this of it (3D)
+SIL_RATIO = 0.55   # a limb is big when its base radius > this x its stem's radius at its socket (Main: 0.6 x the stem;
+#                    the socket rings sit on the swollen stem top, which reads 5-10 % wide: whorl limbs 0.7 x by design)
+SIL_HIDE = 0.25    # tops count as hidden behind each other when their centres are within this x (ra + rb) on screen
+
+
+def _root_stem(C, t):
+    x = t
+    for _ in range(40):
+        if x["ground"]: return x if not C._hung(x) else None
+        H = C.hosts.get((x["id"], 0))
+        if not H: return None
+        x = H[0]
+    return None
+
+
+def _seg_x(a0, a1, b0, b1):
+    """2D segment intersection -> (ta, tb) or None"""
+    d1 = (a1[0] - a0[0], a1[1] - a0[1]); d2 = (b1[0] - b0[0], b1[1] - b0[1])
+    den = d1[0] * d2[1] - d1[1] * d2[0]
+    if abs(den) < 1e-12: return None
+    w = (b0[0] - a0[0], b0[1] - a0[1])
+    ta = (w[0] * d2[1] - w[1] * d2[0]) / den; tb = (w[0] * d1[1] - w[1] * d1[0]) / den
+    return (ta, tb) if 0.0 <= ta <= 1.0 and 0.0 <= tb <= 1.0 else None
+
+
+def silhouettes(bm, k=1.0, plate=0.35, views=(), az=True, dist=10.0, eye=1.3, above=SIL_ABOVE, near=SIL_NEAR,
+                ratio=SIL_RATIO, hide=SIL_HIDE):
+    """Screen-space crossings of the trunk structure, per view. Stems = ground tubes that are not pillars; each stem's
+    fork = the socket of its thickest limb on the stem body; big limbs: base radius > ratio x the stem there; a stem
+    merged into a top limb runs on past its fork as one tube. Per view (perspective, from `loc` looking along `fwd`):
+      stem crossing  : the axes of two stems cross on screen between the root plate and `above` m (arc) past each fork;
+      limb crossing  : a big limb (or a stem's run beyond fork + above) crosses another stem's axis (that same span) on
+                       screen at a point where the two lie within `near` m of each other in 3D;
+      tops           : per stem pair, the fork centres on screen: clear (silhouette gap >= one diameter, ra + rb),
+                       hidden (centres within hide x (ra + rb): one trunk behind the other) or partial (between).
+    views: extra [dict(name, loc, fwd[, fov, aspect])] in shipped m (fov: vertical deg; set = only what is in a frame
+    counts); az=True adds 8 azimuths first (0, 45, ... 315; az 0 looks along +y) at `dist` m, eye `eye` m, aimed at the
+    mean fork height."""
+    C = _Check(bm, k); UPV = Vector((0, 0, 1))
+    stems = [t for t in C.tubes if t["ground"] and not C._hung(t)]
+    fork, big, thick = {}, [], {}
+    def body_r(A):  # the stem's own girth: its ring radius nearest 1.5 m up (above the flare)
+        return min(zip(A["RP"], A["RR"]), key=lambda pr: abs(pr[0].z - 1.5 * k))[1]
+    for t in C.tubes:
+        if t["ground"]: continue
+        H = C.hosts.get((t["id"], 0)); A = _root_stem(C, t)
+        if not H or A is None or H[0] is not A: continue
+        d, rh, s = _near(A["RP"], A["RR"], A["RS"], H[3])[:3]
+        if rh < 0.5 * body_r(A): continue  # on the stem itself, not on its thin merged run
+        if t["R"][1] > ratio * rh: big.append((t, A))
+        if t["R"][1] > thick.get(A["id"], (0.0, 0.0))[0]: thick[A["id"]] = (t["R"][1], s)   # the fork: thickest limb
+    fork = {a: s for a, (_, s) in thick.items()}
+    span, runs = {}, {}
+    for A in stems:
+        sf = fork.get(A["id"], A["RS"][-1]); fork[A["id"]] = sf
+        span[A["id"]] = [i for i in range(len(A["RP"])) if A["RP"][i].z >= plate * k and A["RS"][i] <= sf + above * k]
+        runs[A["id"]] = [i for i in range(len(A["RP"])) if A["RS"][i] > sf + above * k]
+    def fpt(A):
+        sf = fork[A["id"]]; RP, RR, RS = A["RP"], A["RR"], A["RS"]
+        for i in range(len(RP) - 1):
+            if RS[i + 1] >= sf:
+                u = (sf - RS[i]) / max(RS[i + 1] - RS[i], 1e-9); return RP[i].lerp(RP[i + 1], u), RR[i] + (RR[i + 1] - RR[i]) * u
+        return RP[-1], RR[-1]
+    tops = {A["id"]: fpt(A) for A in stems}
+    fz = sum(p.z for p, _ in tops.values()) / max(len(tops), 1) / k; vv = []
+    for a in (range(0, 360, 45) if az else ()):
+        r = math.radians(a); loc = Vector((math.sin(r) * dist, -math.cos(r) * dist, eye))
+        vv.append(dict(name=f"az{a:03d}", loc=loc, fwd=Vector((0, 0, fz)) - loc))
+    views = vv + list(views)
+    lines = [(A, [A["RP"][i] for i in span[A["id"]]]) for A in stems]
+    others = [(t, A, t["RP"]) for t, A in big] + [(A, A, [A["RP"][i] for i in runs[A["id"]]]) for A in stems]
+    out = []
+    for V in views:
+        L = Vector(V["loc"]) * k; f = Vector(V["fwd"]).normalized()
+        rt = f.cross(UPV); rt = rt.normalized() if rt.length > 1e-6 else Vector((1, 0, 0)); up = rt.cross(f)
+        lim = (math.tan(math.radians(V["fov"]) / 2) * V.get("aspect", 16 / 9), math.tan(math.radians(V["fov"]) / 2)) if V.get("fov") else None
+        def pj(q):
+            v = q - L; z = v.dot(f)
+            return None if z < 0.05 * k else (v.dot(rt) / z, v.dot(up) / z, z)
+        def inframe(p): return lim is None or (abs(p[0]) <= lim[0] and abs(p[1]) <= lim[1])
+        def cross(PA, PB, test):
+            hits = []
+            QA = [pj(q) for q in PA]; QB = [pj(q) for q in PB]
+            for i in range(len(PA) - 1):
+                if QA[i] is None or QA[i + 1] is None: continue
+                for j in range(len(PB) - 1):
+                    if QB[j] is None or QB[j + 1] is None: continue
+                    x = _seg_x(QA[i], QA[i + 1], QB[j], QB[j + 1])
+                    if not x: continue
+                    pa = PA[i].lerp(PA[i + 1], x[0]); pb = PB[j].lerp(PB[j + 1], x[1])
+                    sp = (QA[i][0] + (QA[i + 1][0] - QA[i][0]) * x[0], QA[i][1] + (QA[i + 1][1] - QA[i][1]) * x[0])
+                    if inframe(sp) and test(pa, pb): hits.append((pa, pb))
+            return hits
+        rec = dict(view=V["name"], crossings=[], tops=[])
+        for ia, (A, PA) in enumerate(lines):
+            for B, PB in lines[ia + 1:]:
+                h = cross(PA, PB, lambda pa, pb: True)
+                if h:
+                    pf = lambda S, q: round((_near(S["RP"], S["RR"], S["RS"], q)[2] - fork[S["id"]]) / k, 2)
+                    rec["crossings"].append(dict(kind="stem", a=A["id"], b=B["id"], n=len(h), at=[round(x / k, 2) for x in h[0][0]],
+                                                 gap_m=round((h[0][0] - h[0][1]).length / k, 2),
+                                                 past_fork_m=[pf(A, h[0][0]), pf(B, h[0][1])]))
+                (ca, ra), (cb, rb) = tops[A["id"]], tops[B["id"]]
+                qa, qb = pj(ca), pj(cb)
+                if qa is None or qb is None or not (inframe(qa) or inframe(qb)): continue
+                sa, sb = ra / qa[2], rb / qb[2]; dc = math.hypot(qa[0] - qb[0], qa[1] - qb[1]); D = sa + sb
+                cls = "clear" if dc - D >= D else "hidden" if dc <= hide * D else "partial"
+                rec["tops"].append(dict(a=A["id"], b=B["id"], cls=cls, gap_diam=round((dc - D) / D, 2)))
+        for t, A, PT in others:
+            for B, PB in lines:
+                if B is A or len(PT) < 2: continue
+                h = cross(PT, PB, lambda pa, pb: (pa - pb).length <= near * k)
+                if h: rec["crossings"].append(dict(kind="limb", a=t["id"], stem_of_a=A["id"], b=B["id"], n=len(h),
+                                                   at=[round(x / k, 2) for x in h[0][0]], gap_m=round((h[0][0] - h[0][1]).length / k, 2)))
+        rec["n_cross"] = len(rec["crossings"]); rec["n_partial"] = sum(1 for x in rec["tops"] if x["cls"] == "partial")
+        out.append(rec)
+    return dict(stems=[A["id"] for A in stems], big=[t["id"] for t, _ in big],
+                forks={A["id"]: round(tops[A["id"]][0].z / k, 2) for A in stems}, views=out,
+                n_cross=sum(r["n_cross"] for r in out), n_partial=sum(r["n_partial"] for r in out))
