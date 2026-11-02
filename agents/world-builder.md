@@ -60,6 +60,10 @@ furniture zones by spatial-design and the seating and layout rules below.
   save at the end. After any script change, `read_console` for `error CS` before continuing.
 - `execute_code` freezes the editor; MCP times out at ~10 s. Batch work into short calls; give
   every geometry loop a time budget.
+- Navigation empties (`NAV …`, `EditorOnly`, top of the hierarchy): add or move the room empties
+  for each area you build (C.1), check them against the teleport menu (C.2), and never delete or
+  reorder them; they are outside your root scope only for this purpose (world-pipeline "Navigation
+  empties").
 - Collision: none on small props, with two furniture exceptions (below). Walk surfaces (floors,
   terrain, decks, bridges), building walls, rocks, large solid masses and every tree trunk (one
   fitted capsule per tree instance) only; **no barrier colliders**: no invisible walls, world-edge,

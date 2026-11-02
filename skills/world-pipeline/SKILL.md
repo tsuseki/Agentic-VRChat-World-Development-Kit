@@ -286,6 +286,26 @@ measured from the scene, never estimated from shots. Numbers are scene metres.
   LOD group, rebuild those LOD chains and verify no LOD copy renders outside an active LODGroup
   (every enabled renderer of a LOD copy is referenced by an active LODGroup).
 
+## Navigation empties
+
+Every world scene has editor-only navigation empties so the user can select one and press F to
+jump the Scene view there:
+
+- **One root empty per floor** (main floors, roof decks, walkable crowns), named
+  `NAV <floor> — <title> (y <elevation>)`, at the floor's area-weighted centre, 1.3 m above the slab
+  (reference eye height). Ordered top floor first at sibling index 0…n, above every other root.
+- **One root empty per notable outdoor place** (spawn, plazas, landmarks, islands, far
+  destinations), named `NAV Site — <place>`, right after the floor empties.
+- **One child empty per notable room** under its floor's empty, named `NAV <floor> · <room>`: the
+  floor's hub, stores, offices, head rooms, anything players will look for. The teleport menu's
+  destinations are the minimum set.
+- All are plain empties tagged `EditorOnly`, so they are stripped from the build. No components,
+  never start with `__` (the capture sweep deletes `__*__`).
+- **Who:** world-architect creates the floor and site empties with the A.3 shell pick and keeps
+  them in step with the plan in B.1/B.2 (positions from the plan JSON). world-builder adds and
+  moves room empties in C.1 as areas are built, and checks them in C.2 against the teleport menu.
+  Nobody deletes or reorders them; a moved slab moves its empties.
+
 ## Stages and gates
 
 Under `pipeline-trial` every builder and reviewer appends events to `<project>/Trial/log.jsonl`

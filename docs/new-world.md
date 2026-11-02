@@ -31,6 +31,11 @@ Assumes [bootstrap.md](bootstrap.md) is done on this machine.
 5. **Brief**: copy [.omp/templates/WORLD.template.md](../templates/WORLD.template.md) to the project root
    as `WORLD.md` (the code block inside it is the file body). Create the project's own `AGENTS.md`
    with machine facts (local asset library path, Unity instance name, owned paid packages).
+5b. **Navigation empties** (every world): the scene gets editor-only `NAV …` empties at the top of
+   the hierarchy, one per floor and per notable place or room, so you can select one and press F
+   to fly the Scene view there. The agents create them with the first shell blockout (A.3) and
+   keep them current through the build; rules in
+   [.omp/skills/world-pipeline/SKILL.md](../skills/world-pipeline/SKILL.md) "Navigation empties".
 6. **Start the pipeline**: tell the agent "make me a world: <description>" and give it whatever you
    have (a design doc, reference pictures). It loads
    [.omp/skills/world-pipeline/SKILL.md](../skills/world-pipeline/SKILL.md), gathers information

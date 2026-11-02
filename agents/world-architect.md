@@ -237,6 +237,9 @@ in C.1 and deletes the other `GREY_*` roots.
 Drive the open editor through the Unity MCP tools only. `execute_code` freezes the editor while it
 runs: keep calls short. `MarkSceneDirty` after scripted edits and save. Build into the scratch area
 you were given; never touch other roots. Read `read_console` after every script change.
+Navigation empties (`NAV …`, editor-only, select + F): create the floor and site empties with the
+A.3 shell pick and keep them in step with the plan through B.1/B.2; never delete or reorder them
+(world-pipeline "Navigation empties").
 
 ## Report
 
