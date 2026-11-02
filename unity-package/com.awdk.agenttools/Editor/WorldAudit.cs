@@ -54,6 +54,8 @@ namespace AWDK.AgentTools
             var propCols = new Section("PROP_COLLIDERS", "colliders under Props/Dressing/Furniture roots: props are walk-through unless they must block");
             var uv2 = new Section("STATIC_MISSING_UV2", "ContributeGI renderers lightmapped without UV2: enable Generate Lightmap UVs");
             var tex = new Section("UNCOMPRESSED_TEXTURES", "textures on scene materials stored uncompressed (VRAM / download size)");
+            var jump = new Section("NO_JUMPING", "scene descriptor present but no Udon script calls SetJumpImpulse (VRChat default jump is 0): add the kit's PlayerMovementSettings");
+            bool hasDescriptor = false, hasJump = false;
 
             var seenTex = new HashSet<Texture>();
             int lieDownOff = 0, solidOn = 0, containShells = 0;
@@ -87,6 +89,10 @@ namespace AWDK.AgentTools
                             if (float.IsNaN(p) || Mathf.Abs(p - 0.1f) > 1e-4f || h != "No")
                                 pickups.Items.Add(string.Format(Util.Inv, "{0} proximity={1} AutoHold={2}{3}", path, prox == null ? "?" : p.ToString("0.###", Util.Inv), h, state));
                         }
+                        else if (Util.TypeNamed(type, "VRCSceneDescriptor", "VRC_SceneDescriptor"))
+                            hasDescriptor = true;
+                        else if (!hasJump && go.activeInHierarchy && Util.TypeNamed(type, "UdonBehaviour") && SetsJump(c))
+                            hasJump = true;
                     }
 
                     var light = go.GetComponent<Light>();
@@ -158,7 +164,9 @@ namespace AWDK.AgentTools
                 }
             }
 
-            var sections = new[] { stations, pickups, lights, leftovers, walkMesh, propCols, uv2, tex };
+            if (string.IsNullOrEmpty(rootPath) && hasDescriptor && !hasJump)
+                jump.Items.Add("no active UdonBehaviour whose U# source calls SetJumpImpulse(<non-zero>)");
+            var sections = new[] { stations, pickups, lights, leftovers, walkMesh, propCols, uv2, tex, jump };
             var sb = new StringBuilder();
             sb.AppendLine(string.Format(Util.Inv, "WORLD AUDIT scenes={0} root={1}", Util.SceneNames(), string.IsNullOrEmpty(rootPath) ? "<all>" : rootPath));
             int issues = 0;
@@ -179,6 +187,23 @@ namespace AWDK.AgentTools
             }
             sb.Append("ISSUES=").Append(issues.ToString(Util.Inv));
             return sb.ToString();
+        }
+
+        // True when the UdonBehaviour's program is UdonSharp source that sets a non-zero jump impulse.
+        static bool SetsJump(Component udon)
+        {
+            var src = Member(udon, "programSource") as UnityEngine.Object;
+            if (src == null) return false;
+            const BindingFlags bf = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+            for (var t = src.GetType(); t != null; t = t.BaseType)
+            {
+                var f = t.GetField("sourceCsScript", bf);
+                if (f == null) continue;
+                var script = f.GetValue(src) as MonoScript;
+                string text = script != null ? script.text : null;
+                return text != null && Regex.IsMatch(text, @"SetJumpImpulse\s*\(\s*(?!0f?\s*\)|0\.0+f?\s*\))");
+            }
+            return false;
         }
 
         static object Member(Component c, string name)

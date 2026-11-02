@@ -136,7 +136,8 @@ WorldAudit.Run(string rootPath = null)
 Reports, with object paths: `VRCStation`/`VRC_Station` components; `VRC_Pickup` with proximity ≠
 0.1 or AutoHold ≠ No; realtime or Mixed lights; leftover `__*__` objects; MeshColliders on likely
 walkable surfaces; colliders on props; static renderers missing UV2; uncompressed textures on
-scene materials. Read-only; quick enough to run synchronously.
+scene materials; and, on a whole-scene run with a scene descriptor, `NO_JUMPING` when no active
+UdonBehaviour's U# source calls `SetJumpImpulse` with a non-zero value. Read-only; quick enough to run synchronously.
 
 Expected findings, not defects: point-sampled data textures that a tool keeps uncompressed by design (e.g. the
 merged-cell tables `RGBAFloat`/`RGBAHalf` of `vrchat-world-optimization` `scripts/GroundCells.cs.txt`). Never compress,
