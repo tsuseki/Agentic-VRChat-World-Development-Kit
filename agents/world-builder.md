@@ -204,7 +204,9 @@ Once the real objects exist:
   on** (the world's local movement-settings UdonSharp: `SetJumpImpulse(3f)`, walk 2, run 4, strafe 2,
   gravity 1, in `OnPlayerJoined` for the local player; verify the impulse in ClientSim), the
   **respawn height** checked from the sea and every edge, every building entered from its approach
-  path, then the **walk test** (Before you return, step 3).
+  path, **no path ending in nothing** (user, 2026-11-02: "should not end up in nothing but have a little
+  bench here": every path end reaches a destination, such as a bench spot facing a view, a shrine,
+  a lookout or a door, or loops back), then the **walk test** (Before you return, step 3).
 - **Udon**: clickable teleport doors on the real doors, the teleport islands with their return doors
   and landings, toggles, video, pickups only where requested, the VIP gate. No mirror unless the
   plan puts a real one in a bathroom, gym or dance/dressing room (then start it off).

@@ -224,7 +224,8 @@ yaw), never from pixels, and quote the measured value in each finding.
     collider (a capsule oversized by more than ~5 cm or floating is a should-fix), a building whose
     approach path ends at a closed wall, and a world without jumping on (movement-settings script,
     jump impulse 3). No `VRCStation` anywhere unless WORLD.md records the user requesting it; pickups use
-    proximity 0.1 and AutoHold No. Each violation is a blocker. Pickups, Udon-moved and animated
+    proximity 0.1 and AutoHold No. Each violation is a blocker. A path that stops in nothing (no
+    destination such as a bench spot, a shrine or a lookout, and no loop back) is a should-fix. Pickups, Udon-moved and animated
     parts and other dynamic props use an LV-compatible shader (`<name>_LV.mat`;
     `.omp/skills/lightmap-allocation/SKILL.md` §1); a Standard-shader dynamic prop is a should-fix.
     Check the shader assignment only; never judge their lighting, and never by probe light.
