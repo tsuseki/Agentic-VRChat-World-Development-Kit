@@ -40,7 +40,8 @@ texture-memory changes follow texture-decisions.md and still need §4.
    import per §2 B before judging anything at a grazing angle. Size and format: texture-decisions.md.
 5. **Mapping.** Decide where texel density lives (mesh UVs, world-projected, or material tiling) and
    keep it uniform across a surface family. Break clone repetition per renderer with a property
-   block, not with material copies.
+   block, not with material copies. Large worlds (km-scale, few reused textures): plan texel
+   density, period and mapping mode per material first, per `references/uv-tiling-at-scale.md`.
 6. **Value and colour.** Put tone into the albedo texture; `_Color` only trims. Before touching
    metallic, decide whether the surface is carried by diffuse (bounce-lit) or by reflection (facing a
    bright source).
