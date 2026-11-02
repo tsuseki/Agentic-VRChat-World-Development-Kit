@@ -286,6 +286,16 @@ measured from the scene, never estimated from shots. Numbers are scene metres.
   LOD group, rebuild those LOD chains and verify no LOD copy renders outside an active LODGroup
   (every enabled renderer of a LOD copy is referenced by an active LODGroup).
 
+## Progress log
+
+Every world keeps a visual, append-only progress log for the user: mostly pictures, one or two
+sentences each. The orchestrator adds an entry after every stage result, review verdict and
+user decision that changed what the world looks like, with 2–5 of that step's captures:
+`python .omp/scripts/progress_log.py add <project> --stage "C.1" --title "..." --text "..." --img <path> "<caption>" ...`.
+Entries go to `<project>/Design/progress/entries.json`; the page `Design/progress/index.html`
+(light background, newest at the bottom) is rebuilt on every add. Never edit or delete old
+entries; a correction is a new entry. Give the user the page path when you add to it.
+
 ## Navigation empties
 
 Every world scene has editor-only navigation empties so the user can select one and press F to
