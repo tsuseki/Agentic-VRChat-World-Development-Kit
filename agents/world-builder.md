@@ -60,8 +60,11 @@ furniture zones by spatial-design and the seating and layout rules below.
   save at the end. After any script change, `read_console` for `error CS` before continuing.
 - `execute_code` freezes the editor; MCP times out at ~10 s. Batch work into short calls; give
   every geometry loop a time budget.
-- Collision: none on small props, with two furniture exceptions (below). Walls, floors, railings
-  and large solid masses (trees, big solid objects people mustn't walk through) only; prefer one
+- Collision: none on small props, with two furniture exceptions (below). Walk surfaces (floors,
+  terrain, decks, bridges), building walls, rocks, large solid masses and every tree trunk (one
+  fitted capsule per tree instance) only; **no barrier colliders**: no invisible walls, world-edge,
+  shore or sea boundaries, wading walls, and none on fences, railings or low walls (players may jump
+  them, wade, fall; respawn catches them; `.omp/AGENTS.md` "Movement collision"); prefer one
   BoxCollider (otherwise a few locally axis-aligned boxes); stairs, steps and terraces get one thin
   rotated ramp box per flight; cover solid clusters (e.g. stacked crates) with one box, not one per
   item; never a MeshCollider on walkable or brushed surfaces. Destroy primitive auto-colliders.
@@ -186,14 +189,18 @@ set of criteria:
 
 Once the real objects exist:
 
-- **Colliders** per the Unity rules above: walls, floors, railings, large solid masses; walked
+- **Colliders** per the Unity rules above: walk surfaces, building walls, rocks, large solid masses
+  and a fitted capsule on every tree trunk, no barrier, edge, shore or rail colliders; walked
   surfaces smooth (terrain and paths without bumps in the collider; roughness is visual only,
   spatial-design §3.5 Ground); the always-on `SolidCollider` child on every `solid` piece; the
   `LieDownCollider` children on every `lieDown` piece, disabled; the one world lie-down toggle
   (UdonSharp `LieDownColliderToggle`, local per player, holding every `LieDownCollider` in the
   world, placed with the other world toggles).
-- **Stair ramps** (one per flight), **spawn** (facing into the space towards the heart), then the
-  **walk test** (Before you return, step 3).
+- **Stair ramps** (one per flight), **spawn** (facing into the space towards the heart), **jumping
+  on** (the world's local movement-settings UdonSharp: `SetJumpImpulse(3f)`, walk 2, run 4, strafe 2,
+  gravity 1, in `OnPlayerJoined` for the local player; verify the impulse in ClientSim), the
+  **respawn height** checked from the sea and every edge, every building entered from its approach
+  path, then the **walk test** (Before you return, step 3).
 - **Udon**: clickable teleport doors on the real doors, the teleport islands with their return doors
   and landings, toggles, video, pickups only where requested, the VIP gate. No mirror unless the
   plan puts a real one in a bathroom, gym or dance/dressing room (then start it off).

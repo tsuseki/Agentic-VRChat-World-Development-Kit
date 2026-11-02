@@ -219,7 +219,11 @@ yaw), never from pixels, and quote the measured value in each finding.
     inactive state in the scene). A big piece without its solid collider, a missing,
     enabled-by-default or misfitted lie-down collider, a collider on a small prop (chair, stool,
     couch, armchair, coffee/side/bedside table, decor), or a solid box sticking out past the piece is
-    a blocker. No `VRCStation` anywhere unless WORLD.md records the user requesting it; pickups use
+    a blocker. **Barrier colliders are blockers too**: an invisible wall, edge, shore, sea-gate or
+    wading box, or a collider on a fence, railing or low wall. So is a tree instance without a trunk
+    collider (a capsule oversized by more than ~5 cm or floating is a should-fix), a building whose
+    approach path ends at a closed wall, and a world without jumping on (movement-settings script,
+    jump impulse 3). No `VRCStation` anywhere unless WORLD.md records the user requesting it; pickups use
     proximity 0.1 and AutoHold No. Each violation is a blocker. Pickups, Udon-moved and animated
     parts and other dynamic props use an LV-compatible shader (`<name>_LV.mat`;
     `.omp/skills/lightmap-allocation/SKILL.md` §1); a Standard-shader dynamic prop is a should-fix.

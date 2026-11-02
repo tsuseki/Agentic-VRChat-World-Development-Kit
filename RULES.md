@@ -18,6 +18,14 @@ These stay in force for the whole session. Background and rationale live in `.om
    **Lie-down colliders:** beds, couches and lie-on furniture get a top-surface child
    `LieDownCollider` (one `BoxCollider`), disabled by default and switched on only by the world's
    single lie-down colliders toggle (Udon). Requested pickups keep their own tight collider.
+   **No barrier colliders; trunks always:** no invisible walls, world-edge, shore or coast
+   boundaries, sea gates or wading walls, and no colliders on fences, railings or low walls.
+   Players may walk into water, step off edges and jump over fences; the respawn height catches
+   falls. Walk surfaces, building walls, rocks, big furniture and **every tree trunk** (one
+   capsule fitted to the visible trunk; prop/pillar roots count) keep colliders. Every building
+   players can see is enterable from the path that leads to it.
+   **Jumping is on in every world:** one local UdonSharp movement-settings script per world sets
+   `SetJumpImpulse(3)` (VRChat's default is 0) with the default walk/run/strafe/gravity.
 
 3. **Never add a seat station unless the user explicitly asks.** No `VRC_Station`/`VRCStation`
    on any chair, sofa, bench, stool, bed, jacuzzi or prop, in any world. Strip stations off
