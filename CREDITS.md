@@ -223,6 +223,12 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
 - [Blendkit](https://www.blendkit.com/) (formerly BlenderKit) search/download API (`/api/v1/search/`,
   `/api/v1/downloads/`) and [licence terms](https://www.blendkit.com/docs/licenses/) (royalty-free, CC0).
   Used by `.omp/skills/worldbuilding-assets/scripts/blendkit.py`, `.omp/agents/asset-finder.md`.
+- Olive Coast hang-out pieces (BoothAssets, Mediterranean world, 2026-11-02): ambientCG (CC0)
+  [Plaster003](https://ambientcg.com/view?id=Plaster003), [Travertine009](https://ambientcg.com/view?id=Travertine009)
+  and [Wood049](https://ambientcg.com/view?id=Wood049) (2K colour + NormalGL, re-tinted into the 1024² `MedHangout_Atlas`);
+  (the Poly Haven `painted_wooden_bench` was evaluated and dropped, not shipped); the `MedHangout_Vine`
+  leaf atlas was generated with GPT Image (own asset, no third-party licence). Files:
+  `BoothAssets/SourceAssets/Hangout1102/MED/` and `BoothAssets/Assets/_World/Mediterranean/Hangout1102/`.
 
 ## Research references
 
