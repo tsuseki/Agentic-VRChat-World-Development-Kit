@@ -3,6 +3,7 @@
 This file is also the entry point of the **Agentic VRChat World Development Kit (AWDK)**, which lives in
 `.omp/` (skills, agents, knowledge notes, docs, templates, the `com.awdk.agenttools` Unity package).
 Paths written as `.omp/...` resolve from the workspace root; Markdown links resolve from this file.
+Never used an AI agent before? Start with [`.omp/docs/beginner.md`](docs/beginner.md).
 New machine? Follow [`.omp/docs/bootstrap.md`](docs/bootstrap.md). New world? [`.omp/docs/new-world.md`](docs/new-world.md).
 User says "make me a world" or the project has a `WORLD.md`? Load the world-pipeline skill
 ([`.omp/skills/world-pipeline/SKILL.md`](skills/world-pipeline/SKILL.md)) and act as the orchestrator.
