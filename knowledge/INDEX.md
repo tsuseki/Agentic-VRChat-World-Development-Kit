@@ -4,7 +4,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## Topics
 
-- [lighting-baking](#lighting-baking) (79)
+- [lighting-baking](#lighting-baking) (80)
 - [probes-reflection-and-light](#probes-reflection-and-light) (25)
 - [materials-textures-shaders](#materials-textures-shaders) (50)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (34)
@@ -14,7 +14,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [udonsharp-networking](#udonsharp-networking) (11)
 - [vrchat-sdk-upload-components](#vrchat-sdk-upload-components) (4)
 - [performance](#performance) (28)
-- [unity-editor-scripting-mcp](#unity-editor-scripting-mcp) (32)
+- [unity-editor-scripting-mcp](#unity-editor-scripting-mcp) (33)
 - [agent-workflow-verification](#agent-workflow-verification) (44)
 - [assets-sourcing](#assets-sourcing) (7)
 - [audio-video-ui](#audio-video-ui) (12)
@@ -57,6 +57,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Face-down ground decals and wrong-way normals bake black](notes/face-down-decals-bake-black-slabs.md) — A face-down ground quad is invisible from above yet still casts shadow, sealing the surface below into a black baked slab; diagnose by comparing winding normal and shading normal against a ground truth before flipping either.
 - [GLIM bounces black off the back of two-sided leaf cards; a two-shader patch fixes it](notes/glim-backface-black-on-two-sided-foliage.md) — GLIM 0.11.0 ignores Double Sided GI in its lightmap bounce pass, so every bounce ray that hits a leaf card from behind returns black and tree crowns bake about 40 % darker than Progressive; patching two Slang shaders to bounce the front-side value fixes part of it and leaves single-sided bakes byte-identical.
 - [GLIM: a free Vulkan GPU lightmapper that runs on AMD as well as NVIDIA](notes/glim-vendor-portable-gpu-lightmapper.md) — Bakery requires NVIDIA OptiX, but GLIM (github.com/z3y/glim) is a free, open-source drop-in replacement for Unity's built-in lightmapper using Vulkan ray queries, so the NVIDIA lock is not inescapable.
+- [Grass and small ground cover as bake casters print texel-sized smudges; darken the base in the shader instead](notes/grass-casters-print-texel-smudges-use-base-shade.md) — Thousands of sub-metre grass casters bake blotchy lightmap-texel smudges and darken the probes inside the grass; switch them to non-casting and get contact shading from a vertex-height base-darkening term on a world-owned material copy.
 - [Green/pink lightmap blotches: fix atlas starvation before blaming denoise or compression](notes/bakery-chroma-patches-atlas-starvation-recipe.md) — Chroma blobs and bleed gradients on hero surfaces came from one hidden mesh eating 68% of the atlas; audit chart share, demote hogs, use fixed groups, pad, and bake at GI 32 / 4 bounces.
 - [Invisible ShadowsOnly proxy boxes must float and match object height, and only for things that never move](notes/baked-shadow-proxy-boxes-float-and-match-height.md) — A ShadowsOnly proxy resting on the ground bakes a black slab, one shorter than the object hides its shadow underneath, and anything a player can move should get no baked shadow at all.
 - [Lamp too bright' usually means the spill; the fixture's own glow is a separate knob](notes/lamp-brightness-spill-vs-fixture-are-separate-knobs.md) — A lamp's spill on the room (baked emitter intensity) and the fixture's own appearance (shade emission/colour) are independent; 'too bright' and 'too dark' can both be true of one lamp, and fixing it moves the two knobs in opposite directions.
@@ -367,6 +368,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [A material snapshot/restore must capture every field it writes back](notes/material-snapshot-must-record-every-field.md) — Restoring with SetColor(new Color(r,g,b)) forces alpha to 1 and a partial snapshot can rewrite m_LightmapFlags; record every field you will write, or restore from git.
 - [A/B performance in the editor by reading UnityStats and frame-count deltas](notes/measure-editor-fps-and-tris-via-unitystats.md) — Read UnityEditor.UnityStats via reflection for triangles/draw calls and compute FPS from Time.frameCount deltas across two separate execute_code calls.
 - [Adding and inspecting UdonSharp behaviours from editor scripts](notes/udonsharp-add-component-from-editor-script.md) — Use UdonSharpComponentExtensions.AddUdonSharpComponent (or UdonSharpUndo.AddComponent) after the program asset exists and compiles; proxy fields are the source of truth in edit mode.
+- [After a compile error the editor keeps running the previous assembly, so a placement script silently ignores new code](notes/stale-assembly-runs-after-a-compile-error.md) — A single error CS leaves the last good assembly loaded, so calls to your new method or data field run the old code with no error; read the console for error CS after every refresh and prove new code ran by a measured result.
 - [After reimporting, verify in a later call; FBX-embedded material edits and prefab-instance reparenting silently fail](notes/verify-reimports-in-a-later-call-and-edit-instances-safely.md) — A screenshot or measurement in the same call as SaveAndReimport sees the old mesh; embedded FBX materials don't keep edits; importer remaps don't update existing scene renderer arrays; reparenting a child of a prefab instance fails.
 - [An Editor-script recompile can leave Unity on an empty untitled scene — reopen and assert before measuring](notes/editor-script-recompile-can-drop-open-scene.md) — After editing an Editor script, the domain reload may land on an unnamed empty scene where every query returns a plausible lie (0 lights, 0 lightmaps, 0 probes); save first, reopen, and assert scene identity.
 - [An MCP timeout on a bulk mutation means 'unknown', not 'did not run](notes/mcp-timeout-leaves-mutation-half-applied.md) — A bulk Unity edit that exceeds the MCP request window can finish halfway without rollback; query the resulting state, batch small, and make batches resumable.
