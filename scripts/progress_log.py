@@ -66,6 +66,8 @@ h2{font-size:16px;margin:4px 0 6px} p{margin:0 0 10px;max-width:900px}
 figure{margin:0} figure img{width:100%;height:auto;display:block;border:1px solid #d0d7de;border-radius:4px;background:#f6f8fa}
 figcaption{font-size:12px;color:#57606a;margin-top:3px}
 .path{font-family:ui-monospace,Consolas,monospace;font-size:11px;color:#8c959f;word-break:break-all}
+blockquote{margin:0 0 8px;padding:4px 10px;border-left:3px solid #bf8700;background:#fff8c5;max-width:900px;font-size:14px}
+.who{font-weight:600;color:#7d4e00;margin-right:4px}
 """
 
 
@@ -96,6 +98,8 @@ def build(root, d, ef, hf):
             f'<section id="e{i}"><div class="meta"><span class="stage">{html.escape(e.get("stage", ""))}</span>'
             f'{html.escape(e["when"])}</div><h2>{html.escape(e["title"])}</h2>'
             + (f'<p>{html.escape(e["text"])}</p>' if e.get("text") else "")
+            + "".join(f'<blockquote><span class="who">User steered</span> “{html.escape(q)}”</blockquote>'
+                      for q in e.get("steer", []))
             + f'<div class="grid">{"".join(figs)}</div></section>')
     last = f"#e{len(entries) - 1}" if entries else "#"
     page = (f'<!doctype html><html><head><meta charset="utf-8"><title>{html.escape(name)} progress</title>'
@@ -115,6 +119,7 @@ def main():
     a.add_argument("--title", required=True)
     a.add_argument("--text", default="")
     a.add_argument("--img", nargs="+", action="append", metavar=("PATH", "CAPTION"))
+    a.add_argument("--steer", action="append", default=[], help="the user's exact words that steered this step (repeat)")
     a.add_argument("--when")
     b = sp.add_parser("build")
     b.add_argument("project")
@@ -124,7 +129,7 @@ def main():
         entries = load(ef)
         when = args.when or dt.datetime.now().strftime("%Y-%m-%d %H:%M")
         entries.append({"when": when, "stage": args.stage, "title": args.title, "text": args.text,
-                        "images": parse_imgs(args.img, root)})
+                        "steer": args.steer, "images": parse_imgs(args.img, root)})
         ef.write_text(json.dumps(entries, indent=1, ensure_ascii=False), encoding="utf-8")
     print(build(root, d, ef, hf))
 

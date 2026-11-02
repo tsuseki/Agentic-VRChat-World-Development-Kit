@@ -294,7 +294,11 @@ user decision that changed what the world looks like, with 2–5 of that step's 
 `python .omp/scripts/progress_log.py add <project> --stage "C.1" --title "..." --text "..." --img <path> "<caption>" ...`.
 Entries go to `<project>/Design/progress/entries.json`; the page `Design/progress/index.html`
 (light background, newest at the bottom) is rebuilt on every add. Never edit or delete old
-entries; a correction is a new entry. Give the user the page path when you add to it.
+entries; a correction is a new entry. Give the user the page path when you add to it. Every entry that
+followed a user steer carries the user's exact words (`--steer "..."`, repeatable), so the log shows how the
+user steered the build, not only what was built. When the user plans a write-up (blog post, showcase), also keep
+`<project>/Design/blog/blog_notes.md`: one append-only line per thing worth showing (date, what, why, paths) and a
+draft in `Design/blog/blog_draft.md`.
 
 ## Navigation empties
 
