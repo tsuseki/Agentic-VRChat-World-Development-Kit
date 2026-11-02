@@ -10,12 +10,16 @@ Entries live in <project>/Design/progress/entries.json (append only); the page
 
 --img takes a path (relative to the project, or absolute inside it) and an optional caption; repeat it.
 --when "YYYY-MM-DD HH:MM" backdates an entry (backfill); default is now.
+Pictures are embedded in the page as JPEG thumbnails (data URIs): editor HTML previews (VS Code) block
+relative local files, so a linked <img> shows nothing there. The full-size path is printed under each one.
+Needs Pillow.
 """
 import argparse
+import base64
 import datetime as dt
 import html
+import io
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -65,6 +69,17 @@ figcaption{font-size:12px;color:#57606a;margin-top:3px}
 """
 
 
+def thumb_uri(p, width=960, quality=80):
+    from PIL import Image
+    with Image.open(p) as im:
+        im = im.convert("RGB")
+        if im.width > width:
+            im = im.resize((width, round(im.height * width / im.width)), Image.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=quality, optimize=True)
+    return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+
+
 def build(root, d, ef, hf):
     entries = load(ef)
     name = root.name
@@ -72,10 +87,9 @@ def build(root, d, ef, hf):
     for i, e in enumerate(entries):
         figs = []
         for im in e.get("images", []):
-            rel = os.path.relpath(root / im["path"], d).replace(os.sep, "/")
             absw = str((root / im["path"]).resolve())
             figs.append(
-                f'<figure><a href="{html.escape(rel)}"><img loading="lazy" src="{html.escape(rel)}" alt=""></a>'
+                f'<figure><img src="{thumb_uri(absw)}" alt="">'
                 f'<figcaption>{html.escape(im.get("caption", ""))}</figcaption>'
                 f'<div class="path">{html.escape(absw)}</div></figure>')
         rows.append(
