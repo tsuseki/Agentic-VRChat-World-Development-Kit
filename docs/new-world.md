@@ -23,6 +23,11 @@ Assumes [bootstrap.md](bootstrap.md) is done on this machine.
    3.x) in every world: add the VPM listing `https://redsim.github.io/vpmlisting/index.json` in
    VCC/ALCOM and add the package to the project. The volumes are laid out over every playable area
    in D.1 and bake with the full render; they light everything that isn't lightmapped.
+4b. **Jumping** (every world has it; VRChat's default jump impulse is 0): copy
+   [.omp/templates/udon/PlayerMovementSettings.cs.txt](../templates/udon/PlayerMovementSettings.cs.txt) to
+   `Assets/_World/Udon/PlayerMovementSettings.cs` and put one on an object at the scene root (UdonSharp
+   `AddUdonSharpComponent`). Do it now, on day one; no one asks about it. `WorldAudit` reports a world
+   without it as `NO_JUMPING`.
 5. **Brief**: copy [.omp/templates/WORLD.template.md](../templates/WORLD.template.md) to the project root
    as `WORLD.md` (the code block inside it is the file body). Create the project's own `AGENTS.md`
    with machine facts (local asset library path, Unity instance name, owned paid packages).

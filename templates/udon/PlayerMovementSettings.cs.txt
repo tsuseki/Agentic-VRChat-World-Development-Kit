@@ -1,0 +1,28 @@
+using UdonSharp;
+using UnityEngine;
+using VRC.SDKBase;
+using VRC.Udon;
+
+/// <summary>
+/// Local movement settings of a showcase world (jumping on). One per world scene, anywhere in the hierarchy.
+/// Sets the local player's values on join; nothing is synced and nobody else is touched.
+/// </summary>
+[UdonBehaviourSyncMode(BehaviourSyncMode.None)]
+public class PlayerMovementSettings : UdonSharpBehaviour
+{
+    public float jumpImpulse = 3f;
+    public float walkSpeed = 2f;
+    public float runSpeed = 4f;
+    public float strafeSpeed = 2f;
+    public float gravityStrength = 1f;
+
+    public override void OnPlayerJoined(VRCPlayerApi player)
+    {
+        if (!Utilities.IsValid(player) || !player.isLocal) return;
+        player.SetJumpImpulse(jumpImpulse);
+        player.SetWalkSpeed(walkSpeed);
+        player.SetRunSpeed(runSpeed);
+        player.SetStrafeSpeed(strafeSpeed);
+        player.SetGravityStrength(gravityStrength);
+    }
+}

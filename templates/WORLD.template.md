@@ -146,6 +146,7 @@ become the next plan. An area is done on SHIP IT with nothing left on its plan.
 | Solid colliders | every `Solid: yes` item | | child `SolidCollider`, BoxCollider, always on, floor to top surface |
 | Stair ramps (one box per flight) | | | |
 | Spawn + walk test | | | play-mode evidence path |
+| Jumping (`PlayerMovementSettings`, scene root; jump 3, walk 2, run 4, strafe 2, gravity 1) | scene root | done at project setup | standard in every world; ClientSim `GetJumpImpulse()` = 3 |
 | Lie-down colliders | every `Lie-down: yes` item | | child `LieDownCollider`, BoxCollider, inactive by default |
 | Lie-down colliders toggle (`LieDownColliderToggle`, one per world) | e.g. by spawn | | |
 | Teleport doors (on the real doors) and islands | | | |
