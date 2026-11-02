@@ -205,6 +205,17 @@ not). Builder template: `../scripts/GroundCells.cs.txt`.
   frozen; bundle-size A/B. ~13 point fetches per vertex can't be measured in the editor: confirm with a client capture
   on a weak GPU.
 
+## Ground cover that reads continuous: density field, not drifts
+
+Scattering grass in parent drifts leaves visible patches with bare ground between them. Use a coverage field instead, then feed the plants to the cell builder above. Project tool: `BoothAssets/Source/_World/Temperate/scripts/veg_plan.py` (`field_factors`, `field_weights`, `field_try`).
+
+- **Coverage D(x, z) in 0..1** on a 1 m grid from real site factors: light (canopy share, conifer share: open gaps dense, closed canopy sparse), slope (thin above ~14 deg), moisture (distance to water: more rush and sedge), a soft path edge (worn path, a sparse 1-3 m band, then full density) and low-frequency noise (8-20 m wavelength) so density rises and falls into meadows.
+- **Sampling:** variable-radius dart throwing. Draw candidates with probability ~ D; keep one when no kept plant is within r = sqrt(0.7 / (RHO x D)) (0.7 / r^2 = saturated random-sequential-inhibition density). Calibrate RHO to the target count with 2-3 trial runs (count is near-linear in RHO). Hard keep-outs (paths, props, spawns, a bare ring round a fire) stay as rejection tests.
+- **Species** from weights that are smooth functions of the same factors (grass: open and dry; woodrush: shade and wet; low bracken: part shade). The mix cross-fades instead of forming single-species islands.
+- **Drifts only where clusters are natural** (ferns, tall bracken, shrubs, young trees): parent + 70-95 % same species, Clark-Evans R below 1 per species. Large crowns: put the children on a ring just outside the parent's clearance and give each member several tries, or a crowded wood never clusters.
+- **Underlay:** check the terrain splat under the cover (`TerrainData.GetAlphamaps`); paint the grass layer towards 1 under high-density open cells so the carpet reads continuous with fewer instances (cheaper than more tufts). Keep the original alphamaps for rollback.
+- **Proof:** a top-down image of D beside the planted points by species, same-camera before/after from eye height, and the Clark-Evans table for the drift species. Count and draw limits are unchanged: the cell builder carries the draw cost. Do not put reflection probes on the cover (BlendProbes on shrubs/young cost +320 draws at one pose; probes Off stays instanced).
+
 ## Proof
 
 - Same-camera before/after captures with stable content (downloaded images loaded or hidden in
