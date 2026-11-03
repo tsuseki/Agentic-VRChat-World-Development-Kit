@@ -2,10 +2,132 @@
 
 Semantic versioning, one git tag `vX.Y.Z` per release; the current version is in `VERSION`.
 
+## 0.2.1 — 2026-11-03
+
+- The 0.2.0 notes below now cover every change since 0.1.0, not only the last push.
+
 ## 0.2.0 — 2026-11-03
 
 First versioned release. It covers everything since the initial public release (tagged `v0.1.0`,
-2026-10-16); the notes below list the changes made since the last push.
+2026-10-16).
+
+### Kit structure and generation tools
+
+- The kit is named **Agentic VRChat World Development Kit (AWDK)**.
+- **Knowledge notes are compiled into skills.** Each skill has a lessons checklist (one line per
+  note, no links). Sources live only in `SOURCES.md` and `CREDITS.md`, and `check_kit.py` enforces
+  both. A knowledge audit merged duplicate notes and fixed about 25 stale or contradicting ones.
+- **Generation tools have fixed names** (`image-gen`, `image-edit`, `image-to-3d`, `blender`),
+  all called through `scripts/tool.py`. Each user chooses the backends: paid services first, free
+  local ones as fallbacks.
+  - ComfyUI backend: starts automatically, takes numbered reference inputs, and ships Qwen-Image
+    text-to-image and edit workflows. A TRELLIS.2 wrapper is included too.
+  - `tool.py blender` has a machine-wide limit on parallel Blender processes (default 2) and on
+    threads, and runs Blender at below-normal priority.
+- New docs: a beginner guide, project creation by the agent with ALCOM registration, a package
+  update routine, and a recipe for the modal dialogs on a project's first open.
+- Knowledge was extracted from long-running agent transcripts: 38 new notes, plus script
+  templates (GroundCells, LightmappedProbes, perf_tour, bundle_size, marker_profile).
+
+### Scale and pipeline
+
+- **One scale for every world:** the reference person is 1.4 m tall (eye height 1.3 m), and
+  everything new is ×0.8 of real-world size (furniture, props, pickups, outdoor features, trees).
+  Collision minimums never shrink. Hard rule 8.
+- **Pipeline stages redrawn:** B.1 is zoning only, and B.2 is massing plus rough furniture zones.
+  In C.1, furniture is placed in 3D and recorded from the scene.
+  - Hard rule 9: once the user confirms a 3D blockout, no more 2D plan rounds.
+  - New seating and layout rules.
+- **New world defaults (hard rule 2):**
+  - No barrier colliders: no invisible walls, shore or sea gates, and nothing on fences or
+    railings.
+  - A fitted capsule collider on every tree trunk.
+  - Every building can be entered from the path that leads to it.
+  - Jumping is on in every world (`SetJumpImpulse(3)`), using the shipped
+    `PlayerMovementSettings` template. A new `NO_JUMPING` check in WorldAudit catches worlds
+    without it.
+- **Paths never end in nothing.** This is a builder step, and the reviewer raises a should-fix
+  when a path does.
+- **NAV empties** for each floor, site and room (EditorOnly), so agents can navigate the scene.
+- **Progress log:** an append-only visual HTML log per world, with thumbnails embedded as data
+  URIs. It records the user's steering quotes and keeps blog notes and drafts.
+
+### Lighting and lightmaps
+
+- **New `lightmap-allocation` skill:**
+  - Which renderers are lightmapped, lit by Light Volumes, or dynamic.
+  - Texel density, Scale In Lightmap and lightmap groups.
+  - UV2 quality, with a measured pre-bake UV2 audit (adds a `negSO` column and a `NEG_SO` flag).
+  - Post-bake allocation and near-reach checks.
+- **VRC Light Volumes are the kit-wide default for everything not lightmapped.** Light probes are
+  only a coarse fallback, and nothing static is lit by probes. Small props whose UV2 fails the
+  audit may be lit by Light Volumes instead.
+- **GLIM is the free lightmapper.** The skill now covers GLIM trial findings (black bounce from
+  double-sided GI, skybox-only ambient, dialogs in scripted bakes) and Bakery traps (a stale
+  `__ExportTerrain` breaks exports, the registry trap, negative chart rects at cm scale).
+- New notes: unbaked Baked lights render as realtime, small flush wall fittings should be
+  probe-lit, grass shadow casters print texel smudges.
+
+### Reviewers
+
+- `final-reviewer` was rewritten with DRAFT MOOD, FINAL and PERF REGRESSION modes. New checks:
+  - A near-reach bake check on every new lightmapped piece.
+  - A pass per object with lightmap-only renders, plus a check of merged pieces against the
+    originals.
+  - Parts of the same object that are lit differently.
+  - A mandatory measured UV2 audit.
+- `dressing-reviewer` gained a contact sweep per object, close-ups of fixtures, beds and counters,
+  checks of the source config for copied models, material red flags, a measured mid-floor clearance
+  check, and a backface check that looks into open objects.
+
+### Performance
+
+- **LODs:** levels are bounded by error, and switch distances are derived from that error. There is
+  a billboard LOD3 tool per object, and `blender-optimizer` is limited to LOD0.
+- `perf-optimizer` reduces textures selectively and never reduces a visible skybox.
+- Ground cover built as a continuous density field: light weighting (open sun gets the densest
+  grass), an exclusion map, an A/B test with shadow casting off, and the cost per clump.
+- `bundle_size` refreshes the descriptor's DynamicMaterials before measuring (a stale list
+  inflated one A/B by 26 MB).
+
+### Trees (`lowpoly-tree-generation`)
+
+- **Fuller crowns:** bigger cards with open, small-leaved sprays, and a full-crown standard checked
+  by a fullness metric. Every leaf atlas cell must be an open spray, and `branch_atlas.py`
+  SPRAYCHECK enforces it. Texture sheets are approved as PNGs before any build.
+- **VR leaf shimmer fix:** A2C, a mip bias applied only far away, and a lower cutoff. The SoftCrown
+  shader replaces FoliageCutout. Edge-on cards fade out, and the edge fade uses camera-relative
+  positions so it no longer breaks into noise far from the origin. Wind is coherent, and small
+  plants tremble sideways.
+- **Mesh quality:**
+  - Every card is snapped onto the bark mesh.
+  - Base cones stay inside the parent tube.
+  - Merging never leaves a child's bark floating.
+  - Optional root flare with a closed skirt below ground.
+  - New checkers: `bark_clash.py` (bark through bark, elbow sockets, socket rims, and a silhouette
+    metric for trunks crossing on screen), `bare_limbs.py` and `tree_checks.py`.
+- **Lightmaps:** a hand-built Lightmap UV (`lightmap_uv.py`) replaces Smart UV, with a bbox sizing
+  model, texel margins and ribbon splitting. A note covers how transparent leaf quads starve the
+  bark of lightmap space.
+- **Far LODs** (`--lods`): levels set per tree, cards thinned by coverage, rosette fronds resampled.
+  No impostors.
+- **Many new opt-in builder keys** for new tree types: palms, bamboo, banyan with pillar and aerial
+  roots, weeping, pagoda and umbrella crowns, hedges (hug and surface skin), vines, sag and wave.
+  Each one leaves existing builds identical when off, verified by mesh hash.
+
+### Other skills
+
+- **New `fumo-plushie` skill:** character plush pickups end to end.
+  - A studio recipe with grading, a review gate, an AO test, and lineup and close-up scripts.
+  - Cycles renders on the GPU.
+  - Smart UV with `transfer_bake.py`.
+  - Plushies go on shelves, never on seats or beds.
+- `image-to-3d-props`: Smart UV on every generated prop.
+- `blender-modeler`: a self-check loop against the reference and an order for adding detail.
+- `vrchat-world-thumbnail`: `title_render` with subtitle, credit and crop options, glow controls,
+  and nature-theme fonts.
+- `materials-shaders`: UV tiling set at the scale reference.
+- Credits: unity-stylized-water (BSD-3), adapted as a tropical water shader.
 
 ### Concept art now binds what is in each area, not only its feel
 
