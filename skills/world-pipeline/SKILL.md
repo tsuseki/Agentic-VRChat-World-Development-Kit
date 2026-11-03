@@ -193,6 +193,13 @@ and density, reviewers judge against it. Before asking the user about an area's 
 row and the Decisions log; if the answer is there, don't ask. The user should never have to repeat
 something already said or shown in concept art.
 
+**Always build from concept art, never from memory** (user, 2026-11-03). Nothing (structure, set
+piece, area dressing) is built until it has a concept image the user has seen: blockout of the
+piece in a scratch area → captures from several angles → image-edit concept art over them, in one
+subfolder per area under a new `Design/concepts/genNN-*/` → the user says what he likes and what
+not → the picked image goes in the Area references row. The builder opens that image while
+building and the brief names it; a text description or a remembered look is never enough.
+
 ## Lock gaps
 
 A decision during B–D is a lock gap when it is genuinely stylistic (the user would have an
