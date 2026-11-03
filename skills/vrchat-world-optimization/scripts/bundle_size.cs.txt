@@ -10,6 +10,28 @@ string scene = "Assets/MyWorld/MyWorld.unity";   // <-- edit: saved scene path
 string outDir = "C:/Temp/bundle_A";              // <-- edit: scratch folder outside the project
 string tag = "A";                                // <-- edit: run label
 var target = EditorUserBuildSettings.activeBuildTarget;
+// Stale VRCSceneDescriptor.DynamicMaterials (left by the last SDK build) drag replaced materials and their textures into
+// the bundle; an A/B after a material swap then reads too high (one world: 245.2 MB stale vs 218.6 MB refreshed). The SDK
+// refreshes the list itself at build time with VRCWorldAssetExporter.FindDynamicContent, so do the same first (reflection:
+// the type is internal to the SDK editor DLL), then save, because the bundle builds the saved scene.
+string refresh = "FindDynamicContent not found";
+foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies()) {
+    System.Type[] types; try { types = asm.GetTypes(); } catch { continue; }
+    foreach (var ty in types) {
+        if (ty.Name != "VRCWorldAssetExporter") continue;
+        var m = ty.GetMethod("FindDynamicContent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        if (m == null) continue;
+        var ps = m.GetParameters();
+        var desc = Object.FindObjectOfType<VRC.SDK3.Components.VRCSceneDescriptor>();
+        if (ps.Length == 0) m.Invoke(null, null);
+        else if (ps.Length == 1 && desc != null) m.Invoke(null, new object[] { desc });
+        else { refresh = "FindDynamicContent: unexpected signature (" + ps.Length + " params)"; break; }
+        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+        UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
+        refresh = "DynamicMaterials refreshed (" + (desc != null ? desc.DynamicMaterials.Count.ToString() : "?") + ")";
+        break;
+    }
+}
 System.IO.Directory.CreateDirectory(outDir);
 EditorApplication.delayCall += () => {
     var t0 = System.DateTime.Now; string res;
@@ -21,4 +43,4 @@ EditorApplication.delayCall += () => {
     } catch (System.Exception e) { res = "ERR " + e.Message; }
     System.IO.File.WriteAllText(outDir + "/result.txt", res);
 };
-return "queued target=" + target;
+return "queued target=" + target + "; " + refresh;
