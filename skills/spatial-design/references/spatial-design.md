@@ -423,9 +423,15 @@ public ones.
 - Doors near room corners, not mid-wall. Furniture ≥0.6 m clear of every jamb. [in-house]
 - **Door zones** (scene metres, checked by script): per door a box ≥1.2 m deep into the room × (door width +
   0.3 m each side) holds no furniture, and a ≥0.9 m clear route leads on into the room. [user rule]
-- Stairs inside the building (U-turn stairs in volumes); the main stair central and visible, with the
-  threshold into the private floor at its top. One smooth ramp collider per flight; no spiral stairs,
-  ladders or required jumps. [in-house] [WORKSPACE RULE]
+- Stairs inside the building; the main stair central and visible, with the threshold into the private
+  floor at its top. One smooth ramp collider per flight; no required jumps. Ladders only as
+  click-to-teleport ladders (Interact at one end teleports to the other), never climbed.
+  [in-house] [WORKSPACE RULE]
+- **Stairs turn little: turning stairs make VR players nauseous.** No spiral or winder stairs and no
+  short zigzags (many short flights with tight U-turns). Prefer long straight flights (≥ 12–20
+  risers, landings as straight-through rest stops), at most one turn per storey, and make any turn a
+  wide landing (≥ 2× the stair width) or a gentle curve of large radius. Tall rises are carried by
+  long flights along walls or across halls, not by tight stair towers. [user rule]
 - Every boundary is a believable edge (rail, glass, water, planting); no invisible walls. [in-house]
 
 ### 5.7 Spawn and arrival
