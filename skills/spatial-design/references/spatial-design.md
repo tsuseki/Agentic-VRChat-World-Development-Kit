@@ -239,8 +239,9 @@ eye; scale them per §5.9.
   of the big structures floor to ceiling and to the walls, and link neighbours with bridges,
   skywalks, pipe or cable bridges and conveyors at several heights, so they read as part of the
   building, not a miniature town under an empty ceiling. Don't model outdoor building types (sheds,
-  houses, temples) indoors: use the world's own structure language (e.g. industrial-futuristic
-  modules). [user rule]
+  houses, temples) or anything that needs the sky (satellite or radar dishes, antenna masts, wind
+  turbines, weather stations) indoors: use the world's own structure language (e.g.
+  industrial-futuristic modules) and indoor equivalents tied into the ceiling. [user rule]
 
 ### 2.6 Material per volume
 - Each secondary volume gets a material distinct from the primary; ≤3 façade materials + 1 accent; change
