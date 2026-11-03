@@ -1,0 +1,33 @@
+using UdonSharp;
+using UnityEngine;
+using VRC.SDKBase;
+
+/// <summary>
+/// Click-to-teleport point: one script for every "click here, land there" movement in a world.
+///   - teleport doors on real doors and teleport islands (door -> landing on the other side);
+///   - click-teleport ladders (one TeleportDoor at the foot -> landing at the top, one at the top -> landing at the foot);
+///   - teleport-lift buttons (one TeleportDoor per floor button on the cabin panel -> that floor's cabin landing).
+/// Needs a trigger BoxCollider on the same object over the clickable part (door leaf, ladder end, button).
+/// That collider is the Interact target only, never movement collision. Local only, nothing is synced.
+/// </summary>
+[UdonBehaviourSyncMode(BehaviourSyncMode.None)]
+public class TeleportDoor : UdonSharpBehaviour
+{
+    [Tooltip("Where the player lands. Rotation is used as well as position: face the landing away from the way back.")]
+    public Transform destination;
+
+    [Tooltip("Optional one-shot played where the player clicked (door creak, ladder rattle, lift chime).")]
+    public AudioSource sfx;
+
+    [Tooltip("Explicit guard against VRChat's long Interact raycast: only players this close can use it.")]
+    public float interactionDistance = 3f;
+
+    public override void Interact()
+    {
+        VRCPlayerApi player = Networking.LocalPlayer;
+        if (destination == null || !Utilities.IsValid(player)) return;
+        if ((player.GetPosition() - transform.position).sqrMagnitude > interactionDistance * interactionDistance) return;
+        if (sfx != null) sfx.Play();
+        player.TeleportTo(destination.position, destination.rotation);
+    }
+}

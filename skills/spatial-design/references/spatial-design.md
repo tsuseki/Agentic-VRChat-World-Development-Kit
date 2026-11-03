@@ -411,7 +411,7 @@ public ones.
 - VR: colliders are smooth ramps, so tripping is gone, but head-height jumps, broken sightlines between
   seated groups and furniture placement problems remain. [INFERENCE]
 - Most verticality comes from section: double-height rooms with a gallery, a second storey with an overlook,
-  bridges, overhanging wings, roof terraces, raised roofs. Between storeys: stairs or fade-teleport lifts. [in-house]
+  bridges, overhanging wings, roof terraces, raised roofs. Between storeys: stairs first (every floor reachable on foot), plus teleport lifts (button per floor) and click-teleport ladders for short climbs; never moving platforms that carry players (world-builder "Interactions & playability"). [in-house] [user rule]
 - Under a void the void is real: no hidden ceiling collider acting as an invisible floor. [in-house]
 
 ### 5.6 Circulation and doors

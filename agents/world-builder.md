@@ -213,6 +213,25 @@ Once the real objects exist:
 - **Udon**: clickable teleport doors on the real doors, the teleport islands with their return doors
   and landings, toggles, video, pickups only where requested, the VIP gate. No mirror unless the
   plan puts a real one in a bathroom, gym or dance/dressing room (then start it off).
+- **Movement between floors and levels** (user, 2026-11-03), three systems, all on the one
+  click-to-teleport script `.omp/templates/udon/TeleportDoor.cs.txt` (Interact → `TeleportTo` a
+  landing transform, 3 m interaction distance, optional sfx, local only; a trigger BoxCollider over
+  the clickable part is the Interact target, never movement collision):
+  1. **On foot first:** every floor reachable by stairs (≥ 2 walking routes per pair of main floors
+     in big worlds), built to spatial-design §5.6 stair comfort: long straight flights, no spiral,
+     winder or short zigzag stairs (they make VR players nauseous), at most one turn per
+     floor-to-floor run on a wide landing. One ramp collider per flight.
+  2. **Teleport lifts**, several per floor where floors are far apart: a cabin (or lift lobby) per
+     floor with a button panel, one TeleportDoor per floor button → that floor's cabin landing
+     (facing out of the doors), lift chime as sfx. Never moving platforms that carry players: they
+     jitter and desync in VRChat. Label each button with its floor's name.
+  3. **Click-teleport ladders** for short climbs (catwalks, top decks, tank tops, machinery, nest
+     pods): a visible ladder mesh, one TeleportDoor at the foot → landing at the top and one at the
+     top → landing at the foot, each landing ≥ 1 m clear of the ladder on a guarded floor. Ladders are
+     never climbed for real and never the only way to a required place.
+
+  Record every lift, ladder and stair route in WORLD.md's C.2 table; the walk test uses each one in
+  both directions.
 - **Ambience** per spatial-design §5.8: one 3D base bed per area (Volumetric Radius ≈ room, never
   2D) plus placed emitters; walk the routes listening for 180° swings, flanging and silent rooms;
   distant sources disabled by zone.
