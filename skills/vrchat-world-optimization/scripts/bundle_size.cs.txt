@@ -22,7 +22,7 @@ foreach (var asm in System.AppDomain.CurrentDomain.GetAssemblies()) {
         var m = ty.GetMethod("FindDynamicContent", System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
         if (m == null) continue;
         var ps = m.GetParameters();
-        var desc = Object.FindObjectOfType<VRC.SDK3.Components.VRCSceneDescriptor>();
+        var desc = UnityEngine.Object.FindObjectOfType<VRC.SDK3.Components.VRCSceneDescriptor>();
         if (ps.Length == 0) m.Invoke(null, null);
         else if (ps.Length == 1 && desc != null) m.Invoke(null, new object[] { desc });
         else { refresh = "FindDynamicContent: unexpected signature (" + ps.Length + " params)"; break; }
