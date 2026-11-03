@@ -16,7 +16,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [performance](#performance) (28)
 - [unity-editor-scripting-mcp](#unity-editor-scripting-mcp) (33)
 - [agent-workflow-verification](#agent-workflow-verification) (45)
-- [assets-sourcing](#assets-sourcing) (7)
+- [assets-sourcing](#assets-sourcing) (8)
 - [audio-video-ui](#audio-video-ui) (12)
 - [blender-modeling](#blender-modeling) (13)
 
@@ -451,6 +451,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 - [A bloated .unitypackage export: stale Anchor Override references and layered PSDs](notes/unitypackage-bloat-from-stale-probe-anchors-and-psds.md) — A renderer Anchor Override left pointing into another prefab drags that prefab and everything it uses into the export; flattening the prefab and converting PSDs to PNG took 667 MB to 109 MB with no visual change.
 - [Choose furniture prefabs from a rendered contact sheet, not from names](notes/pick-pack-prefabs-from-a-contact-sheet.md) — Pack prefab names say nothing about period or style; render 7–9 candidates in a row at 3/4 view far from the scene and choose by eye before placing anything.
+- [Code builds boxes only; source or model every other shape](notes/never-build-complex-objects-from-unity-primitives.md) — Machines, tanks, gates and trusses built in Unity from code-generated lathes, tubes and lattices read as faceted greybox next to their concept art; a data generator should make boxes only, and every other shape should be an imported asset from the library, a Blender kit or image-to-3D.
 - [Extract only the assets you need from a .unitypackage by GUID closure](notes/extract-unitypackage-subset-by-guid-closure.md) — A .unitypackage is a tar.gz of GUID folders; BFS the guid references from seed prefabs and copy only that closure instead of importing the whole pack.
 - [Free CC0 asset sources with scriptable downloads, and what to avoid](notes/free-cc0-asset-sources-and-download-apis.md) — Poly Haven, ambientCG and Quaternius are CC0 and downloadable by script; avoid 'free download' mirrors of paid packs and URP/HDRP-only packs for VRChat.
 - [Generate 360° skyboxes locally with FLUX: seam fix last, upscale, HDR boost](notes/local-flux-equirect-skybox-pipeline.md) — Text-to-image at 2048×1024 with a 360 LoRA, then a rolled-strip inpaint to fix the wrap seam as the very last generative step, upscale, and inverse-tonemap highlights into a half-float EXR.

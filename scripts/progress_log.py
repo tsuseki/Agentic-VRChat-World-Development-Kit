@@ -20,6 +20,7 @@ import datetime as dt
 import html
 import io
 import json
+import shutil
 import sys
 from pathlib import Path
 
@@ -35,8 +36,12 @@ def load(f):
     return json.loads(f.read_text(encoding="utf-8")) if f.exists() else []
 
 
-def parse_imgs(argv_imgs, root):
+def parse_imgs(argv_imgs, root, d):
+    """Copy each image into <progress>/img/ so later renames or regenerations never break the log."""
     out = []
+    snap = d / "img"
+    snap.mkdir(exist_ok=True)
+    stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
     for item in argv_imgs or []:
         p = Path(item[0])
         p = (root / p) if not p.is_absolute() else p
@@ -44,10 +49,13 @@ def parse_imgs(argv_imgs, root):
         if not p.exists():
             sys.exit(f"image not found: {p}")
         try:
-            rel = p.relative_to(root).as_posix()
+            src = p.relative_to(root).as_posix()
         except ValueError:
             sys.exit(f"image must be inside the project: {p}")
-        out.append({"path": rel, "caption": item[1] if len(item) > 1 else ""})
+        copy = snap / f"{stamp}_{p.name}"
+        shutil.copy2(p, copy)
+        out.append({"path": copy.relative_to(root).as_posix(), "source": src,
+                    "caption": item[1] if len(item) > 1 else ""})
     return out
 
 
@@ -90,10 +98,13 @@ def build(root, d, ef, hf):
         figs = []
         for im in e.get("images", []):
             absw = str((root / im["path"]).resolve())
+            shown = str((root / im.get("source", im["path"])).resolve())
+            img = (f'<img src="{thumb_uri(absw)}" alt="">' if Path(absw).exists()
+                   else '<div class="path">(image no longer on disk)</div>')
             figs.append(
-                f'<figure><img src="{thumb_uri(absw)}" alt="">'
+                f'<figure>{img}'
                 f'<figcaption>{html.escape(im.get("caption", ""))}</figcaption>'
-                f'<div class="path">{html.escape(absw)}</div></figure>')
+                f'<div class="path">{html.escape(shown)}</div></figure>')
         rows.append(
             f'<section id="e{i}"><div class="meta"><span class="stage">{html.escape(e.get("stage", ""))}</span>'
             f'{html.escape(e["when"])}</div><h2>{html.escape(e["title"])}</h2>'
@@ -129,7 +140,7 @@ def main():
         entries = load(ef)
         when = args.when or dt.datetime.now().strftime("%Y-%m-%d %H:%M")
         entries.append({"when": when, "stage": args.stage, "title": args.title, "text": args.text,
-                        "steer": args.steer, "images": parse_imgs(args.img, root)})
+                        "steer": args.steer, "images": parse_imgs(args.img, root, d)})
         ef.write_text(json.dumps(entries, indent=1, ensure_ascii=False), encoding="utf-8")
     print(build(root, d, ef, hf))
 

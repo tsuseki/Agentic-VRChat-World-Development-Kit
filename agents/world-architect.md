@@ -82,6 +82,14 @@ The main area and spawn sit at the origin.
 
 ## Non-negotiables
 
+- **Boxes only in Unity; everything else is sourced or modelled** (`.omp/RULES.md` rule 10). Your
+  generators and `execute_code` build only boxes: slabs, decks, walls, plinths, beams, square
+  towers, treads, massing. Never lathes, tubes, domes, lattices, gates or machines from code: a
+  structure that needs them gets a **parts list** (which parts are boxes, which come from
+  `asset-finder`, which need `blender-modeler`, which need Tripo) in your report, and you place the
+  imported prefabs once they exist. In greybox (B.2) a non-box piece is a plain labelled box or
+  cylinder volume standing in for the real model, never a detailed code-built imitation of it.
+
 - **Never a single box.** One extruded rectangle has been rejected every time it was shown. A
   building is a composition of volumes: a dominant primary volume plus secondary and tertiary ones
   (wings, an annex, a bridge, an overhang, a raised roof, a cut corner), each with a reason.

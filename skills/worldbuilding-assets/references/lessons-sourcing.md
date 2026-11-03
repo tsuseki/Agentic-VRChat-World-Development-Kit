@@ -21,3 +21,4 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 ## Generated skyboxes
 
 - **Generate 360° skies locally at 2048×1024 with an equirect LoRA, upscale via img2img, make the rolled-strip seam inpaint the last generative step, then boost highlights into a half-float EXR** — every img2img pass re-breaks the wrap seam; FLUX negatives are inert at cfg 1.0, and slow sampling at half GPU power means weights paging from RAM. Match camera height first (SKILL.md §360 panoramas).
+- **Code builds boxes only; every other shape is an imported asset (library first, then a Blender kit, then image-to-3D), matched to the picked concept sheet** — code-built lathes, tubes and lattices read as faceted greybox next to concept art and were rejected outright.

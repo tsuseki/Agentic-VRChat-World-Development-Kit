@@ -289,8 +289,12 @@ from it (id, type, size, `lieDown`, `solid`, source). The record follows the sce
 written ahead of placement.
 
 **Assets on demand.** There is no separate asset stage. As a pass needs them, asset-finder searches
-the `object`-tagged references first, blender-modeler makes "to model" items, each at the size the
-pass plan gives (×k, fitting its furniture zone); the source goes in the prop schedule's Source column.
+the `object`-tagged references, the local library and free sources first, blender-modeler makes
+simple geometric "to model" items as a reusable kit, and Tripo (`image-to-3d`) makes organic or
+irregular ones from the picked concept sheets (spend approved by the user per batch), each at the
+size the pass plan gives (×k, fitting its furniture zone); the source goes in the prop schedule's
+Source column. This covers structures and machines too, not only furniture: **code builds boxes
+only** (`.omp/RULES.md` rule 10).
 
 **Briefing a modeller.** Point it at `WORLD.md` (Pitch, Brief rows for the asset, references) and
 state that greybox shapes and zones are rough massing only, never the model's shape.

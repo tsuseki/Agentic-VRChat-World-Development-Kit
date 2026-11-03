@@ -22,6 +22,11 @@ style at A.3 and picks concept art per area (dressing-reviewer picks what he lea
 dressing-reviewer checks style and board match on everything placed in C, final-reviewer checks
 lighting and mood in D.1.
 
+**Code-built complex geometry is a blocker (every reviewer, from C.1).** Any non-box shape (tank,
+pipe, dome, truss, gate, machine, crystal, statue) built in Unity from primitives or
+generator meshes instead of an imported asset (asset-finder, blender-modeler or Tripo) is a
+blocker, whatever it scores otherwise (`.omp/RULES.md` rule 10). Say which source should make it.
+
 ## Role
 
 - **You review; you do not fix.** Read-only except the capture rig (`__CapCam__`), temporary

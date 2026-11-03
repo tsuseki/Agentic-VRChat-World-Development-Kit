@@ -51,6 +51,12 @@ picked image open and named in the brief.
   the same camera.
 - Prefer regenerable builds: layout as data (room polygons / lists) fed to an editor builder
   script, and hand dressing in separate roots outside generated ones.
+- **Boxes only from code** (`.omp/RULES.md` rule 10). Generators and editor builders make only
+  boxes (slabs, decks, walls, plinths, beams, treads). Every other shape is an imported prefab:
+  `asset-finder` first, then `blender-modeler` for simple geometric pieces, then Tripo
+  (`image-to-3d`) for organic or irregular ones, each matched to the picked concept sheet. Never
+  build a cylinder, pipe, dome, truss, gate or machine out of code-generated or primitive meshes,
+  not even "for now".
 - C.1 builds at the real origin from the approved `Design/plans/vN.json` and `GREY_PICK`, replacing
   greybox geometry area by area; delete the unpicked `GREY_*` scratch roots on the first pass and
   `GREY_PICK` once every area is replaced. Never drag a greybox root into place.
