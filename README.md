@@ -62,6 +62,11 @@ Pull to update. If you change the kit, enable the leak check once
 `local/banned-terms.txt` are refused. `python .omp/scripts/check_kit.py` checks links, front matter
 and host-neutral syntax.
 
+**Versions.** The kit uses semantic versioning: the current version is in `VERSION`, every release
+is a git tag `vX.Y.Z`, and [CHANGELOG.md](CHANGELOG.md) lists what changed. Before 1.0, a minor bump
+(0.x.0) may change pipeline rules or agent briefs, and a patch bump (0.x.y) only fixes things. The
+Unity package `com.awdk.agenttools` keeps its own version in its `package.json`.
+
 ## Licence
 
 Free for personal and other noncommercial use; the kit itself may not be sold. **Worlds and assets
