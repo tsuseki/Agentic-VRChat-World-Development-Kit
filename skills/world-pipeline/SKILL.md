@@ -189,18 +189,37 @@ user reopens it; log the reopen and redo the affected stages.
 
 Per-area concept images and the user's picks and words about an area's content are requirements,
 not history. Keep them in one WORLD.md table, "Area references (binding per-area targets)": one row
-per area with its target image(s), the pick, and the user's exact words, updated the moment the user
-picks or comments. Every area pass brief (B.2, C.1, D.1) copies its row; builders match the content
-and density, reviewers judge against it. Before asking the user about an area's content, read that
-row and the Decisions log; if the answer is there, don't ask. The user should never have to repeat
-something already said or shown in concept art.
+per area with its target image(s), the pick, the signature pieces and the user's exact words,
+updated the moment the user picks or comments. Every area pass brief (B.2, C.1, D.1) copies its
+row. Before asking the user about an area's content, read that row and the Decisions log; if the
+answer is there, don't ask. The user should never have to repeat something already said or shown
+in concept art.
+
+**Same style, not a copy** (user, 2026-11-03: "I don't want the world to look exactly like in the
+concept art but it needs to have the same style"). The build is not a replica of the picture:
+layout, exact proportions and composition follow the plan and greybox. But it must clearly belong
+to the same picture: the same kinds of structures and signature pieces, silhouettes, materials,
+density, wear and overgrowth. A build that shares only the palette is "no way near" the concept and
+fails review.
 
 **Always build from concept art, never from memory** (user, 2026-11-03). Nothing (structure, set
-piece, area dressing) is built until it has a concept image the user has seen: blockout of the
-piece in a scratch area → captures from several angles → image-edit concept art over them, in one
-subfolder per area under a new `Design/concepts/genNN-*/` → the user says what he likes and what
-not → the picked image goes in the Area references row. The builder opens that image while
-building and the brief names it; a text description or a remembered look is never enough.
+piece, area dressing) is built until it has a picked concept image:
+
+1. Blockout of the piece or area in a scratch area; captures from several angles (eye level close
+   and far, ¾, top, a detail).
+2. Concept art over the captures with the `image-edit` tool: the capture gives composition and
+   scale, the area's target or picked image is the **primary style reference** and the prompt asks
+   for a full repaint in its style and density (a literal paint-over of greybox colours is a failed
+   image). **Several images per view**: 3–4 variants for hero views, at least 2 for the rest.
+3. One subfolder per area under a new `Design/concepts/genNN-*/`, named code + programme
+   (`B2_waterworks/`, `L3_production/`), files prefixed the same
+   (`B2_waterworks_pump_house_eye_close_A.png`); never bare codes like `L1/`.
+4. **Pick the best:** the user picks when he wants to (pick page with filenames under every image,
+   light background, embedded images). Otherwise, or for areas he leaves open, `dressing-reviewer`
+   runs a CONCEPT PICK: ranks the variants per view against the lock and the area's existing
+   references, scores each /10 and names the pick and why. The user can overrule any pick later.
+5. The pick goes in the Area references row and steers the style of the build; the builder opens it
+   while building and the brief names it. A text description or a remembered look is never enough.
 
 ## Lock gaps
 
