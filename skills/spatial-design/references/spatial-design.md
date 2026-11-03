@@ -416,6 +416,11 @@ public ones.
 
 ### 5.6 Circulation and doors
 - ≥1 loop through the common rooms; 1–3 primary routes. [INFERENCE]
+- **Everything that looks walkable is reachable, in several ways** (user rule): every bridge,
+  mezzanine, gallery, balcony, top deck and catwalk joins the walking network by a stair, bridge,
+  click-teleport ladder or lift stop; every floor and mezzanine level has ≥ 2 independent
+  connections to its neighbours, walking routes first. A surface that can't be connected must not
+  read as walkable (no rail, no deck finish). Reviewers check it with the builder's reach check.
 - **Corridors are rooms:** corridor in front of private rooms ≥3.1 m clear (2.2 m was rejected); furnish
   hallway pockets (couches facing the doors they serve); widen junctions into halls (a 4.6 m-deep junction
   hall with a sofa lounge worked); squash sealed rooms first to find the width. [in-house]

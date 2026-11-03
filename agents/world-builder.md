@@ -57,6 +57,13 @@ picked image open and named in the brief.
   (`image-to-3d`) for organic or irregular ones, each matched to the picked concept sheet. Never
   build a cylinder, pipe, dome, truss, gate or machine out of code-generated or primitive meshes,
   not even "for now".
+- **Everything that looks walkable is reachable** (user, 2026-11-03: "I want the various areas be
+  connected with bridges/ladders/elevators so its all reachable and explorable by foot … all floors
+  should be connected in multiple ways"). Every bridge, mezzanine, gallery, balcony, top deck and
+  catwalk connects to the walking network (stair, bridge, click-teleport ladder or lift stop), and
+  every floor and mezzanine level has ≥ 2 independent connections to its neighbours, walking routes
+  first. A surface that can't be connected must not read as walkable. Prove it with a flood-fill
+  reach check from the spawn (unreached surfaces = 0, with a positive control).
 - C.1 builds at the real origin from the approved `Design/plans/vN.json` and `GREY_PICK`, replacing
   greybox geometry area by area; delete the unpicked `GREY_*` scratch roots on the first pass and
   `GREY_PICK` once every area is replaced. Never drag a greybox root into place.
