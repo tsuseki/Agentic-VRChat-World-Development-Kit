@@ -236,8 +236,11 @@ eye; scale them per §5.9.
   lookout, machinery deck, catwalk junction, reached by stairs or bridges) or the structure is
   **built into the ceiling** (walls or columns run into the roof slab or trusses, often widening
   into a capital, or a bridge or duct band joins it to the ceiling). In tall halls tie a good share
-  of the big structures floor to ceiling and to the walls, so they read as part of the building, not
-  a miniature town under an empty ceiling. [user rule]
+  of the big structures floor to ceiling and to the walls, and link neighbours with bridges,
+  skywalks, pipe or cable bridges and conveyors at several heights, so they read as part of the
+  building, not a miniature town under an empty ceiling. Don't model outdoor building types (sheds,
+  houses, temples) indoors: use the world's own structure language (e.g. industrial-futuristic
+  modules). [user rule]
 
 ### 2.6 Material per volume
 - Each secondary volume gets a material distinct from the primary; ≤3 façade materials + 1 accent; change
