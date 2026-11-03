@@ -231,6 +231,13 @@ eye; scale them per §5.9.
 - Set the top volume back ≥1.8 m so the setback is a usable terrace. Finish every roof edge (parapet,
   cornice, overhang). Vary setbacks between floors ("wedding cake" otherwise). [INFERENCE]
 - A raised roof with a clerestory over one room is a cheap, well-received height step. [in-house]
+- **Buildings inside a hall get no outdoor roofs.** No pitched or gabled roofs, pediments or eaves
+  on structures standing indoors: the top is a **usable area** (railed terrace, garden, deck,
+  lookout, machinery deck, catwalk junction, reached by stairs or bridges) or the structure is
+  **built into the ceiling** (walls or columns run into the roof slab or trusses, often widening
+  into a capital, or a bridge or duct band joins it to the ceiling). In tall halls tie a good share
+  of the big structures floor to ceiling and to the walls, so they read as part of the building, not
+  a miniature town under an empty ceiling. [user rule]
 
 ### 2.6 Material per volume
 - Each secondary volume gets a material distinct from the primary; ≤3 façade materials + 1 accent; change
