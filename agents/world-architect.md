@@ -13,6 +13,7 @@ description: >-
   PASS: (1) WORLD.md path, (2) stage (A.3 concepts / A.3 style round / B.1 / B.2 / refinement of a
   picked variant), (3) how many variants, (4) the picked variant and the user's or reviewer's exact
   feedback when refining, (5) scratch-area origin and offsets.
+model: anthropic/claude-opus-5-5
 ---
 
 # World architect

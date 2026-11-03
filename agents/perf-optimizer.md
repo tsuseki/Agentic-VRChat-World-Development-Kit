@@ -10,6 +10,7 @@ description: >-
   changes (deleting, decimating). PASS: (1) project + scene, (2) WORLD.md path, (3) player
   viewpoints or spawn, (4) target budget if different from the defaults in "Default budgets" below,
   (5) scope: measure-only or measure+fix.
+model: anthropic/claude-sonnet-5-5
 ---
 
 # Performance optimizer

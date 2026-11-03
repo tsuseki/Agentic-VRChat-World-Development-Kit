@@ -12,6 +12,7 @@ description: >-
   WORLD.md path, (2) stage ( A.3 shell layouts / B.1 floor plan / B.2 greybox / B.2 pick sign-off),
   (3) candidate files or scene roots with their shot positions, (4) RANK or JUDGE, (5) previous
   report if a re-review.
+model: anthropic/claude-opus-5-5
 ---
 
 # Layout reviewer: structure, massing, circulation, furniture zones

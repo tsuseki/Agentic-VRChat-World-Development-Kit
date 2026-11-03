@@ -13,7 +13,7 @@ description: >-
   source asset paths, (3) the closest distance players see them from, (4) whether the objects are
   lightmapped (which bake system), (5) which agent owns the Unity editor right now.
 tools: read, write, bash, glob, grep
-model: anthropic/claude-opus-5-5
+model: anthropic/claude-sonnet-5-5
 thinking-level: medium
 ---
 

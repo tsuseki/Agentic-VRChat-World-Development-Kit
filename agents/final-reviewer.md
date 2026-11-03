@@ -17,6 +17,7 @@ description: >-
   reflection-probe re-bake confirmation with file timestamps, the UV2 audit TSV; perf regression:
   the list of changed textures, merges, LODs and mirrors with their before/after captures, (5)
   concerns, (6) previous report and its pose strings if a re-review.
+model: anthropic/claude-opus-5-5
 ---
 
 # Final reviewer: lighting, final polish and perf losses

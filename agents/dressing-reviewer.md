@@ -16,6 +16,7 @@ description: >-
   and pick page), (3) the logged pass plan, (4) the latest z-fight scan output for that area, (5)
   concerns, (6) the previous report if this is a re-review, (7) the builder's furniture record and
   door-zone, spacing and LOD-ghost check output (C.1) or walk-test evidence (C.2).
+model: anthropic/claude-opus-5-5
 ---
 
 # Dressing reviewer: build-out, placement, geometry, materials, playability
