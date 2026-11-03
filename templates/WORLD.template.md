@@ -57,7 +57,7 @@ Extracted from what the user supplied; gaps asked. Source: user / doc / referenc
 | Assets / paid tools | ... | user |
 
 ## References (A.2, accepted any time)
-Images in `Design/references/`. Reference only — never shipped as world assets. Feel references, never blueprints.
+Images in `Design/references/`. Reference only — never shipped as world assets. Content and feel references, never blueprints.
 | File | Tags (mood / lighting / palette / materials / massing / layout / object / sky / avoid) | What we take from it | Source |
 |---|---|---|---|
 | 01_rooftop-bar.jpg | lighting, mood | warm low pools, dark ceiling, city glow through glass | user-supplied |
@@ -93,8 +93,8 @@ Text → image rounds conditioned on the lock images, in `Design/concepts/genNN-
 ## Design Lock (A.4)
 Approved YYYY-MM-DD — user: "<exact words>". Images in `Design/lock/`, manifest `Design/lock/lock.json`
 (`{file, item, tags, caption, feel, free, approved, user_words}`). Builders match the `feel`; reviewers
-judge against it. Images bind mood, palette, materials, lighting character and density only — never
-positions, proportions or layout. Changes only when the user reopens an item.
+judge against it. Images bind what is there (structure and object types, silhouettes, signature pieces), mood, palette, materials, lighting
+character and density — never exact positions, proportions or layout. Changes only when the user reopens an item.
 | File | Item | Tags | Caption | Feel (binding) | Free (not binding) |
 |---|---|---|---|---|---|
 | 01_palette.png | palette | palette | warm walnut, cream, one ink-blue accent | walls cream #EFE6D6; wood walnut; accent only on textiles | vignette furniture, layout |
@@ -102,6 +102,15 @@ positions, proportions or layout. Changes only when the user reopens an item.
 
 
 <!-- ===================== B · Blueprint ===================== -->
+
+## Area references (binding per-area targets)
+One row per area: the concept image(s) it is built from, the user's pick and his exact words. Made before the area
+is built (blockout → captures from several angles → concept art over them → user picks; pipeline skill "Area
+references"). Every area brief copies its row; reviewers check content match and distinctness against it. Read it
+before asking the user anything about an area's content.
+| Area | Target image(s) | Signature pieces (from the image) | User words / pick |
+|---|---|---|---|
+| e.g. Foundry floor | `Design/concepts/gen14-themes/L3/L3_furnace_eye_A.png` | blast furnace with ladle, overhead cranes, hull in scaffolding | picked: "I like this" |
 
 ## Floor plan (B.1, zoning)
 Picked `Design/plans/vN.png` + `vN.json` (layout-reviewer N/10), inside the locked shells. Zoning only: room

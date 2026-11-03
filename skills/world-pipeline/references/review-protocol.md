@@ -66,17 +66,30 @@ to the same sections, so you and the builder share one set of criteria.
 4. **Cite the spatial-design section** in every finding that rests on one (e.g. "§5.2: facing seats
    1.9 m apart, ≤1.07 m"). A deliberate deviation the user approved (recorded in WORLD.md Decisions,
    or built into the approved greybox) outranks the rule for that world; it is not a finding. A
-   reference image alone never establishes a geometric deviation ("Images are feel references").
+   reference image alone never establishes a dimensional deviation ("Images are content and feel references").
 
-## Images are feel references, never blueprints (every reviewer)
+## Images are content and feel references, not blueprints (every reviewer)
 
 AI images don't translate into 3D: their perspective and parallax lines don't line up, their scale
-is ambiguous and their layouts are often impossible. From any image (lock images, concept art,
-user references) judge only **mood, palette, materials, lighting character and density**. The A.3
-style-track concept art is text → image and never binds geometry. Never raise a finding because positions, proportions
-or layout differ from an image. Geometry and dimensions are judged only against `SHELL_PICK`, the
-approved greybox and spatial-design; furniture placement is judged in 3D against spatial-design and
-the pipeline skill's "Seating and layout rules (C.1)", never against a planned position.
+is ambiguous and their layouts are often impossible. Never raise a finding because exact positions,
+proportions or layout differ from an image; dimensions and circulation are judged only against
+`SHELL_PICK`, the approved greybox and spatial-design, and furniture placement in 3D against
+spatial-design and the pipeline skill's "Seating and layout rules (C.1)".
+
+From every image that covers your target (lock images, the area's row in WORLD.md "Area
+references", user references) judge **what is there** as well as mood, palette, materials,
+lighting character and density:
+
+1. **Content match.** Before judging, list the area image's signature pieces (e.g. "blast furnace
+   with ladle, 2–4 overhead cranes, tracked hull in scaffolding, hydraulic press"). Each one missing
+   from the build, or replaced by generic filler, is a **blocker**. Put the image next to your
+   capture in the report.
+2. **Distinctness.** When the target spans several areas or floors of different programmes, make
+   one sheet with one matching shot per area. Two areas that read the same (same structure kit,
+   same silhouettes) where their images differ is a **blocker**, whatever the massing scores.
+3. **Missing target.** If the brief names no area image for an area that has a row in "Area
+   references", or the row has no image yet, the verdict is NEEDS WORK with "no concept target":
+   the area is not reviewable against content yet.
 
 ## Judging against the Design Lock (every reviewer)
 

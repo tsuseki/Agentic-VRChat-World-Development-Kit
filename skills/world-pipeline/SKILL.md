@@ -46,7 +46,7 @@ resolve from the file that contains them.
 | [references/intake.md](references/intake.md) | Information gathering: the checklist of required facts, extraction from what the user supplied, gap questions, concept rounds, defaults, involvement, lock-gap questions |
 | [spatial-design](../spatial-design/SKILL.md) | Architecture and interior-design guide (`references/spatial-design.md`): space archetypes, massing, per-archetype rules, intimacy gradient, checklists for architect and reviewers; plus the sourced research and the case studies behind it |
 | [clip-planes](../clip-planes/SKILL.md) | Clip planes, fog vs the far cut, float precision and world extent (256/512 m radii), teleport-island placement, distant scenery, z-fight separation; setup checklist |
-| [references/review-protocol.md](references/review-protocol.md) | Shared rules for all reviewers: capture, verdict and score, images as feel references, judging against the lock, reviewers by stage, trial logging |
+| [references/review-protocol.md](references/review-protocol.md) | Shared rules for all reviewers: capture, verdict and score, images as content and feel references (content match, distinctness), judging against the lock, reviewers by stage, trial logging |
 | [pipeline-trial](../pipeline-trial/SKILL.md) | Trial runs: checkpoint after every stage, `Trial/log.jsonl` event log, HTML/PDF reports, agreement rate |
 | `ZFightScan`, `WorldCapture`, `ZFightRender`, `PerfSample`, `WorldAudit` | Editor package `com.awdk.agenttools` (`.omp/docs/unity-tools.md`); the checks every gate uses |
 
@@ -123,17 +123,19 @@ in phase A and approved once at A.4; it is the user's last decision before D.3.
 | Materials sheet (floors per zone, walls, trims and frames, fabrics, metals) | A.3 (style round) | `NN_materials.png` | world-architect (`image-edit` tool, lock images as references) | none: user picks |
 | Lighting and time-of-day sheet (darkness level, warm/cool, light sources per archetype) | A.3 (style round) | `NN_lighting.png` | world-architect (`image-edit` tool, lock images as references) | none: user picks |
 
-The images show the world's **general feel**: there is no picture per room. The shells are locked
+The lock images show the world's **general feel**; each area's content target is its picked image in WORLD.md "Area references" (made before that area is built). The shells are locked
 as the `SHELL_PICK` blockout and its JSON, never taken from an image. The zoning plan and greybox
 that follow and the furniture placed in C.1 are agent decisions recorded in WORLD.md and the plan
 JSON, not lock items; under "Every step" the user reviews plan and greybox at the B checkpoint.
 
-**Images are feel references, never blueprints.** AI images don't translate into 3D: their
-perspective and parallax lines don't line up, their scale is ambiguous and their layouts are often
-impossible. Concept art therefore binds only **mood, palette, materials, lighting character and
-density**, never positions, proportions or layout. Geometry is
-judged only against `SHELL_PICK`, the approved greybox and spatial-design (review-protocol "Images
-are feel references").
+**Images are content and feel references, not blueprints.** AI images don't translate into 3D:
+their perspective and parallax lines don't line up, their scale is ambiguous and their layouts are
+often impossible. So concept art never sets exact positions, proportions or layout; those are
+judged against `SHELL_PICK`, the approved greybox and spatial-design. But it **does** bind **what
+is there** (structure and object types, silhouettes, each area's signature pieces) as well as mood,
+palette, materials, lighting character and density. An area whose picked image shows tanks, cranes
+or furnaces must have them; generic filler in their place is a blocker (see "Area references";
+review-protocol "Images are content and feel references").
 
 **Rounds.** The concept (A.3) is decided in rounds (intake.md "Concept rounds") on two separate
 tracks:
@@ -278,8 +280,8 @@ state that greybox shapes and zones are rough massing only, never the model's sh
 the same paths and are swapped in place.
 
 **Gate per pass:** z-fight scan clean → dressing-reviewer SHIP IT on the area as placed, against
-spatial-design, the seating and layout rules and the boards' feel, with board match as a separate
-criterion and separate style and build scores. Track each area's passes, scores and verdicts in
+spatial-design, the seating and layout rules, the boards' feel and the area's picked image (content
+match), with board match as a separate criterion and separate style and build scores. Track each area's passes, scores and verdicts in
 WORLD.md's Build-out area tracker. C.1 ends when every area has SHIP IT with nothing left on its plan.
 
 ### Seating and layout rules (C.1)

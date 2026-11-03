@@ -15,7 +15,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [vrchat-sdk-upload-components](#vrchat-sdk-upload-components) (4)
 - [performance](#performance) (28)
 - [unity-editor-scripting-mcp](#unity-editor-scripting-mcp) (33)
-- [agent-workflow-verification](#agent-workflow-verification) (44)
+- [agent-workflow-verification](#agent-workflow-verification) (45)
 - [assets-sourcing](#assets-sourcing) (7)
 - [audio-video-ui](#audio-video-ui) (12)
 - [blender-modeling](#blender-modeling) (13)
@@ -412,6 +412,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Automatic leaf-size measurement misreads dense sprays; measure leaf size by hand on a pixel grid](notes/measure-leaf-size-by-hand.md) — A leaf-size script segmented overlapping leaves as a few big ones (reported 2.97× too big on leaves hand-measured ~1.1×) and skipped volume-crown trees; measure leaf px on a grid in 2 atlas cells and convert with card length / cell px.
 - [Baked occlusion data hides moved static objects in editor captures](notes/baked-occlusion-hides-moved-statics-in-captures.md) — After a static renderer moves, the baked occlusion data still culls it by its old bounds, so a capture camera with occlusion culling on drops it whenever the old spot is out of view; review captures must render with useOcclusionCulling off, and the occlusion bake must be redone before upload.
 - [Check the live scene before acting on each review finding — some may already be fixed](notes/verify-review-findings-against-live-scene.md) — A reviewer's screenshots can predate fixes already applied; dump the named objects' current state before editing, and record already-closed findings with the proving measurement.
+- [Concept art must bind what is in each area, or every area comes out the same](notes/concept-art-binds-content-not-just-feel.md) — A kit rule that images bind only mood/palette/materials/density let a structure pass ignore per-area concept art and extrude one generic block kit on every floor; images must bind content (structure and object types, signature pieces), areas must be built from a picked image, and reviewers must check content match and distinctness.
 - [Concurrent headless Blender runs freeze a busy workstation; run one machine-wide, capped threads, low priority](notes/one-headless-blender-at-a-time-low-priority.md) — Each headless Blender takes every core; two at once plus ~16 agent sessions froze a 16-thread PC, so run one Blender machine-wide with -t 6 at below-normal priority and keep ~4 builder agents active.
 - [Deterministic before/after captures in foliage worlds: freeze wind, fades, water and particles](notes/perf-deterministic-captures-for-foliage-worlds.md) — Foliage captures differ run to run until wind, LOD cross-fade, animated water and particles are frozen; two consecutive 'before' sets must match at 0 px before any diff counts.
 - [Find the stored shots a model change affects by toggling its renderers](notes/review-find-shots-a-model-change-affects.md) — To decide which stored camera shots need a re-shoot after an asset change, render every camera small with the asset's renderers forceRenderingOff on vs off and threshold the changed-pixel share, inspecting the mask for animated-water and glitter false positives.

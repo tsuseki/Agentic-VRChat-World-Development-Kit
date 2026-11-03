@@ -124,10 +124,11 @@ and boards are generated *from* the tagged references, `world-architect` reads `
 refs, `asset-finder` searches `object` refs first, and `avoid` refs become explicit "do not" lines
 in the brief.
 
-**Images are feel references, never blueprints**, user-supplied ones included: they set mood,
-palette, materials, lighting character and density. A floor-plan sketch or layout photo informs
-the B.1 floor-plan program as a stated wish, but geometry is decided by the shell layout, the floor plan, the greybox and
-spatial-design (review-protocol "Images are feel references").
+**Images are content and feel references, not blueprints**, user-supplied ones included: they set
+what is there (structure and object types, silhouettes, signature pieces), mood, palette,
+materials, lighting character and density. A floor-plan sketch or layout photo informs the B.1
+floor-plan program as a stated wish, but dimensions and layout are decided by the shell layout, the
+floor plan, the greybox and spatial-design (review-protocol "Images are content and feel references").
 
 ### Involvement (always confirm, last)
 

@@ -119,11 +119,14 @@ verdict and the reasons (dressing-reviewer: separate style and build-quality sco
 trials compare the user's own score with the reviewer's. The score/verdict mapping is defined when
 the reviewers are designed.
 
-## Images are feel references, never blueprints
+## Images are content and feel references, not blueprints
 AI images don't translate into 3D: perspective and parallax lines don't line up, scale is
-ambiguous and layouts are impossible. Builders and reviewers match **mood, palette, materials,
-lighting character and density** from images, never positions, proportions or layout. Geometry
-is judged only against the approved greybox and spatial-design.
+ambiguous and layouts are impossible. So images never set exact positions, proportions or layout;
+dimensions are judged against the approved greybox and spatial-design. But builders and reviewers
+match **what is there** (structure and object types, silhouettes, each area's signature pieces)
+and **mood, palette, materials, lighting character and density**. Every area is built from its
+picked concept image, never from memory, and reviewers check content match and that different
+areas don't read the same.
 
 ## Lock gaps
 A stylistic decision during B–D that the lock doesn't cover: dressing-reviewer decides it

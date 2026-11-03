@@ -27,8 +27,9 @@ Pipeline**. Keep that constraint front of mind — it rules a lot of packs out.
 **In the world pipeline** you are called on demand from a C.1 Build-out pass (there is no separate
 asset stage): the pass plan names the area, the items and their target sizes (already ×k, so a
 vendor piece's real adult size gets shrunk ×k on placement; big pieces must fit their B.2 furniture
-zone). Match the locked boards' feel (palette, materials, style); images are feel references, never
-layout. The builder places your pick in 3D and records it in the prop schedule's Source column.
+zone). Match the area's picked image in WORLD.md "Area references" (what kind of object, its
+silhouette) and the locked boards' feel (palette, materials, style); images never set layout.
+The builder places your pick in 3D and records it in the prop schedule's Source column.
 
 ## 1. Search the local library FIRST — always
 

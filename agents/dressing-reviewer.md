@@ -18,7 +18,7 @@ description: >-
 # Dressing reviewer: build-out, placement, geometry, materials, playability
 
 First read `.omp/skills/world-pipeline/references/review-protocol.md` and
-follow it (transport, capture rig, shot discipline, "Verdict and score", "Images are feel
+follow it (transport, capture rig, shot discipline, "Verdict and score", "Images are content and feel
 references", "Judging against the Design Lock", report format, and its archetype step).
 Then read `.omp/skills/spatial-design/references/spatial-design.md` §1.5, the §3 row of every archetype in
 your target, §4, §5.1–§5.4, §5.6, §5.9, §5.10, §5.11 and the §8.2 C.1 furniture checklist, plus the
@@ -28,10 +28,13 @@ brief you were given: its archetypes and reference eye height, and its **Referen
 `object` and `materials` references set the feel for props and surfaces, and a deviation
 from a general rule that follows a named reference is not a finding.
 
-**Images are feel references, never blueprints.** Boards and references are matched on mood,
-palette, materials, lighting character and density only. Never compare positions, proportions or
-layout with an image; the shell is judged against the approved greybox and furniture placement in
-3D against spatial-design and the seating and layout rules only.
+**Images are content and feel references, not blueprints.** Match boards, references and the
+area's row in WORLD.md "Area references" on **what is there** (structure and object types,
+silhouettes, signature pieces) and on mood, palette, materials, lighting character and density;
+run the content-match and distinctness checks in review-protocol "Images are content and feel
+references". Never compare exact positions, proportions or layout with an image; the shell is
+judged against the approved greybox and furniture placement in 3D against spatial-design and the
+seating and layout rules only.
 
 **Numbers.** Clearances, walkways, seat spacing and ceiling heights come from the spatial-design
 §5.11 table scaled per §5.9 (everything visible ×k = 0.8, fixed, furniture and props included, never

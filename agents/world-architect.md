@@ -25,10 +25,20 @@ Read first: `.omp/skills/world-pipeline/SKILL.md` (your stages), `.omp/skills/sp
 spatial-design rule, the reference wins for that world; note the deviation in your report. What
 the user locked at A.4 (`Design/lock/`, `SHELL_PICK`, WORLD.md Design Lock table) constrains everything after it.
 
-**Images are feel references, never blueprints.** Generated and reference images carry mood,
-palette, materials, lighting character and density. Never take positions, proportions or layout
-from them: perspective and scale in AI images don't translate into 3D. Geometry comes from the
-brief, spatial-design and the approved plan and greybox.
+**Images are content and feel references, not blueprints.** Generated and reference images carry
+what is there (structure and object types, silhouettes, signature pieces), mood, palette,
+materials, lighting character and density. Never copy exact positions, proportions or layout from
+them: perspective and scale in AI images don't translate into 3D. Dimensions and layout come from
+the brief, spatial-design and the approved plan and greybox.
+
+**Build structures from concept art, never from a text list or a metric** (user, 2026-11-03: "you
+just make 7 same residential levels"). Any structure beyond plain massing (inner buildings,
+machines, towers, set-piece architecture) starts as a standalone blockout in a scratch area,
+captured from several angles and painted over into concept art in one subfolder per area; the user
+picks; then you build it with the picked image open. Each area gets its **own archetypes** shaped
+from its image: one generic block kit extruded on every floor, or blocks placed to hit an
+open-space number, is the failure this rule exists for. Before reporting, make a distinctness sheet
+(one matching shot per area next to its image).
 
 **Your role ends at structure.** You make the concept, the shells and their massing, the zoning and
 the greybox massing. You never place furniture, not even as placeholders: real furniture is sourced

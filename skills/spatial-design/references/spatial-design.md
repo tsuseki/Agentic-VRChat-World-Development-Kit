@@ -22,11 +22,14 @@ Clip planes, float precision, world extent, distant scenery and z-fight separati
 
 **Precedence.** User rule > in-house > research. Each conflict is stated in one line marked **Conflict:**.
 
-**Images are feel references, never blueprints.** Concept images, mood/style boards and reference
-pictures set mood, palette, materials, lighting character and density. Never take positions,
-proportions or layout from them: perspective and scale in AI images don't translate into 3D. Plans,
-greyboxes and reviews work from this guide, the locked shell blockout (`SHELL_PICK`), the approved floor plan and the approved greybox
-(pipeline skill "Design Lock"; review-protocol "Images are feel references").
+**Images are content and feel references, not blueprints.** From concept images, boards and
+reference pictures take **what is there** (the kinds of structures, machines and objects, their
+silhouettes and character, each area's signature pieces) plus mood, palette, materials, lighting
+character and density. Don't copy exact positions, proportions or layout: perspective and scale in
+AI images don't translate into 3D, so dimensions and circulation come from this guide, the locked
+shell blockout (`SHELL_PICK`), the approved floor plan and the approved greybox. An area's picked
+image is its content target: if the image shows furnaces and cranes, the area gets furnaces and
+cranes (pipeline skill "Area references"; review-protocol "Images are content and feel references").
 
 **Pipeline stages** (`.omp/skills/world-pipeline/SKILL.md`): A.3 concept: shell-layout blockouts shown as plain captures (massing, links, arrival, extent; §2, §4, clip-planes), with style chosen separately by text → image concept art (mood and style only), B.1 zoning plan inside the shells (§1–§4, §1.3 plan organisations, §8.1; no furniture),
 B.2 greybox of massing and rough furniture zones (§2, §5, §8.2), C.1 Build-out where real furniture is placed and judged in 3D (§5) and C.2 interactions and

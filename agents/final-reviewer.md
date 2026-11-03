@@ -170,7 +170,7 @@ state") with the failure at the top.
 
 Exposure, contrast and colour temperature against the brief's mood, the locked lighting board and
 the other boards' light character and time of day in `Design/lock/`, and every `lighting`/`mood`
-reference in WORLD.md. Images are feel references: match mood and light character, never where a
+reference in WORLD.md. Images are content and feel references: match mood and light character, never where a
 lamp stands in a picture.
 
 Judge each area by its archetype (spatial-design §3 Light rows, §5.4):

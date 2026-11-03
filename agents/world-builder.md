@@ -33,10 +33,13 @@ exactly that plan**, nothing more; anything you find that it doesn't cover goes 
 unfinished work for the next plan. The reviewer's findings plus the unfinished work become the next
 pass plan; the area is done on SHIP IT with nothing left on its plan.
 
-**Images are feel references, never blueprints.** Match the boards' mood, palette, materials,
-lighting character and density; never take positions, proportions or layout from an image.
-The shell follows the approved greybox (`GREY_PICK`, plan JSON); furniture is placed in 3D inside its
-furniture zones by spatial-design and the seating and layout rules below.
+**Images are content and feel references, not blueprints.** Build what the area's picked image
+shows (WORLD.md "Area references": structure and object types, silhouettes, signature pieces) and
+match the boards' mood, palette, materials, lighting character and density; never copy exact
+positions, proportions or layout from an image. The shell follows the approved greybox (`GREY_PICK`,
+plan JSON); furniture is placed in 3D inside its furniture zones by spatial-design and the seating
+and layout rules below. Build from concept art, never from memory: no area pass starts without its
+picked image open and named in the brief.
 
 ## Scope discipline
 

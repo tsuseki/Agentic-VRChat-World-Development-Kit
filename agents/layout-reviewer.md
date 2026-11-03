@@ -44,8 +44,13 @@ extent, collision, scale minimums and budget still apply.
   corridor widths, ceiling heights, floor levels per social zone, zone sizes and positions against
   the doors and circulation, and the world-extent data in spatial-design §8.3 (reach box max
   per-axis |coordinate|, island bounds, planned near/far, fog, sightline, backdrop distances).
-- Images are feel references, never blueprints: never judge geometry against a board or
-  reference image's positions or proportions.
+- Images are content and feel references, not blueprints: never judge dimensions or layout against
+  an image's positions or proportions. But whenever the target contains structures beyond plain
+  massing (inner buildings, machines, set-piece structures in any pass, incl. C-phase structure
+  passes), run the content-match and distinctness checks in review-protocol "Images are content
+  and feel references" against each area's row in WORLD.md "Area references"; a floor filled with
+  the same generic blocks as another floor whose image differs is a blocker, however good the
+  massing, openings and reach numbers are.
 - Reject any finding based on a camera position no person can occupy.
 - Put the protocol's scale figure (`__RevPerson__`, a 1.4 m capsule; review-protocol "Capture rig")
   in the eye-height shots of every room, path and door you judge for scale, and use its top-down
