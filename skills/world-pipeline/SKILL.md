@@ -183,6 +183,16 @@ picked shell layout with its concept art, the style images with their `feel` lin
 once; record the date and their words in Decisions. From then on a lock item changes only when the
 user reopens it; log the reopen and redo the affected stages.
 
+## Area references
+
+Per-area concept images and the user's picks and words about an area's content are requirements,
+not history. Keep them in one WORLD.md table, "Area references (binding per-area targets)": one row
+per area with its target image(s), the pick, and the user's exact words, updated the moment the user
+picks or comments. Every area pass brief (B.2, C.1, D.1) copies its row; builders match the content
+and density, reviewers judge against it. Before asking the user about an area's content, read that
+row and the Decisions log; if the answer is there, don't ask. The user should never have to repeat
+something already said or shown in concept art.
+
 ## Lock gaps
 
 A decision during B–D is a lock gap when it is genuinely stylistic (the user would have an
