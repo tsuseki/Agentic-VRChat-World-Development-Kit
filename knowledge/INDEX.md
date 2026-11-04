@@ -14,7 +14,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [udonsharp-networking](#udonsharp-networking) (11)
 - [vrchat-sdk-upload-components](#vrchat-sdk-upload-components) (4)
 - [performance](#performance) (28)
-- [unity-editor-scripting-mcp](#unity-editor-scripting-mcp) (33)
+- [unity-editor-scripting-mcp](#unity-editor-scripting-mcp) (34)
 - [agent-workflow-verification](#agent-workflow-verification) (45)
 - [assets-sourcing](#assets-sourcing) (8)
 - [audio-video-ui](#audio-video-ui) (12)
@@ -389,6 +389,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Never round-trip floats through strings in editor scripts: locale commas give 100x values](notes/editor-locale-breaks-float-string-round-trips.md) — Under a comma-decimal OS locale, editor float formatting prints '1,15' and parsing it back yields 115 even with InvariantCulture, silently writing wrong values into the scene.
 - [Objects missing in the Scene view far away: check SceneView far clip, not layers](notes/scene-view-far-clip-hides-distant-objects.md) — With SceneView.cameraSettings.farClip at 100, a box 160 m away is invisible and framing from further only shows sky.
 - [Play mode silently refuses to start when scripts have compile errors](notes/play-mode-silently-refuses-on-compile-errors.md) — Entering play mode remotely reports success and then silently drops back to edit mode if any script fails to compile; read the console for 'error CS' first.
+- [PreviewRenderUtility renders from an agent call can kill the editor (LightmapSettings NULL)](notes/previewrenderutility-fatal-lightmapsettings-null.md) — Rendering a shader test through PreviewRenderUtility from the Unity MCP execute_code tool froze the editor on a native fatal modal whose only button is Quit; render tests in the open scene with the persistent capture camera instead.
 - [Renderer.bounds inflates for rotated objects — measure size from the mesh](notes/renderer-bounds-inflate-with-rotation.md) — Renderer.bounds is the world-axis-aligned box of the rotated local bounds, so a yawed prop measures up to 1.41x too wide, faking distortion, overhang and clash failures.
 - [Revert one geometry pass by reading transforms from the old scene YAML in git](notes/revert-one-geometry-pass-from-old-scene-yaml.md) — To undo one change in a large scene that also holds work you must keep, read the old transforms out of the committed .unity YAML and re-apply them through the editor.
 - [Scripted reparent/rename edits do not dirty the scene, so saves silently skip them](notes/unity-scripted-edits-do-not-dirty-the-scene.md) — SetParent and rename via script leave scene.isDirty false, so SaveScene returns true without writing; always MarkSceneDirty first and verify on disk.

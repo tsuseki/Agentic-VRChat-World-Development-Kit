@@ -179,6 +179,12 @@ Unity MCP `read_console` tool, and resolve every `error CS` before anything else
   camera: `Camera.SetupCurrent(null)`, `RenderTexture.active = null`, `cam.targetTexture = null`
   before the destroy, then move it to the persistent camera; a `delayCall`-deferred destroy is no fix (it waits for
   an editor tick that can come minutes later). Save the scene before a screenshot pass.
+- **Never render through `PreviewRenderUtility` (or any other preview scene) from an agent call.** A preview
+  scene has no `LightmapSettings`. The first render worked; the second froze the editor on a native
+  "Fatal Error! GetManagerFromContext: pointer to object of manager 'LightmapSettings' is NULL" modal,
+  whose only button is Quit, and that lost every unsaved scene change. For isolated test renders,
+  build the test objects far off in the open scene, render them with the persistent `__CapCam__` and
+  delete them afterwards. Save the scene first.
 - **Sweep `__*__` objects and assert zero realtime/mixed lights** before every save, commit, bake or
   build; review tools may leave a realtime `__CapLight__`, and the SDK saves the open scene on build.
   Run both checks; either can miss on its own.
