@@ -286,6 +286,12 @@ Numbers lie; renders don't.
   forward-axis varies and is the #1 thing that comes in wrong.
 - Sanity-check tri count (`get_object_detail_summary` / a `bpy` poly count) and
   material count against the budget table before declaring done.
+- **Check face orientation before export**, because Unity culls back faces. Blender's Cycles/EEVEE
+  renders and the material preview show inside-out faces as if they were fine. Run
+  `bmesh.ops.recalc_face_normals` on closed parts, or test outward-ness explicitly. In scripted bmesh
+  code, call `face.normal_update()` before reading `face.normal`: `bm.faces.new` leaves it at zero, so an
+  orientation test silently never fires. Prove it with an inward-area check per exported piece (solid
+  tubes read ≈ 0.1, inside-out ≈ 0.8), plus one viewport render with backface culling on.
 
 ## Export for Unity (Built-in RP)
 
