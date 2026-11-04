@@ -59,6 +59,12 @@ change and the user's words go in that world's `WORLD.md` Decisions log, and the
   lightmapped.
 - **Who gets texels and how many** (the per-class reception table, these exceptions included, density
   targets, groups, UV2 quality and the pre-/post-bake allocation audit): `.omp/skills/lightmap-allocation/SKILL.md`.
+- **Every interior space gets its own light source** (user, 2026-11-04: "all inside areas need some
+  kind of illumination"): halls, side rooms, corridors, tunnels, stair runs and lift lobbies. Sky and
+  bounce alone leave enclosed spaces black. Corridors get rhythmic ceiling or bulkhead fixtures
+  (about 6–8 m apart, pools with darker gaps between them), with the brightest light at junctions,
+  ends and doors so players are pulled forward. Before any bake, run a coverage check that counts the
+  baked sources reaching each interior room or corridor; a space with 0 is a finding.
 - **Cozy/night interiors go darker than instinct.** Deep shadow with small warm pools; when it seems
   done, cut another ~15% before asking, and never raise a level the user approved. "Lamp too bright"
   usually means the spill (emitter intensity), not the shade's own emission; they are separate knobs.

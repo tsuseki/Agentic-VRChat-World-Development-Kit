@@ -38,6 +38,7 @@ resolve from the file that contains them.
 | File | Purpose |
 |---|---|
 | `<project>/WORLD.md` | The brief, the involvement settings, the Design Lock table, the shell layout, floor plan and greybox pick, the prop schedule, the Build-out area tracker, decisions log, lock gaps, stage status. Single source of truth. Template: `.omp/templates/WORLD.template.md` |
+| `<project>/STEER.jsonl` (+ generated `STEER.md`, vocabulary `steer_parts.txt`) | The steer log: every decision and steer from the user, in their exact words, one JSON record per line, append-only. Fields: id, when, stage, `affects` (world parts from `steer_parts.txt`: floors, roof-skyline, surroundings, greenery, lighting …), `topic` (a stable key), said, images, decision, status, supersedes. **The latest record on a topic holds.** Add a record the moment the user steers, before acting on it: `python .omp/scripts/steer.py --project <project> add --affects … --topic … --said "…" --decision "…"`. Before every brief, resume and question to the user, run `steer.py current --affects <part>` (or `find --text/--image/--topic`), and quote the records the brief depends on. The `WORLD.md` Decisions log keeps the reasoning. New world: copy `.omp/templates/steer_parts.txt` and add the world's floors and areas |
 | `<project>/Design/lock/` | Every image the user approved for the lock, plus `lock.json` (captions, tags, feel lines). The feel target every builder and reviewer works to |
 | `<project>/Design/concepts/genNN-<route>/` | A.3 images only, **one folder per generation** (route `text`, `3d` or `style`): `<letter>_<view>.png` (3D route: plain Unity captures, no paint-overs). This is the only folder the user looks at |
 | `<project>/Design/_prompts/genNN-<route>/` | Agent-only: the prompt files, pitches and notes for the matching generation. Never shown to the user; pitches are summarised in chat |
@@ -136,6 +137,20 @@ is there** (structure and object types, silhouettes, each area's signature piece
 palette, materials, lighting character and density. An area whose picked image shows tanks, cranes
 or furnaces must have them; generic filler in their place is a blocker (see "Area references";
 review-protocol "Images are content and feel references").
+
+**Every visible element traces to a picked image, the exterior included.** Before a pass adds a
+generated element (roof towers, skyline, outbuildings, surroundings), its brief names the picked
+image and the part of it that shows that element. An element with no picked image behind it waits
+for reference art and a user pick before it is built. Its look never comes from a text description
+alone, and never reuses an interior kit such as hall window bays. Every user pick and every "I like
+this" is logged on the spot in `WORLD.md` "Area references", with the file path and the user's
+words. When the user rejects a look, the first step is to reread the recorded picks and show what
+they contain; new art comes from those picks, never from a fresh text prompt. Each C.1 pass ends
+with an exterior silhouette capture next to the site picks, which the reviewer judges.
+Lesson (2026-11-04): reviewer-driven "shape variety" added 11 roof towers from text and built
+them with the interior window-bay kit, so they looked like office skyscrapers. No pass compared the
+roofline with the site picks. When the user objected, the orchestrator first generated clean
+sci-fi variants from a text prompt instead of starting from the picks the user had already liked.
 
 **Rounds.** The concept (A.3) is decided in rounds (intake.md "Concept rounds") on two separate
 tracks:

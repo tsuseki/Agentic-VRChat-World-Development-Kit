@@ -1,0 +1,18 @@
+# World parts a steer can affect (one per line). Add a world's own floors and areas; keep names stable.
+whole-world
+site
+exterior-facade
+roof-skyline
+surroundings
+backdrop-skybox
+all-floors
+circulation
+open-areas
+greenery
+materials
+lighting
+colliders-interactions
+furniture-props
+performance
+concept-art
+process

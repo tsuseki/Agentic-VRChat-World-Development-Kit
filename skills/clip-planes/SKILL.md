@@ -107,6 +107,13 @@ off-axis points at up to 1.56 n in a wide VR view. 1 cm is "close enough for hea
   point the Bakery sky light at the new cubemap, rebake, then bake reflection probes. [in-house]
 - Match the skybox sun to the baked light in azimuth and elevation; grade geometry, impostors and capture
   together. [in-house]
+- **Skybox-only content is a one-off render source, not shipped content.** Far structures that only feed the
+  skybox capture have no triangle, texture or LOD budget and need no cleanup, colliders or walkability. Raw
+  image-to-3D output is fine if it looks right from the capture point. They may get their own lightmap bake
+  at any resolution and atlas count, since they're rendered once and then disabled and excluded from the
+  build, so their meshes and lightmaps never ship. Keep them in their own root (or a separate bake scene)
+  so the shipped bake and the build never include them. The near ring inside the parallax limit keeps the
+  normal budgets. [in-house]
 
 ## 6. Depth separation (z-fighting)
 - Never coplanar: joints overlap 1–3 cm, decals stand off ≥1 mm. [in-house]
