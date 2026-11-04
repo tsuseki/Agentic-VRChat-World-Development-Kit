@@ -5,7 +5,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 ## Topics
 
 - [lighting-baking](#lighting-baking) (80)
-- [probes-reflection-and-light](#probes-reflection-and-light) (25)
+- [probes-reflection-and-light](#probes-reflection-and-light) (26)
 - [materials-textures-shaders](#materials-textures-shaders) (50)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (34)
 - [import-fbx-prefabs](#import-fbx-prefabs) (16)
@@ -105,6 +105,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## probes-reflection-and-light
 
+- [A higher-weight Light Volume overhanging the next room plus a Shadows lift turns that room red and black](notes/lv-volume-overhang-and-shadows-lift-red-black-banding.md) — Crop every Light Volume to its own room's walls and keep its Shadows lift at 0 (bake brightening into the data or use Exposure); a weight-2 bath volume reaching 1.4 m into a bedroom with Shadows 0.7 rendered the bed head saturated red and black.
 - [A lamp can still read as switched on because of its albedo, not emission](notes/fixture-reads-on-because-of-its-albedo.md) — A fixture whose albedo was authored to be seen under its own bulb still reads as lit after emission is killed; judge against the key light and fix with a _Color block.
 - [An object blinking between unrelated colours is outside the light-probe hull](notes/blinking-colours-probe-extrapolation-outside-hull.md) — Changing wrong colours on a moving/distant object come from light-probe extrapolation outside the LightProbeGroup volume; the Console warning names the world position.
 - [Bake Light Volumes alone in a scratch copy so the world's lightmaps stay byte-identical](notes/lv-volume-only-bake-in-a-scratch-scene-copy.md) — To add or re-bake Light Volumes without touching a scene's lightmaps, bake them in a scene copy with every renderer at Scale In Lightmap 0 plus a Bakery sun and sky light, then move the volumes and their atlas into the world.

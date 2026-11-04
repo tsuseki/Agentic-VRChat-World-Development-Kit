@@ -45,6 +45,8 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **To bake volumes without touching a scene's lightmaps, bake them in a scene copy with every renderer at Scale In Lightmap 0, a `BakeryDirectLight` sun and a `BakerySkyLight`, then move the volumes and their atlas into the world** — the lightmaps stay byte-identical; with only the Unity Baked sun the volumes came out near black.
 - **Measure volume coverage as the % of reachable ground cells covered at feet, eye and head height, and re-run it after adding any structure** — 3 % of one walk zone and three later buildings in another sat outside every volume; outdoor 112 m tiles with 2.5 m voxels fit the 32-volume cap.
 - **Prove baked volume shade in edit mode with `Texture0.GetPixelBilinear` at under-crown, shade-side and open-sun points** — edit mode pushes no volume globals; under-crown volumes read 0.02–0.57 of open sun where light probes read ~1.2, so probes miss tree shade.
+- **Crop every Light Volume to its own room's walls (audit each AABB against the walls; a higher weight wins the overlap) and keep `Shadows` at 0, brightening with Exposure or a per-voxel data rescale instead; judge rooms in play mode with a grid of LV-PBR spheres** — a weight-2 bath volume reaching 1.4 m into a bedroom with Shadows 0.7 rendered the bed head red and black; the atlas lift rescales L0 and each L1 vector separately, so near-zero voxels get L1 > L0.
+- **When islands get their own Bakery light bitmask bits, add them to the `Light Volume Manager` `VolumeBitmask` and `ProbeBitmask`** — only matching lights bake into volumes and probes, so the next full bake would build the island's volumes and probes without its own lights.
 
 ## Tuning by measurement
 
