@@ -296,8 +296,11 @@ Numbers lie; renders don't.
   renders and the material preview show inside-out faces as if they were fine. Run
   `bmesh.ops.recalc_face_normals` on closed parts, or test outward-ness explicitly. In scripted bmesh
   code, call `face.normal_update()` before reading `face.normal`: `bm.faces.new` leaves it at zero, so an
-  orientation test silently never fires. Prove it with an inward-area check per exported piece (solid
-  tubes read ≈ 0.1, inside-out ≈ 0.8), plus one viewport render with backface culling on.
+  orientation test silently never fires. Check per connected part, not per whole mesh: a small inside-out
+  stub or rung in a big piece barely moves a whole-mesh average. Closed parts need a positive signed
+  volume; open tubes need most of their area facing away from the part's axis. Run the check on the
+  exported FBX (it takes a known-bad file as a positive control), plus one viewport render with backface
+  culling on.
 
 ## Export for Unity (Built-in RP)
 
