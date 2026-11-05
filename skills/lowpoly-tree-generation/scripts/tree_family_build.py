@@ -49,6 +49,11 @@
 #       (opt-in): the wave fades in over that fraction of the limb (0 at the parent), so the limb leaves at its drawn
 #       angle (Banyan v3: a first step the wave pitched level ran across the trunk top as a band). Off = identical.
 #   levels[i] sides=(lod0, lod1) (opt-in): tube sides of that level's limbs (and their merged continuations).
+#   levels[i] collar cmax=<c> (opt-in key of the collar dict): the base ring is at most c x the host's radius at the attach point (never under the
+#       limb's own radius), so a limb on a host thinner than its collar (the top whorl on a 2 cm leader) gets no collar that overlaps its neighbours.
+#   levels[i] root_clear=<k> (opt-in, not with root_out): a limb thicker than its host (parent radius < the limb's base radius) is shifted rigidly
+#       k x its own base radius out along its radial (cards and children follow): the top whorl's bases leave the thin leader instead of crossing.
+#   fork stride=<n> (opt-in): the fork limbs keep every n-th ring in the packed LOD1 (1 = every ring: round fork elbows).
 #   levels[i] collar=dict(k=1.7, h=1.5) (or a number = k; fork collar too; opt-in, mesh only): the limb's base ring (inside its
 #       parent, on the parent's axis) is k x wider and ONE plain ring is added h x the limb radius past where the limb leaves the
 #       parent tube, so the limb swells over its first 0.2-0.4 m into a branch collar instead of a constant tube butted on
@@ -262,7 +267,7 @@
 #   merge=dict(at=0.7, ang=50, blend=2, round=1, round_bend=20, depth=(0, 99), straighten=True)   sympodial joints:
 #       a limb whose last fork is past `at` of its length continues into its best-aligned child as one tube (no
 #       spike past the fork); see merge_continuations(). Recommended for every new tree.
-#       relax=dict(w=0.5, iters=2, span=2, min=12) (opt-in): after the swing and the corner cut, the sharpest bend within the joint
+#       relax=dict(w=0.5, iters=2, span=2, min=12, keep=1, depth=(0, 99)) (opt-in; depth: only chains whose head is in that depth range are relaxed; `relax` may be a list of such dicts, the first whose depth range holds the chain applies; keep=2 holds the first and last two points, so the chain's end directions and the parents' merge swing are unchanged): after the swing and the corner cut, the sharpest bend within the joint
 #       window (when over `min` deg) is smoothed by pulling the points within `span` rings of it toward their neighbours' midpoints
 #       (`iters` passes of weight `w`): a 40-50 deg merge elbow spreads over ~4 rings with NO added rings (a corner cut adds one
 #       ring per pass). Moves the chain up to ~0.2 m at the joint; every branch rooted on it moves rigidly with the nearest chain
@@ -639,6 +644,9 @@ def collar_axis(b, CO):
         if seg > s2 * 1.1:
             f2 = s2 / seg
             pts.insert(1, pts[0].lerp(pts[1], f2)); radii.insert(1, radii[0] + (radii[1] - radii[0]) * f2)
+    cm = CO.get("cmax") if isinstance(CO, dict) else None  # opt-in cmax: the base ring is at most cmax x the host's radius (never under the limb's own)
+    if cm and hp is not None and len(hp.pts) >= 2 and len(pts) >= 2:
+        k = max(1.0, min(k, cm * _near_axis(pts[0], hp.pts, hp.radii)[1] / max(radii[0], 1e-6)))
     radii[0] *= k
     return pts, radii
 
@@ -880,15 +888,18 @@ def merge_continuations(branches, M):
             wp, wr = smooth_path(b.pts[i0:i1], b.radii[i0:i1], math.radians(M.get("round_bend", 15)), rd)
             b.pts = b.pts[:i0] + wp + b.pts[i1:]; b.radii = b.radii[:i0] + wr + b.radii[i1:]
             b.lobe_end += 0.0
-        RX = M.get("relax")  # opt-in: the sharpest bend around the joint is relaxed toward its neighbours' midpoints (no new rings)
-        if RX and len(b.pts) > 4:
-            lo, hi = max(1, k - 2), min(len(b.pts) - 1, k + 3)
+        RX = M.get("relax")
+        if isinstance(RX, (list, tuple)): RX = next((x for x in RX if x.get("depth", (0, 99))[0] <= b.depth <= x.get("depth", (0, 99))[1]), None)
+        # opt-in: the sharpest bend around the joint is relaxed toward its neighbours' midpoints (no new rings)
+        if RX and len(b.pts) > 4 and RX.get("depth", (0, 99))[0] <= b.depth <= RX.get("depth", (0, 99))[1]:
+            kp = RX.get("keep", 1)  # keep=2: the first and last two chain points stay put (the chain's end directions drive the parents' merge swing)
+            lo, hi = max(kp, k - 2), min(len(b.pts) - kp, k + 3)
             tn = {j: (b.pts[j] - b.pts[j - 1]).angle(b.pts[j + 1] - b.pts[j]) for j in range(lo, hi)
                   if (b.pts[j] - b.pts[j - 1]).length > 1e-6 and (b.pts[j + 1] - b.pts[j]).length > 1e-6}
             if tn and max(tn.values()) > math.radians(RX.get("min", 12)):
                 jm = max(tn, key=tn.get); old_p = [q.copy() for q in b.pts]
                 for _ in range(RX.get("iters", 2)):
-                    for j in range(max(1, jm - RX.get("span", 2)), min(len(b.pts) - 1, jm + RX.get("span", 2) + 1)):
+                    for j in range(max(kp, jm - RX.get("span", 2)), min(len(b.pts) - kp, jm + RX.get("span", 2) + 1)):
                         b.pts[j] = b.pts[j].lerp((b.pts[j - 1] + b.pts[j + 1]) * 0.5, RX.get("w", 0.5))
                 # every branch rooted on the chain (b, c and what c already merged) moves rigidly with the chain point nearest
                 # its base, so no shoot is left hanging beside the relaxed axis (a thinned tube would need every ring then)
@@ -1166,6 +1177,7 @@ def build_skeleton(seed):
                 c = grow(start, cd, rng.uniform(*F["len"]), rr, F["tip"] * rr, 5, 1, out, F.get("gnarl", 0.1),
                          F.get("up", 0.0), seed * 5 + j)
                 if c and F.get("collar"): c.collar = F["collar"]  # opt-in: base ring k x wider (levels collar, mesh only)
+                if c and F.get("stride"): c.stride = F["stride"]  # opt-in: fork limbs keep every n-th ring in the packed LOD1 (like levels stride)
                 if c: c.par = trunk; nxt.append(c)
             trunk.radii[-1] = rt * 0.8  # the leader (0.85 x) sheathes the trunk end
         for b in parents:
@@ -1225,6 +1237,10 @@ def build_skeleton(seed):
                     cx = grow(p - d * min(0.03, r), cdx, ln, rr, P["tip"] * rr if P["tip"] > 0.05 else P["tip"],
                               P.get("segs", 4 if lv == 0 else 3), lv + 1, tmp, P["gnarl"], P["up"], seed * 7 + j + lv * 31,
                               up_end=P.get("up_end"), flat=P.get("flat", 0.0), wave=P.get("wave"), plane=MPN)
+                    if cx and P.get("root_clear") and r < cx.radii[0] and not P.get("root_out"):  # opt-in: a limb thicker than its host
+                        rad = cdx - d * cdx.dot(d)  # (the top whorl on a thin leader) leaves its axis root_clear x its own radius out
+                        if rad.length > 1e-6:       # along its own radial, so the whorl's bases don't overlap each other (rigid shift)
+                            sh = rad.normalized() * cx.radii[0] * P["root_clear"]; cx.pts = [q + sh for q in cx.pts]
                     if cx and P.get("root_out"):  # opt-in: the whole limb shifted rigidly root_out x parent radius out along
                         rad = cdx - d * cdx.dot(d)  # its own radial (same shape and noise), so a thick limb clears the parent wall sooner
                         if rad.length > 1e-6:
