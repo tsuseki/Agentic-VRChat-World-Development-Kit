@@ -193,7 +193,7 @@ def openai_image(cfg: dict, req: dict) -> dict:
     key = api_key(cfg, "OPENAI_API_KEY")
     base = cfg.get("base_url", "https://api.openai.com/v1").rstrip("/")
     w, h = size_for(req["aspect"], 0)
-    body = {"model": cfg.get("model", "gpt-image-2.5-sunburst"), "prompt": req["prompt"],
+    body = {"model": cfg.get("model", "gpt-image-2.6-sunburst"), "prompt": req["prompt"],
             "size": f"{w}x{h}", "quality": req["quality"], "n": 1, "output_format": "png"}
     if req["transparent"]:
         body["background"] = "transparent"

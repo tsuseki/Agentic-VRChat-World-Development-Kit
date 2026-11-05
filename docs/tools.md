@@ -62,7 +62,8 @@ API fields merged into the request), `timeout` (seconds), `confirm_spend`.
 
 GPT Image through the OpenAI Images API. Key: <https://platform.openai.com/api-keys>, saved as
 the user env var `OPENAI_API_KEY` (or `key_env`/`key_file`). `model` defaults to
-`gpt-image-2.5-sunburst`; `base_url` for an OpenAI-compatible proxy. References go to the edits
+`gpt-image-2.6-sunburst` (precise, consistent edits; `gpt-image-2.6-flare` is faster for drafts);
+`base_url` for an OpenAI-compatible proxy. References go to the edits
 endpoint (up to 16). Supports `--transparent`.
 
 ### gemini
