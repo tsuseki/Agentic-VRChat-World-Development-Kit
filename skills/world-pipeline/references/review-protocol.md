@@ -14,7 +14,7 @@ adds only its own scope, criteria and verdict rules.
 | Concept art per area (before any area is built) | `dressing-reviewer` CONCEPT PICK, only for picks the user leaves open | rank the variants per view, pick the best; the user can overrule | every option /10 |
 | C.1 Build-out (per pass) | `dressing-reviewer` | judge whatever the pass placed, in 3D: structures, shell finish, furniture (seating and layout rules), dressing; style match with the area's picked concept image (same style, not a copy), build quality and board match; decides lock gaps; never lighting. Structure passes also get `layout-reviewer` for massing, circulation and reach | `Style N/10 · Build N/10` |
 | C.2 Interactions & playability | `dressing-reviewer` | judge the placed interaction objects | `Style N/10 · Build N/10` |
-| D.1 Lighting | `final-reviewer` | DRAFT MOOD on the draft bake (mood vs the boards), then FINAL after bake + probe re-bake (lighting, polish, textures and sky, world extent); FINAL is the only upload gate (D.3) | `Score` |
+| D.1 Lighting | `final-reviewer` | DRAFT MOOD on the draft bake (mood vs the boards), then FINAL after bake + probe re-bake (lighting, polish, textures and sky, world extent); FINAL is the only upload gate (D.3). Runs only once the user calls for final lighting; quick bakes the user requests earlier get no review loop (`bakery-light-baking` "Baking rules") | `Score` |
 | D.2 Performance | `final-reviewer` | PERF REGRESSION: what perf changes did to textures, the sky, merges, LODs and mirrors (same-camera before/after) | `Score` |
 
 There is no separate style reviewer: world-architect pitches every A.3 option, the user judges

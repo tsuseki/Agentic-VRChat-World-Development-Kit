@@ -29,6 +29,49 @@ description: "Diagnose and fix baked-lighting artifacts (red/green chroma blobs,
 | SSS does nothing on a translucent mesh | It's a **per-group** checkbox and needs a closed volume | Give the mesh its own group asset + selector; model real thickness; `shadowCastingMode = On` |
 | Glossy surfaces glow/reflect sky inside dark baked corners ("Unity shine") even with correct probes | Standard has no lightmap-driven specular occlusion | Default: lower smoothness / probe intensity on the affected materials. Only if the user approves a shader change: Filamented (Exposure Occlusion), ORL Standard (Reflection Probe Occlusion) or Graphlit Lit; these also support Bakery MonoSH and bicubic lightmaps. Offer, never swap unasked |
 
+## Baking rules (user rules, 2026-11-05)
+
+A world under construction is at an early stage until the user says it is ready for final lighting
+(user: "we're at an VERY early stage", "we are NO WAY near the finished product"). Overnight, one
+requested "quick bake" turned into five bakes of 37–76 minutes, through a reviewer fix loop
+(user: "why do you keep baking so much what are you even changing", "bruh just stop it",
+"don't bake more than 10 min").
+
+1. **Bake only when the user asks.** Never bake on your own initiative, inside a fix or review
+   loop, after a change "to check it", or as a step in someone else's pass. The same goes for the
+   skybox and for Light Volume and probe bakes, apart from the reflection probes that must follow a
+   requested lightmap bake.
+2. **One bake per request.** Bake, then the reflection probes, then a handful of captures. Show the
+   user and stop. If a reviewer or your own read suggests changes, list them for the user; don't
+   re-bake.
+3. **Every bake before final lighting is QUICK, with a hard 10-minute cap on wall time:**
+   - GI samples 4, Samples Multiplier 1/8, half the draft texel density;
+   - fast denoise, no AO, no SSS;
+   - bounces equal to final, so brightness stays trustworthy.
+
+   Set the cap before you launch. Estimate from the light count and atlas size; if it won't fit,
+   bake fewer lightmap groups or merge emitters for the quick bake. Watch the clock, and cancel at
+   10 minutes (see "Stopping a bake"). Noise and blotches are expected.
+4. **No lighting polish early.** Lighting setup at this stage means placing fixtures and choosing
+   rough colours. Intensity tuning, calibration rounds and the final-reviewer DRAFT MOOD loop wait
+   until the user calls for final lighting. Run DRAFT MOOD earlier only when the user asks for a
+   review, and then once, without re-bakes.
+5. **The slow, clean bake** (draft or final quality, any length) runs only when the user
+   explicitly asks for the final lighting.
+
+**Stopping a bake.** Follow these steps in order, then check that the editor is back on the real
+scene:
+1. Set static `ftRenderLightmap.userCanceled = true`. It winds down in about 30–60 s.
+2. Confirm no `ftrace*` process is running. The tracer restarts once per light, so sample
+   `tasklist` several times over about 15 s.
+3. If `bakeInProgress` or the progress window lingers, unhook `RenderLightmapUpdate` from
+   `EditorApplication.update`, then call `simpleProgressBarEnd()` and `ProgressBarEnd(true)`.
+4. If the active scene is an untitled scene with one root, Bakery's temporary state, reopen the
+   world scene from disk.
+5. Re-enable anything disabled for the bake, then save.
+
+Killing the agent that launched the bake does not stop the bake.
+
 ## Workspace lighting standard (user rules)
 
 Defaults for every world, whichever lightmapper bakes it. The user may change them for a specific world; the
@@ -110,6 +153,8 @@ Full code: `reference/examples.md` (Snippets 2–3).
 ### Two-stage workflow: draft preset → final preset
 
 Iterating lighting at final quality is the single biggest time sink in a world project. Keep **two named settings presets** and switch between them instead of hand-editing the Bakery window each time.
+
+**Quick bakes** (GI 4, Samples Multiplier 1/8, half the draft texel density, bounces equal to final) are the only kind of bake before final lighting; see "Baking rules" above.
 
 Bakery already has the mechanism: `ftSettingsAsset` ScriptableObjects, exposed in the Bakery window under **Presets** (only visible when Settings Mode = Experimental). Assigning one copies its values into the scene's `ftLightmapsStorage`. Both classes use identical `renderSettings*` field names, so presets can be created and applied by copying fields by name — see `reference/examples.md` (Snippet 6).
 

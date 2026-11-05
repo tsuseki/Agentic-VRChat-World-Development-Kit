@@ -63,6 +63,9 @@ routes); archetype light rows apply only where the plan used archetypes.
 ### DRAFT MOOD (D.1 draft)
 
 The scene carries a low-quality draft bake.
+Runs only when the user has called for final lighting, or has asked for a review of a quick bake.
+For a quick bake, review once and list the fixes; the findings never trigger re-bakes on their own
+(`bakery-light-baking` "Baking rules").
 
 - **Check:** lightmaps exist (`LightmapSettings.lightmaps.Length > 0`), no realtime or Mixed lights.
 - **Focus:** F1 mood and exposure; focal points lit and wayfinding readable in the dark.

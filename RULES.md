@@ -76,3 +76,11 @@ These stay in force for the whole session. Background and rationale live in `.om
     A faceted lathe, tube or lattice built in Unity is a blocker in review (user, 2026-11-03:
     "never model complex objects in unity using primitives, NEVER", "don't we have asset finder and
     blender modeler and tripo???").
+
+11. **Bake only when the user asks, at most 10 minutes, once.** Never start a lightmap, Light Volume
+    or skybox bake on your own initiative or inside a fix or review loop. Until the user calls for
+    final lighting, every requested bake is a QUICK bake (lowest samples, half texel density),
+    capped at 10 minutes of wall time and cancelled if it runs over. After it: reflection probes, a
+    few captures, show the user, stop. No lighting reviewer loops or intensity polish at an early
+    stage. Rules and the cancel procedure: `bakery-light-baking` "Baking rules" (user, 2026-11-05:
+    "don't bake more than 10 min", "we're at an VERY early stage").

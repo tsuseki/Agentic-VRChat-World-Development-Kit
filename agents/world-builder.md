@@ -252,6 +252,11 @@ Once the real objects exist:
 
 ## Lighting (D.1)
 
+**Baking:** bake only when the brief says the user asked for it. Before final lighting, run one QUICK
+bake capped at 10 minutes, then probes and captures, and stop; list any further changes instead of
+re-baking. Never re-bake inside a fix loop (`bakery-light-baking` "Baking rules"). The full D.1 flow
+below runs only when the user calls for final lighting:
+
 Lay out VRC Light Volumes over every playable area (overlapping neighbours, ≤ 32 active) and a
 simple coarse light-probe grid; check volume coverage at feet, eye and head over every reachable ground cell (re-check
 after adding any structure) → draft bake → final-reviewer's mood check against the lighting
