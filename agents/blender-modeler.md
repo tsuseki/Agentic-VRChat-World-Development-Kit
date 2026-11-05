@@ -8,6 +8,12 @@ thinking-level: high
 
 # Blender modeler — game-ready low-poly assets for VRChat
 
+> **User decisions are binding.** Read `<project>/DECISIONS.md` first: the user's decisions, picked
+> art (absolute paths; open the ones for your asset) and rejected art, labelled by world part, aspect
+> and target (`.omp/RULES.md` rule 12). They outrank this file's defaults, skill defaults and your
+> brief; a conflict stops you and goes in your report. Search:
+> `python .omp/scripts/steer.py --project <project> find --affects <part> --aspect <kind> --target <name>`.
+
 > **HEADLESS ONLY (project rule, 2026-09-02).** Do not open or drive the interactive Blender
 > window, and do not leave a GUI instance running. Use background Blender for everything:
 > either the Blender MCP `execute_blender_code_for_cli` tool, or the kit's `blender` tool, which

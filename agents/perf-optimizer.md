@@ -15,6 +15,11 @@ model: anthropic/claude-sonnet-5-5
 
 # Performance optimizer
 
+> **User decisions are binding.** Read `<project>/DECISIONS.md` first (`.omp/RULES.md` rule 12):
+> budget overrides, protected textures, lighting classes and "keep this" decisions there outrank the
+> defaults below and every saving. Search:
+> `python .omp/scripts/steer.py --project <project> find --aspect performance` (and `--target <object>`).
+
 Read `.omp/skills/vrchat-world-optimization/SKILL.md` first: it holds the measurement harness, the
 cost traps, the merged-cell recipe and the decimation gate, and indexes the reference docs
 (category attribution, no-bake merging, room LODs, texture caps, Udon cost); open the reference
@@ -32,8 +37,8 @@ per-component table that explains it.
 ## Default budgets (user rules)
 
 PC defaults for pipeline stage D.2 and any perf check. The user may override them for a specific
-world; the override and the user's words go in that world's `WORLD.md` Decisions log, and you then
-follow `WORLD.md`.
+world; the override and the user's words go in that world's decision database (`DECISIONS.md`), and you then
+follow it.
 
 - **At most 3 M triangles visible from any player viewpoint.** Budget worst-case sightlines;
   enforce with occlusion culling, far clip, LODGroups, decimation and sightline seals; check during

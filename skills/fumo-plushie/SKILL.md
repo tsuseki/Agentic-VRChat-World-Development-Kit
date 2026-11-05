@@ -174,6 +174,13 @@ it reports the support and the gap. `NO SUPPORT` or a support that isn't the vis
 Walkthrough 17, top flush with the surface) and re-run. A decoration-only plush gets no collider,
 Rigidbody or sync; static, ContributeGI, authored UV2, Scale In Lightmap 8.
 
+**Physics class comes from the project's decisions first.** Gravity-on is only the default. Before running
+the pickup script, check the project's `DECISIONS.md` (`steer.py find --target Fumo_ --aspect behaviour`):
+a world may make plushies *posable* (Rigidbody kinematic, gravity off, collider `isTrigger`, stays exactly
+where released; Penthouse does, user: "fumos should not be affected by gravity have them stay in place
+when dropped"). Then set those values after the script runs and verify them; a posable plush needs no rest
+support. Overriding a recorded physics decision with this default is the failure this paragraph exists for.
+
 **12. Scream in fire.** Only when the world has fires (fireplace, fire pit, brazier; candles are not).
 Copy `scripts/unity/Udon/*.cs` to `Assets/<World>/Udon/` and `scripts/unity/Editor/FumoScreamBuilder.cs`
 to `Assets/<World>/Editor/`, wait for the compile (no `error CS`), then `FumoScreamBuilder.CreatePrograms`
@@ -224,7 +231,7 @@ make a local backup commit.
 | Self-review | the failure list in step 8 is clear, close-ups beside the reference saved in `ship/` |
 | Importer | `generateSecondaryUV` false; texture 1024, compressed, crunch off |
 | Contact / float | pickup script `support=<the visible surface or its Rest_*>`, gap within ±3 mm; play mode (wait a few seconds): plush moves < 5 mm, tilts < 2°, none fell; no scene save after play without this check |
-| Pickup | proximity 0.1, AutoHold No, ObjectSync, gravity on, kinematic off, layer Pickup, exactly one BoxCollider |
+| Pickup | proximity 0.1, AutoHold No, ObjectSync, layer Pickup, exactly one BoxCollider; physics per the project's `DECISIONS.md` (default gravity on, kinematic off; posable: kinematic, gravity off, trigger) |
 | Scream | positive control: a plush moved into a zone in play mode screams once; every resting spot near a fire stays silent |
 | One copy | exactly one object named `Fumo_<Name>` in the scene |
 | Visual | `dressing-reviewer` SHIP IT |

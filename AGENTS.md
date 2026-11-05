@@ -67,6 +67,7 @@ The reviewer may leave `__CapCam__` **and an active realtime directional `__CapL
 | Task | Load |
 |---|---|
 | Build a world from a description, or resume one with `WORLD.md` | [`.omp/skills/world-pipeline/SKILL.md`](skills/world-pipeline/SKILL.md) |
+| Record, look up or apply a user decision or art pick (any project) | "User decisions and picked art" below; `python .omp/scripts/steer.py` |
 | Gather information for a world (ask only about gaps) | [`.omp/skills/world-pipeline/references/intake.md`](skills/world-pipeline/references/intake.md) |
 | Concept (shell-layout blockouts + concept art, style rounds), floor plans, greybox | agent `world-architect`, `layout-reviewer`; [`.omp/skills/spatial-design/SKILL.md`](skills/spatial-design/SKILL.md) (guide, research, case studies) |
 | Scale, reference eye height, dimensions | spatial-design guide ([spatial-design.md](skills/spatial-design/references/spatial-design.md)) §5.9, §5.11 |
@@ -100,9 +101,49 @@ Before debugging anything from scratch, grep `.omp/knowledge/notes/` (or read
 [`.omp/knowledge/INDEX.md`](knowledge/INDEX.md)): hundreds of single-lesson notes, symptom → cause → fix → verify.
 
 **World defaults** (lighting standard, performance budgets, scale and clip planes, teleport islands,
-geometry) live in the homes above. Unlike the hard rules (`.omp/RULES.md`), the user may change any
-of them for a specific world; record the change and the user's words in that world's `WORLD.md`
-Decisions log, and every agent then follows `WORLD.md`.
+geometry, pickup physics) live in the homes above. Unlike the hard rules (`.omp/RULES.md`), the user may
+change any of them for a specific world; record the change and the user's words in that world's decision
+database (below), and every agent then follows it.
+
+## User decisions and picked art
+
+Agents forgot picked concept art and earlier user decisions, and a skill default (pickups with gravity)
+silently undid the user's "fumos should not be affected by gravity". Every project therefore keeps one
+**decision database** (user, 2026-11-05):
+
+- `<project>/STEER.jsonl`: every decision, steer, pick and rejection the user makes, in their exact words,
+  one record per line, append-only, written only through `python .omp/scripts/steer.py` (run with
+  `--help` for every command). Labels per record: `affects` (WHERE: world parts and areas from the
+  project's `steer_parts.txt`, created from the template on first use), `aspect` (WHAT KIND: size,
+  layout, design, style, materials, lighting, behaviour, audio, script, performance, process) and
+  `targets` (the concrete objects, scene paths, scripts and assets it governs; globs such as `Fumo_*`).
+  The latest record on a topic holds.
+- `<project>/Design/picks/`: every image the user liked, copied there by `steer.py pick` (rejected
+  art goes to `Design/picks/rejected/`), so a pick never gets lost in a generation folder.
+- Generated on every write, never edited: `DECISIONS.md` (the digest: picked art with absolute
+  paths, the design lock, rejected art, decisions in force by part), `DECISIONS.json` (machine form)
+  and `STEER.md` (full history).
+
+Rules:
+
+1. **Record on the spot.** When the user decides, picks, likes or rejects something, record it
+   before acting on it: `steer.py add` for decisions, `steer.py pick` (or `pick --reject`) for
+   images, always with `--aspect` and with `--target` whenever specific objects or scripts are
+   meant. A user decision that only lives in the chat is lost at the next compaction.
+2. **Read before acting.** Before working on a project, read its `DECISIONS.md` for the parts you
+   touch and open the picked images for them; search with `steer.py find --affects <part>
+   --aspect <kind> --target <object|script> --text <words>`.
+3. **Decisions beat defaults.** A recorded decision outranks workspace defaults, skill defaults and
+   briefs. A task that would contradict one stops for the user.
+4. **Briefs carry them.** Every subagent brief quotes the decisions and picked image paths it
+   depends on (subagents do not get this file; they get `.omp/RULES.md` rule 12).
+
+The `world-decisions` omp extension (`.omp/extensions/world-decisions/`, loads when omp starts in
+the workspace root) enforces this mechanically in the main session and every subagent: the first
+time a session touches a project (its name in the prompt, a path, a Unity instance name) it injects
+the digest, it injects new records as they are added, and a tool call that names a record's
+`targets` gets that record as a reminder. `WORLD.md` keeps the pipeline state and the reasoning
+behind agent picks; the user's own words live in the database.
 
 **Scale: people are 1.4 m tall (eye 1.3 m) in all worlds; everything is ×0.8 of real-world size.** Use a
 1.4 m person for every scale figure, review camera, capture, fit test and brief. Shell, built-ins, loose

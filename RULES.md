@@ -83,3 +83,18 @@ These stay in force for the whole session. Background and rationale live in `.om
     Re-baking is fine. Only the final bake the user asks for may be slow. Details and the cancel
     procedure: `bakery-light-baking` "Baking rules" (user, 2026-11-05: "don't bake more than 10
     min", "you can do rebakes I meant just do low samples so a quick test doesn't take 1h").
+
+12. **The user's decisions and picked art are binding: read them, record them, never override them.**
+    Each project keeps a decision database, `<project>/STEER.jsonl`, and its generated digest
+    `<project>/DECISIONS.md` (what holds now: picked art with absolute paths, rejected art, the
+    design lock, every decision labelled by world part, aspect and target). Before working on a
+    project, read `DECISIONS.md` for the parts you touch and open the picked images for them. A
+    recorded decision beats workspace defaults, skill defaults (a skill's "pickups get gravity"
+    loses to the project's "fumos have no gravity") and briefs; if a task contradicts one, stop and
+    ask. The moment the user decides, picks or rejects something, record it in their exact words
+    before acting: `python .omp/scripts/steer.py --project <project> add|pick ...` (`pick` copies
+    liked art to `Design/picks/`, rejected art to `Design/picks/rejected/`), with `--aspect`
+    (size, layout, design, style, …) and `--target` (objects, scripts, scene paths). Briefs to
+    subagents quote the decisions and image paths they depend on. Details: `.omp/AGENTS.md`
+    "User decisions and picked art" (user, 2026-11-05: "persistent important goals and decisions
+    like the concept art and all the kind of user made decisions").

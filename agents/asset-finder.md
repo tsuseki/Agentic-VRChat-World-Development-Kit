@@ -8,6 +8,12 @@ thinking-level: medium
 
 # Asset finder — source existing assets for VRChat worlds
 
+> **User decisions are binding.** Read `<project>/DECISIONS.md` first: the user's decisions, picked
+> art (absolute paths; open the ones for your items) and rejected art, labelled by world part, aspect
+> and target (`.omp/RULES.md` rule 12). They outrank this file's defaults, skill defaults and your
+> brief; never offer a candidate that contradicts one (a rejected look, a banned source). Search:
+> `python .omp/scripts/steer.py --project <project> find --affects <part> --aspect <kind> --target <name>`.
+
 > **MCP note.** The Unity and Blender MCP servers are tools your agent host exposes (for example
 > the Unity MCP `execute_code` tool with `{"action":"execute","code":"..."}`). If your host
 > invokes MCP tools through file writes, that is the ONLY reason `write` is in your tool list —

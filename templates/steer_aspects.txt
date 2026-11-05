@@ -1,0 +1,12 @@
+# What kind of decision a record is (one per line). Kit-wide; every project uses the same list.
+size
+layout
+design
+style
+materials
+lighting
+behaviour
+audio
+script
+performance
+process

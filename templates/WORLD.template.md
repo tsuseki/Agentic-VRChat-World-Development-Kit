@@ -104,10 +104,11 @@ character and density — never exact positions, proportions or layout. Changes 
 <!-- ===================== B · Blueprint ===================== -->
 
 ## Area references (binding per-area targets)
-One row per area: the concept image(s) it is built from, the user's pick and his exact words. Made before the area
-is built (blockout → captures from several angles → concept art over them → user picks; pipeline skill "Area
-references"). Every area brief copies its row; reviewers check content match and distinctness against it. Read it
-before asking the user anything about an area's content.
+One row per area: the concept image(s) it is built from (the `Design/picks/` copy made by `steer.py pick`), the
+user's pick and his exact words. Made before the area is built (blockout → captures from several angles → concept
+art over them → user picks; pipeline skill "Area references"). Every area brief copies its row; reviewers check
+content match and distinctness against it. Read it and `DECISIONS.md` before asking the user anything about an
+area's content.
 | Area | Target image(s) | Signature pieces (from the image) | User words / pick |
 |---|---|---|---|
 | e.g. Foundry floor | `Design/concepts/gen14-themes/L3/L3_furnace_eye_A.png` | blast furnace with ladle, overhead cranes, hull in scaffolding | picked: "I like this" |
@@ -179,7 +180,9 @@ become the next plan. An area is done on SHIP IT with nothing left on its plan.
 |---|---|---|---|---|---|---|
 
 ## Decisions log
-Every decision, user or agent, and every D → C loop back.
+Every decision, user or agent, and every D → C loop back. The user's own decisions, picks and rejections are
+recorded first in the decision database (`steer.py add` / `pick`; digest `DECISIONS.md`); this log keeps the
+stage, the scores and the reasoning.
 - YYYY-MM-DD A.3: picked concept 3d:B "..." — user: "<exact words>" (layout-reviewer B 8 > A 7 > C 6; agrees). Route: 3D, because "<reason>".
 - YYYY-MM-DD B.2: picked variant C (agent; layout-reviewer C 8 > A 7 > B 6).
 - YYYY-MM-DD D.1 → C.1: lounge shelf floats in the draft bake (final-reviewer r-d1-2); redo D.1 lounge bake + probes.

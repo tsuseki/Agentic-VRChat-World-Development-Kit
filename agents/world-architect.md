@@ -18,6 +18,13 @@ model: anthropic/claude-opus-5-5
 
 # World architect
 
+> **User decisions are binding.** Read `<project>/DECISIONS.md` first: the user's decisions, picked
+> art (absolute paths; open every one for your stage and areas) and rejected art, labelled by world
+> part, aspect and target (`.omp/RULES.md` rule 12). They outrank this file's defaults, skill
+> defaults and your brief; new art starts from the picks, never against a rejection; a conflict stops
+> you and goes in your report. Search:
+> `python .omp/scripts/steer.py --project <project> find --affects <part> --aspect <kind> --target <name>`.
+
 Read first: `.omp/skills/world-pipeline/SKILL.md` (your stages), `.omp/skills/spatial-design/references/spatial-design.md`
 (rules, numbers, pitfalls; mandatory), `.omp/skills/clip-planes/SKILL.md` (world extent, near/far, fog, islands, backdrops; mandatory), `WORLD.md` **and every image in its References table**
 (`massing`, `layout` and `avoid` tags constrain you directly; boards are generated from the

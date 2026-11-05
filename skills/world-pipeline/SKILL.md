@@ -38,7 +38,8 @@ resolve from the file that contains them.
 | File | Purpose |
 |---|---|
 | `<project>/WORLD.md` | The brief, the involvement settings, the Design Lock table, the shell layout, floor plan and greybox pick, the prop schedule, the Build-out area tracker, decisions log, lock gaps, stage status. Single source of truth. Template: `.omp/templates/WORLD.template.md` |
-| `<project>/STEER.jsonl` (+ generated `STEER.md`, vocabulary `steer_parts.txt`) | The steer log: every decision and steer from the user, in their exact words, one JSON record per line, append-only. Fields: id, when, stage, `affects` (world parts from `steer_parts.txt`: floors, roof-skyline, surroundings, greenery, lighting …), `topic` (a stable key), said, images, decision, status, supersedes. **The latest record on a topic holds.** Add a record the moment the user steers, before acting on it: `python .omp/scripts/steer.py --project <project> add --affects … --topic … --said "…" --decision "…"`. Before every brief, resume and question to the user, run `steer.py current --affects <part>` (or `find --text/--image/--topic`), and quote the records the brief depends on. The `WORLD.md` Decisions log keeps the reasoning. New world: copy `.omp/templates/steer_parts.txt` and add the world's floors and areas |
+| `<project>/STEER.jsonl` (+ generated `DECISIONS.md`, `DECISIONS.json`, `STEER.md`; vocabulary `steer_parts.txt`) | The **decision database**: every decision, steer, pick and rejection from the user, in their exact words, one record per line, append-only, labelled `affects` (world parts), `aspect` (size, layout, design, style, materials, lighting, behaviour, audio, script, performance, process) and `targets` (objects, scripts, scene paths). **The latest record on a topic holds.** Record the moment the user steers, before acting: `python .omp/scripts/steer.py --project <project> add …` (decisions) or `pick …` / `pick --reject …` (images). `DECISIONS.md` is the digest every agent reads; before every brief, resume and question to the user, run `steer.py current --affects <part>` (or `find --aspect/--target/--text`) and quote the records and picked image paths the brief depends on. The `WORLD.md` Decisions log keeps the reasoning behind agent picks. New world: add the world's floors and areas to `steer_parts.txt` (created from the template on first use). Rules: `.omp/AGENTS.md` "User decisions and picked art" |
+| `<project>/Design/picks/` | Every image the user liked, copied by `steer.py pick` (`S-NNNN_<name>.png`); `rejected/` holds the art the user turned down. Never move or rename these files |
 | `<project>/Design/lock/` | Every image the user approved for the lock, plus `lock.json` (captions, tags, feel lines). The feel target every builder and reviewer works to |
 | `<project>/Design/concepts/genNN-<route>/` | A.3 images only, **one folder per generation** (route `text`, `3d` or `style`): `<letter>_<view>.png` (3D route: plain Unity captures, no paint-overs). This is the only folder the user looks at |
 | `<project>/Design/_prompts/genNN-<route>/` | Agent-only: the prompt files, pitches and notes for the matching generation. Never shown to the user; pitches are summarised in chat |
@@ -108,8 +109,9 @@ ready-to-upload report (final-reviewer SHIP IT with its score, the build-and-tes
 thumbnail, the lock gaps decided provisionally) and the user decides whether to upload.
 
 At every `user` decision: show images (never ASCII plans), every option's score and reasons, your
-recommendation, and the option to "pick with changes". Record every decision, user or agent, in
-WORLD.md Decisions (the user's exact words, or the scores and ranking for an agent pick).
+recommendation, and the option to "pick with changes". Record every user decision in the decision
+database the moment it is made (`steer.py add`; images with `steer.py pick`, rejections with
+`pick --reject`), and every agent pick in WORLD.md Decisions (the scores and ranking).
 
 ## Design Lock
 
@@ -143,8 +145,9 @@ generated element (roof towers, skyline, outbuildings, surroundings), its brief 
 image and the part of it that shows that element. An element with no picked image behind it waits
 for reference art and a user pick before it is built. Its look never comes from a text description
 alone, and never reuses an interior kit such as hall window bays. Every user pick and every "I like
-this" is logged on the spot in `WORLD.md` "Area references", with the file path and the user's
-words. When the user rejects a look, the first step is to reread the recorded picks and show what
+this" is recorded on the spot with `steer.py pick` (the image is copied to `Design/picks/`) and
+listed in `WORLD.md` "Area references" with that path. When the user rejects a look, record it
+with `pick --reject`, then reread the recorded picks and show what
 they contain; new art comes from those picks, never from a fresh text prompt. Each C.1 pass ends
 with an exterior silhouette capture next to the site picks, which the reviewer judges.
 Lesson (2026-11-04): reviewer-driven "shape variety" added 11 roof towers from text and built
@@ -206,7 +209,7 @@ Per-area concept images and the user's picks and words about an area's content a
 not history. Keep them in one WORLD.md table, "Area references (binding per-area targets)": one row
 per area with its target image(s), the pick, the signature pieces and the user's exact words,
 updated the moment the user picks or comments. Every area pass brief (B.2, C.1, D.1) copies its
-row. Before asking the user about an area's content, read that row and the Decisions log; if the
+row. Before asking the user about an area's content, read that row and `DECISIONS.md`; if the
 answer is there, don't ask. The user should never have to repeat something already said or shown
 in concept art.
 

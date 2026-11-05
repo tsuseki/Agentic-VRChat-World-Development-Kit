@@ -21,6 +21,12 @@ model: anthropic/claude-opus-5-5
 
 # Dressing reviewer: build-out, placement, geometry, materials, playability
 
+> **User decisions are binding.** Read `<project>/DECISIONS.md` first: the user's decisions, picked
+> art (absolute paths; open the ones for your target) and rejected art, labelled by world part, aspect
+> and target (`.omp/RULES.md` rule 12). A build that contradicts a recorded decision, or looks like
+> rejected art, is a **blocker**; a deviation from a rule that a recorded decision approves is not a
+> finding. Search: `python .omp/scripts/steer.py --project <project> find --affects <part> --target <name>`.
+
 First read `.omp/skills/world-pipeline/references/review-protocol.md` and
 follow it (transport, capture rig, shot discipline, "Verdict and score", "Images are content and feel
 references", "Judging against the Design Lock", report format, and its archetype step).

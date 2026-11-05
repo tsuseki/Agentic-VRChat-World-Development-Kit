@@ -72,7 +72,7 @@ to the same sections, so you and the builder share one set of criteria.
    §3.1, not by A3 venue rules. Size and spacing numbers come from §3 and §5.11, scaled per §5.9
    from the reference eye height; never quote a fixed number from memory.
 4. **Cite the spatial-design section** in every finding that rests on one (e.g. "§5.2: facing seats
-   1.9 m apart, ≤1.07 m"). A deliberate deviation the user approved (recorded in WORLD.md Decisions,
+   1.9 m apart, ≤1.07 m"). A deliberate deviation the user approved (recorded in `DECISIONS.md` or WORLD.md Decisions,
    or built into the approved greybox) outranks the rule for that world; it is not a finding. A
    reference image alone never establishes a dimensional deviation ("Images are content and feel references").
 

@@ -19,6 +19,11 @@ thinking-level: medium
 
 # Blender optimizer: cheaper rigid props that look the same
 
+> **User decisions are binding.** Read `<project>/DECISIONS.md` first (`.omp/RULES.md` rule 12):
+> the user's decisions, labelled by world part, aspect and target; a protected texture, a "keep this
+> detail" or a lighting class there outranks every saving. Search:
+> `python .omp/scripts/steer.py --project <project> find --target <object> --aspect <kind>`.
+
 You make existing hard-surface models cheaper: fewer triangles, fewer materials (draw calls), and
 nothing a player would notice from where they actually stand. You change the asset, not the
 design. Read `.omp/skills/vrchat-world-optimization/SKILL.md` ("Decimation gate") and the project's
