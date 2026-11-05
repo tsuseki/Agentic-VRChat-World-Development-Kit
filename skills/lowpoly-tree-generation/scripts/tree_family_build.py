@@ -49,6 +49,19 @@
 #       (opt-in): the wave fades in over that fraction of the limb (0 at the parent), so the limb leaves at its drawn
 #       angle (Banyan v3: a first step the wave pitched level ran across the trunk top as a band). Off = identical.
 #   levels[i] sides=(lod0, lod1) (opt-in): tube sides of that level's limbs (and their merged continuations).
+#   levels[i] collar=dict(k=1.7, h=1.5) (or a number = k; fork collar too; opt-in, mesh only): the limb's base ring (inside its
+#       parent, on the parent's axis) is k x wider and ONE plain ring is added h x the limb radius past where the limb leaves the
+#       parent tube, so the limb swells over its first 0.2-0.4 m into a branch collar instead of a constant tube butted on
+#       the stem (the 'pipes' of the Sea almond review, 2026-11-04). +1 ring per limb. The base cone apex follows (`bury` x
+#       the wider radius; keep `bury` small), base_clamp pulls anything that leaves the parent back in. Off = identical.
+#   levels[i] stride=<n> (opt-in): the packed LOD1 (lod1_subset) keeps every n-th ring of that level's limbs and of the
+#       chains merged into them (default 2). 3 on short leafy shoots drops one ring of three, which pays for the sides of the
+#       limbs above them. Off = identical builds.
+#   blunt=dict(r=(r1, r2, ...), cap=0.6) (opt-in, taper trees): the end radius of every tapered branch end, by the depth of the
+#       chain's last member (index depth-1, the last entry holds for deeper), instead of the 3 mm needle (TIP_R); never wider
+#       than the branch's own end radius before the taper. cap: the end cone's height as a share of the end radius (default
+#       2.5 x, min 2 cm: a spear); 0.6 = a low dome. Twigs that end inside a leaf cluster as a blunt stub, not a spike that
+#       shows edge-on as a dark line past it. Same tris. Off = identical builds.
 #   levels[i] keep_rings=True (opt-in): the packed LOD1 meshes every ring of that level's limbs (and their merged
 #       continuations) instead of every other one, so sinuous limbs keep round elbows (more bark tris).
 #   flute=dict(n, amt, base, base_h, twist, vary) (opt-in, use sides[0] = 2 n): depth-0 stems fluted like fused root
@@ -249,6 +262,11 @@
 #   merge=dict(at=0.7, ang=50, blend=2, round=1, round_bend=20, depth=(0, 99), straighten=True)   sympodial joints:
 #       a limb whose last fork is past `at` of its length continues into its best-aligned child as one tube (no
 #       spike past the fork); see merge_continuations(). Recommended for every new tree.
+#       relax=dict(w=0.5, iters=2, span=2, min=12) (opt-in): after the swing and the corner cut, the sharpest bend within the joint
+#       window (when over `min` deg) is smoothed by pulling the points within `span` rings of it toward their neighbours' midpoints
+#       (`iters` passes of weight `w`): a 40-50 deg merge elbow spreads over ~4 rings with NO added rings (a corner cut adds one
+#       ring per pass). Moves the chain up to ~0.2 m at the joint; every branch rooted on it moves rigidly with the nearest chain
+#       point (subtree, cards follow), so no shoot is left beside the thinned tube. Off = identical builds.
 #       ang0=<deg> (opt-in, depth 0 in `depth`): a stem continues into its best-aligned top limb up to ang0 deg off its
 #       end without swinging it (stem_cont: the stem ends inside that limb, no drum top; the chain tapers like a limb,
 #       a keep_rings limb's chain keeps its LOD1 rings where the axis turns > 8 deg only (keep_rings "bends"); stem_dome
@@ -606,6 +624,25 @@ def base_flare_axis(b, BF):
     return pts, radii
 
 
+def collar_axis(b, CO):
+    """opt-in levels[i] / fork collar=dict(k=1.7, h=1.5) (a bare number = k): the limb's base ring (inside its parent, on the
+    parent's axis) is k x wider and ONE plain ring is added h x the limb radius past where the limb leaves the parent tube
+    (the parent chain's radius there): the limb swells over its first 0.2-0.4 m into a branch collar (one added ring, no
+    wide ring at the wall). Without the added ring the first segment (a limb's whole first fifth, 1 m or more) tapers
+    linearly from the wide base ring and reads as a fin. Too short a first segment: the wider base ring only."""
+    k, h = (CO, 1.5) if not isinstance(CO, dict) else (CO.get("k", 1.7), CO.get("h", 1.5))
+    pts, radii = list(b.pts), list(b.radii)
+    hp = getattr(b, "par", None)
+    while hp is not None and getattr(hp, "merged_into", None) is not None: hp = hp.merged_into
+    if hp is not None and len(hp.pts) >= 2 and len(pts) >= 2:
+        rh = _near_axis(pts[0], hp.pts, hp.radii)[1]; seg = (pts[1] - pts[0]).length; s2 = rh + h * radii[0]
+        if seg > s2 * 1.1:
+            f2 = s2 / seg
+            pts.insert(1, pts[0].lerp(pts[1], f2)); radii.insert(1, radii[0] + (radii[1] - radii[0]) * f2)
+    radii[0] *= k
+    return pts, radii
+
+
 def base_flare_sunk(b, hp, k, h, f, steps, along=None):
     """base_flare sink=f (opt-in; review banyan_v3_1: the flared ring at the stem wall stood 6-8 cm proud of it as a hard
     rim, read as a sleeve or a sawn log end butted onto the stem). The widest ring (k x the limb radius) is sunk inside
@@ -843,6 +880,32 @@ def merge_continuations(branches, M):
             wp, wr = smooth_path(b.pts[i0:i1], b.radii[i0:i1], math.radians(M.get("round_bend", 15)), rd)
             b.pts = b.pts[:i0] + wp + b.pts[i1:]; b.radii = b.radii[:i0] + wr + b.radii[i1:]
             b.lobe_end += 0.0
+        RX = M.get("relax")  # opt-in: the sharpest bend around the joint is relaxed toward its neighbours' midpoints (no new rings)
+        if RX and len(b.pts) > 4:
+            lo, hi = max(1, k - 2), min(len(b.pts) - 1, k + 3)
+            tn = {j: (b.pts[j] - b.pts[j - 1]).angle(b.pts[j + 1] - b.pts[j]) for j in range(lo, hi)
+                  if (b.pts[j] - b.pts[j - 1]).length > 1e-6 and (b.pts[j + 1] - b.pts[j]).length > 1e-6}
+            if tn and max(tn.values()) > math.radians(RX.get("min", 12)):
+                jm = max(tn, key=tn.get); old_p = [q.copy() for q in b.pts]
+                for _ in range(RX.get("iters", 2)):
+                    for j in range(max(1, jm - RX.get("span", 2)), min(len(b.pts) - 1, jm + RX.get("span", 2) + 1)):
+                        b.pts[j] = b.pts[j].lerp((b.pts[j - 1] + b.pts[j + 1]) * 0.5, RX.get("w", 0.5))
+                # every branch rooted on the chain (b, c and what c already merged) moves rigidly with the chain point nearest
+                # its base, so no shoot is left hanging beside the relaxed axis (a thinned tube would need every ring then)
+                mem, x = [b, c], getattr(c, "cont", None)
+                while x is not None: mem.append(x); x = getattr(x, "cont", None)
+                ids = {id(y) for y in mem}; shifted = set()
+                for m in mem:
+                    for kx in kids_of.get(id(m), []):
+                        if id(kx) in ids or id(kx) in shifted or not kx.pts: continue
+                        jn = min(range(len(old_p)), key=lambda i: (old_p[i] - kx.pts[0]).length)
+                        dv = b.pts[jn] - old_p[jn]
+                        if dv.length < 1e-4: continue
+                        for y in subtree(kx):
+                            if id(y) in shifted: continue
+                            shifted.add(id(y)); y.pts = [q + dv for q in y.pts]
+                            if y.depth > 0:
+                                for q in y.pts: q.z = max(q.z, 0.25)
         b.cont = c; c.merged_into = b
         if S0:  # stem_cont: the chain tapers like the limb and keeps its rings at the bends (keep_rings "bends")
             b.stem_cont = True; b.keep_rings = "bends" if getattr(c, "keep_rings", False) else getattr(b, "keep_rings", False)
@@ -1102,6 +1165,7 @@ def build_skeleton(seed):
                 start = pt - dt * rt * 0.6 if lead else p - d * min(0.03, r)
                 c = grow(start, cd, rng.uniform(*F["len"]), rr, F["tip"] * rr, 5, 1, out, F.get("gnarl", 0.1),
                          F.get("up", 0.0), seed * 5 + j)
+                if c and F.get("collar"): c.collar = F["collar"]  # opt-in: base ring k x wider (levels collar, mesh only)
                 if c: c.par = trunk; nxt.append(c)
             trunk.radii[-1] = rt * 0.8  # the leader (0.85 x) sheathes the trunk end
         for b in parents:
@@ -1194,6 +1258,8 @@ def build_skeleton(seed):
                 if c and P.get("sides"): c.lsides = P["sides"]  # opt-in per-level tube sides (LOD0, LOD1)
                 if c and P.get("keep_rings"): c.keep_rings = True  # opt-in: the packed LOD1 meshes every ring (round elbows)
                 if c and P.get("base_flare"): c.bflare = P["base_flare"]  # opt-in: a flared socket, meshed only
+                if c and P.get("collar"): c.collar = P["collar"]  # opt-in: base ring k x wider + one plain ring (mesh only)
+                if c and P.get("stride"): c.stride = P["stride"]  # opt-in: the packed LOD1 keeps every n-th ring
                 if c: c.par = b; nxt.append(c)
                 if c and MPN is not None: c.plane_mid = True  # merge continues the stem into this limb
         parents = nxt
@@ -1416,7 +1482,9 @@ def tube(bm, br, sides, lobe_amt, cap):
         SD = CFG.get("stem_dome") if not getattr(br, "stem_cont", False) else None  # stem_cont: a limb's spear tip
         k = 0.35 if (br.depth == 0 and CFG.get("fork")) else (SD["k"] if isinstance(SD, dict) else SD) \
             if (br.depth == 0 and SD) else 1.0 if rosette else 2.5
-        apex = bm.verts.new(br.pts[-1] + t * max(br.radii[-1] * k, 0.02))
+        BL = CFG.get("blunt")  # opt-in blunt ends: a low dome (cap x the end radius), not a 2 cm spear
+        apex = bm.verts.new(br.pts[-1] + t * (max(br.radii[-1] * BL.get("cap", 0.6), 0.004) if BL and br.depth > 0
+                                              else max(br.radii[-1] * k, 0.02)))
         for s in range(sides):
             f = bm.faces.new((ring[s], ring[(s + 1) % sides], apex)); f.material_index = 0
 
@@ -2374,9 +2442,14 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
                 k = min(range(len(b.pts)), key=lambda i: (b.pts[i] - c.pts[0]).length)
                 if (b.pts[k] - c.pts[0]).length < b.radii[k] + 0.1: f0 = max(f0, cum[k] / L + 0.08)
             f0 = min(f0, 0.9)
+            tr = TIP_R
+            BL = CFG.get("blunt")  # opt-in: the taper ends at a blunt stub radius by the chain's last member depth
+            if BL and b.depth > 0:
+                rl = BL["r"]; dl = (chain[-1] if chain else b).depth
+                tr = max(TIP_R, min(rl[min(dl - 1, len(rl) - 1)], b.radii[-1]))
             for i in range(len(b.pts)):
                 f = max(0.0, (cum[i] / L - f0) / (1 - f0)) ** 1.5
-                b.radii[i] = b.radii[i] * (1 - f) + TIP_R * f
+                b.radii[i] = b.radii[i] * (1 - f) + tr * f
     KC = CFG.get("kid_cap")  # opt-in dict(k=0.8, depth=2): a child (depth >= `depth`) whose base sits on a tube that the
     if KC:  # merge blend / end taper thinned below it is scaled down to k x that tube's radius there, its whole length
         kk, kd, ncap = KC.get("k", 0.8), KC.get("depth", 2), 0  # (BanyanGrove v3: shoots 5-6 cm on limb tips 4 cm thick)
@@ -2444,7 +2517,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
         # kr "bends" (stem_cont chains of keep_rings limbs): LOD1 keeps every ring where the axis turns > 8 deg and every
         # other one along the straight runs (the stem), so the limb part keeps its round elbows at fewer rings
         if sub and len(b.pts) > 2 and bi not in full_rings and (not kr or kr == "bends"):  # every other (lv: every `rings`-th) ring; the cards stay rooted on the full axis
-            ks = list(range(0, len(b.pts) - 1, lv.get("rings", 2) if lv is not None else 2)) + [len(b.pts) - 1]
+            ks = list(range(0, len(b.pts) - 1, lv.get("rings", 2) if lv is not None else (getattr(b, "stride", None) or 2))) + [len(b.pts) - 1]
             if kr == "bends":
                 ks = [0]
                 for i in range(1, len(b.pts) - 1):
@@ -2458,6 +2531,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
                 k = next((i for i in range(len(b.pts) - 1) if (b.pts[i].z + b.pts[i + 1].z) / 2 > thr), None)
                 if k is not None: ks = sorted(set(ks) | {k})
             b.pts = [b.pts[k] for k in ks]; b.radii = [b.radii[k] for k in ks]
+        if getattr(b, "collar", None): b.pts, b.radii = collar_axis(b, b.collar)  # opt-in collar (mesh only)
         if getattr(b, "bflare", None): b.pts, b.radii = base_flare_axis(b, b.bflare)  # opt-in flared socket (mesh only)
         if bi in base_over: b.pts, b.radii = base_axis(b.pts, b.radii, base_over[bi])  # base fix (mesh only)
         f0 = len(bm.faces); v0 = len(bm.verts)
