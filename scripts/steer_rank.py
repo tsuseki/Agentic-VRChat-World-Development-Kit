@@ -170,11 +170,17 @@ class Index:
             lo = sorted(raw)[len(raw) // 2]  # median: below-median similarity counts as none
             sem = scale([max(0.0, x - lo) for x in raw])
         w_sem = W_SEM if self.vecs is not None else 0.0
+        hits = [hit(r, query, qt) for r in self.recs]
+        # A hit shared by many records says little about any one of them: share the boost, separately
+        # for alias hits (1.0) and target hits (0.6, targets like Fumo_* are often shared).
+        n_alias = sum(1 for h in hits if h == 1.0)
+        n_target = sum(1 for h in hits if 0 < h < 1.0)
         out = []
-        for r, l, sc in zip(self.recs, lex, sem):
+        for r, l, sc, h in zip(self.recs, lex, sem, hits):
             if r["id"] in exclude:
                 continue
-            score = (W_LEX * l + w_sem * sc) / (W_LEX + w_sem) + W_HIT * hit(r, query, qt)
+            spread = min(1.0, 3.0 / max(1, n_alias if h == 1.0 else n_target))
+            score = (W_LEX * l + w_sem * sc) / (W_LEX + w_sem) + W_HIT * h * spread
             out.append((round(score, 3), r))
         out.sort(key=lambda x: -x[0])
         return out[:limit]

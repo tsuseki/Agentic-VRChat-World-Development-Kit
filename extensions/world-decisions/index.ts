@@ -29,7 +29,8 @@ const STEER = path.join(ROOT, ".omp", "scripts", "steer.py");
 const FIRST_TOP = 12;
 const PROMPT_TOP = 8;
 const BRIEF_TOP = 10;
-const MIN_SCORE = 0.55;
+const MIN_SCORE = 0.55; // per-prompt injection: only clearly relevant records
+const BRIEF_MIN = 0.35; // briefs: a few extra lines cost less than a missed decision
 const RESHOW_AFTER = 30; // tool calls before a shown record may be shown again
 const REMIND_EVERY = 25;
 const MAX_REMINDERS = 6;
@@ -299,7 +300,7 @@ export default function worldDecisions(pi: Api): void {
 				const ranked = await rank(n, `${context}\n${brief}`, BRIEF_TOP, []);
 				if (!ranked) continue;
 				const byId = new Map(db.records.map(r => [r.id, r]));
-				const recs = ranked.filter(x => x.score >= MIN_SCORE).flatMap(x => byId.get(x.id) ?? []);
+				const recs = ranked.filter(x => x.score >= BRIEF_MIN).flatMap(x => byId.get(x.id) ?? []);
 				if (!recs.length) continue;
 				blocks.push(
 					`### ${n}\n${recs.map(r => recLine(r)).join("\n")}\nMore: \`python .omp/scripts/steer.py --project ${path.join(ROOT, n)} find --like "<words>"\`, digest ${path.join(ROOT, n, "DECISIONS.md")}.`,
