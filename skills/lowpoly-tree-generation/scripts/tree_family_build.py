@@ -84,6 +84,7 @@
 #       tufts 0.12-0.26) each build at k x their drawn width.
 #   crown (rosette) az_world=<deg> (opt-in): every head's first frond leaves at this azimuth from world +X (deg, CCW) instead of a random
 #       one; with spread=0 all its fronds share it (flat cards that must face one way: wall streaks, ledge blankets, curtains). Off = identical.
+#   crown (rosette) min_fronds=<n> (opt-in, default 3): fewest live fronds per head (1 = a single flat card: wall streaks, blankets).
 #   crown (rosette) clear=<m> (opt-in): every frond point (midrib and edges) stays `clear` m above the ground (droop
 #       relaxed as for the 0 / 0.1 m default, else the frond is dropped): sucker leaves off the ground (Banana).
 #   crown (rosette) clear_bark=<m> (opt-in): no frond surface (midrib, edges, between rows) rests within `m` m of the
@@ -2100,7 +2101,7 @@ def rosette_crown(bm, uvl, branches, rng, fold, lod=None):
         if AW is not None: e1 = (Vector((1, 0, 0)) - axis * axis.x).normalized(); e2 = axis.cross(e1)
         hp = C.get("head_pow")  # opt-in: small heads (suckers) get count/young/dead x sc^head_pow and zone x sc
         hs = 1.0 if hp is None else sc ** (hp - 1.0)
-        az0 = rng.uniform(0, 2 * math.pi); n = max(3, round(C["count"] * sc * hs))
+        az0 = rng.uniform(0, 2 * math.pi); n = max(C.get("min_fronds", 3), round(C["count"] * sc * hs))
         if AW is not None: az0 = math.radians(AW)  # (the draw above is kept: the sequence stays the same)
         specs = [("live", i / max(1, n - 1)) for i in range(n)]
         Y, D = C.get("young"), C.get("dead")
