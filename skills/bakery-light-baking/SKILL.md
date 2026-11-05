@@ -47,6 +47,12 @@ doesn't take 1h").
    atlas size. If it won't fit in 10 minutes, bake fewer lightmap groups (selected groups), merge
    hidden emitters, or lower the samples further. Watch the clock and cancel at 10 minutes (see
    "Stopping a bake"), then shrink the scope and relaunch. Log each bake's time and stage split.
+
+   **The biggest lever is the number of mesh lights.** Bakery runs the tracer once per
+   `BakeryLightMesh` per lightmap, about 5 s each; point lights are batched and nearly free. For a
+   quick bake, turn strip rows, rail strips and shaft slots into chains of point lights and keep
+   only a handful of mesh lights. (rp-world 2026-11-05: 108 mesh lights ran past 25 min before
+   being killed, breaking the cap; the point-chain version baked in 3 min 46 s.)
 3. **Re-bakes are allowed** as often as the work needs, each one QUICK. Run reflection probes after
    every bake. Noise and blotches are expected and are never a finding at this quality.
 4. **The slow, clean bake** (final quality, any length) runs only when the user explicitly asks for
