@@ -17,6 +17,9 @@ Ask the user only for things that need them (licence sign-in, purchases, paths t
   **[vrc-get](https://github.com/vrc-get/vrc-get)** CLI. ALCOM/VCC create projects and bundle the
   community repo list; vrc-get resolves and installs packages from the shell.
 - **Python 3.10+** (kit tools) and **[uv](https://docs.astral.sh/uv/)** (`uvx` runs the MCP server).
+  Optional: `pip install fastembed` for meaning-based search in the decision database
+  (`scripts/steer.py find --like`; a ~70 MB local model downloads on first use). Without it the search
+  matches words and aliases only.
 - **Your agent host** with MCP support (see [hosts.md](hosts.md)).
 - **Blender 4.2+** for custom props (run headless by the kit). Lightmapper: **Bakery** (paid,
   [geom.io/bakery](https://geom.io/bakery/wiki/index.php?title=Manual)) if owned, else **GLIM**

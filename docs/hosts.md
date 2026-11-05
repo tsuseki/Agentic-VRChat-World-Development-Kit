@@ -18,6 +18,11 @@ through the host's extra-skills setting.
 - Personal skills: `skills.customDirectories: ["<workspace>/.omp/local/skills"]` in `~/.omp/agent/config.yml`.
 - Optional per-agent `model:`, `thinking-level:` and `tools:` front matter, per the table below.
 - MCP: `mcp.json` (user `~/.omp/agent/mcp.json` or `<workspace>/.omp/mcp.json`).
+- Extensions in `.omp/extensions/` load when omp starts in `<workspace>` (omp looks only in the start
+  folder). `world-decisions` feeds each project's user decisions (`<project>/DECISIONS.md`) to the
+  main session and appends the relevant ones to every `task` brief. Other hosts don't run it: there
+  the orchestrator follows `.omp/RULES.md` rule 12 by hand (`steer.py find --like`, quote the records
+  in each brief).
 
 ## Claude Code
 

@@ -2,6 +2,59 @@
 
 Semantic versioning, one git tag `vX.Y.Z` per release; the current version is in `VERSION`.
 
+## 0.3.0 — 2026-11-05
+
+### User decisions and picked art (new)
+
+Agents forgot picked concept art and earlier user decisions; in one world a skill default
+(pickups with gravity) silently undid the user's "fumos should not be affected by gravity".
+
+- **Decision database per project** (`<project>/STEER.jsonl`, written only through
+  `scripts/steer.py`): every user decision, pick and rejection in the user's exact words, with a
+  timestamp and labels. Labels: `affects` (world part, from `steer_parts.txt`), `aspect` (size,
+  layout, design, style, materials, lighting, behaviour, audio, script, performance, process; new
+  `templates/steer_aspects.txt`), `targets` (objects, scripts, scene paths, globs) and `aliases`.
+  The newest record on a topic, by timestamp, holds; backfilled old records never override newer ones.
+- **Picked art is kept:** `steer.py pick` copies liked images to `<project>/Design/picks/`,
+  `pick --reject` to `Design/picks/rejected/`. Only an explicit like is a pick, only an explicit
+  dislike a rejection; uncommented art is no signal.
+- **Generated digest** `DECISIONS.md` (+ `DECISIONS.json`, `STEER.md`): picked and rejected art with
+  absolute paths, the design lock, decisions in force by part.
+- **Soft search:** `steer.py find --like "<free text>"` ranks by stemmed words (BM25), meaning (optional
+  local embeddings, `pip install fastembed`) and alias/target hits (`scripts/steer_rank.py`). New
+  commands `tag` (labels and aliases on existing records) and `serve` (ranking server).
+- **Hard rule 12:** decisions beat workspace defaults, skill defaults and briefs. The orchestrator
+  holds them, records new ones on the spot and feeds the relevant ones into every subagent brief
+  under "## User decisions (binding)". New `AGENTS.md` section "User decisions and picked art".
+- **`world-decisions` omp extension** (`extensions/world-decisions/`, main session only): injects the
+  relevant decisions when a project comes up, appends ranked decisions to each `task` brief, and
+  reminds the orchestrator when a tool call names a decision's target or alias.
+- All nine agents take their decisions from the brief; for reviewers, a contradiction is a blocker.
+  Pipeline skill, review protocol, WORLD template and `bootstrap.md` / `hosts.md` updated; the
+  fumo skill's gravity-on pickup is now only a default under the project's decision.
+  `unity-world.gitignore` ignores the embedding cache `STEER.emb.npz`.
+
+### Rules
+
+- **Hard rule 10: code builds boxes only.** Every other shape comes from asset-finder, then
+  blender-modeler, then Tripo; a faceted lathe, tube or lattice built in Unity is a review blocker.
+- **Hard rule 11: test bakes are QUICK and capped at 10 minutes.** Re-bakes are allowed; only the
+  final bake the user asks for may be slow. Cancel procedure in the Bakery skill; mesh-light count is
+  the quick-bake lever.
+- **Reachability:** everything that looks walkable is reachable, with ≥ 2 connections per level pair,
+  proven by a flood-fill check.
+- Traceability (every visible element traces to a picked image), interior illumination coverage, and
+  the far-ring skybox as a one-off render source.
+
+### Skills and agents
+
+- blender-modeler: soft goods (pillows, cloth, bedding) are out of scope; face-orientation check per
+  connected part before export.
+- unity-mcp-scripting: never render through `PreviewRenderUtility` (fatal LightmapSettings modal).
+- Light Volumes lessons: crop volumes to rooms, Shadows lift 0, island bits in LV Manager bitmasks.
+- lowpoly-tree-generation: composed single-leaf atlas for plate-like leaves, hanging/ledge recipe,
+  opt-in bark fixes in `tree_family_build` (collar, stride, blunt, relax).
+
 ## 0.2.1 — 2026-11-03
 
 - The 0.2.0 notes below now cover every change since 0.1.0, not only the last push.
