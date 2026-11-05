@@ -31,33 +31,26 @@ description: "Diagnose and fix baked-lighting artifacts (red/green chroma blobs,
 
 ## Baking rules (user rules, 2026-11-05)
 
-A world under construction is at an early stage until the user says it is ready for final lighting
-(user: "we're at an VERY early stage", "we are NO WAY near the finished product"). Overnight, one
-requested "quick bake" turned into five bakes of 37–76 minutes, through a reviewer fix loop
-(user: "why do you keep baking so much what are you even changing", "bruh just stop it",
-"don't bake more than 10 min").
+Test and iteration bakes must be quick. Overnight, five draft-quality bakes of 37–76 minutes ran
+in a fix loop (user: "don't bake more than 10 min"). Re-baking is fine; the rule is about how long
+one bake takes (user: "nonono you can do rebakes I meant just do low samples so a quick test
+doesn't take 1h").
 
-1. **Bake only when the user asks.** Never bake on your own initiative, inside a fix or review
-   loop, after a change "to check it", or as a step in someone else's pass. The same goes for the
-   skybox and for Light Volume and probe bakes, apart from the reflection probes that must follow a
-   requested lightmap bake.
-2. **One bake per request.** Bake, then the reflection probes, then a handful of captures. Show the
-   user and stop. If a reviewer or your own read suggests changes, list them for the user; don't
-   re-bake.
-3. **Every bake before final lighting is QUICK, with a hard 10-minute cap on wall time:**
+1. **Every test or iteration bake is QUICK, with a hard 10-minute cap on wall time:**
    - GI samples 4, Samples Multiplier 1/8, half the draft texel density;
    - fast denoise, no AO, no SSS;
    - bounces equal to final, so brightness stays trustworthy.
 
-   Set the cap before you launch. Estimate from the light count and atlas size; if it won't fit,
-   bake fewer lightmap groups or merge emitters for the quick bake. Watch the clock, and cancel at
-   10 minutes (see "Stopping a bake"). Noise and blotches are expected.
-4. **No lighting polish early.** Lighting setup at this stage means placing fixtures and choosing
-   rough colours. Intensity tuning, calibration rounds and the final-reviewer DRAFT MOOD loop wait
-   until the user calls for final lighting. Run DRAFT MOOD earlier only when the user asks for a
-   review, and then once, without re-bakes.
-5. **The slow, clean bake** (draft or final quality, any length) runs only when the user
-   explicitly asks for the final lighting.
+   This covers mood checks, fix-loop re-bakes and reviewer rounds. Save it as the scene's default
+   preset (QUICK).
+2. **Fit the cap before you launch.** Estimate from the light count, the hidden emitters and the
+   atlas size. If it won't fit in 10 minutes, bake fewer lightmap groups (selected groups), merge
+   hidden emitters, or lower the samples further. Watch the clock and cancel at 10 minutes (see
+   "Stopping a bake"), then shrink the scope and relaunch. Log each bake's time and stage split.
+3. **Re-bakes are allowed** as often as the work needs, each one QUICK. Run reflection probes after
+   every bake. Noise and blotches are expected and are never a finding at this quality.
+4. **The slow, clean bake** (final quality, any length) runs only when the user explicitly asks for
+   the final lighting.
 
 **Stopping a bake.** Follow these steps in order, then check that the editor is back on the real
 scene:
