@@ -129,7 +129,16 @@ Rules:
 1. **Record on the spot.** When the user decides, picks, likes or rejects something, record it
    before acting on it: `steer.py add` for decisions, `steer.py pick` (or `pick --reject`) for
    images, always with `--aspect` and with `--target` whenever specific objects or scripts are
-   meant. A user decision that only lives in the chat is lost at the next compaction.
+   meant. A user decision that only lives in the chat is lost at the next compaction. The newest
+   record on a topic (by its `when` time) replaces the older ones, so keep one topic per facet
+   (`canal-width` and `canal-depth`, not one `site-water`), and when a record does replace a topic,
+   restate in `--decision` everything from the older records that still holds.
+   **Art signals** (user, 2026-11-05: "concept art I mostly dont comment but for some I say like and
+   very rarely I say dislike. So no comment could be any at least passable or completely off. So only
+   likes are clear signal"): `pick` only what the user explicitly liked (his words name or point at
+   the image, or he made or marked it himself); an uncommented image is neither liked nor rejected and
+   is never recorded or inferred as a pick. `pick --reject` only on an explicit dislike of that
+   image; criticism that asks for a change ("needs more machinery") is a decision (`add`).
 2. **Read before acting.** Before working on a project, read its `DECISIONS.md` for the parts you
    touch and open the picked images for them; search with `steer.py find --affects <part>
    --aspect <kind> --target <object|script> --text <words>`.

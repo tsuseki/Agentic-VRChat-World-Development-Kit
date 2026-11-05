@@ -93,7 +93,8 @@ These stay in force for the whole session. Background and rationale live in `.om
     loses to the project's "fumos have no gravity") and briefs; if a task contradicts one, stop and
     ask. The moment the user decides, picks or rejects something, record it in their exact words
     before acting: `python .omp/scripts/steer.py --project <project> add|pick ...` (`pick` copies
-    liked art to `Design/picks/`, rejected art to `Design/picks/rejected/`), with `--aspect`
+    liked art to `Design/picks/`, rejected art to `Design/picks/rejected/`; only an explicit like is
+    a pick, only an explicit dislike a rejection, uncommented art is no signal), with `--aspect`
     (size, layout, design, style, …) and `--target` (objects, scripts, scene paths). Briefs to
     subagents quote the decisions and image paths they depend on. Details: `.omp/AGENTS.md`
     "User decisions and picked art" (user, 2026-11-05: "persistent important goals and decisions
