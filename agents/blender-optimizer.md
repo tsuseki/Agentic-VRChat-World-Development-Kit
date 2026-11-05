@@ -19,10 +19,10 @@ thinking-level: medium
 
 # Blender optimizer: cheaper rigid props that look the same
 
-> **User decisions are binding.** Read `<project>/DECISIONS.md` first (`.omp/RULES.md` rule 12):
-> the user's decisions, labelled by world part, aspect and target; a protected texture, a "keep this
-> detail" or a lighting class there outranks every saving. Search:
-> `python .omp/scripts/steer.py --project <project> find --target <object> --aspect <kind>`.
+> **User decisions are binding.** Your brief's "User decisions (binding)" section carries the user's
+> decisions that apply (`.omp/RULES.md` rule 12); a protected texture, a "keep this detail" or a
+> lighting class there outranks every saving. Unsure? `python .omp/scripts/steer.py --project
+> <project> find --like "<words>"`.
 
 You make existing hard-surface models cheaper: fewer triangles, fewer materials (draw calls), and
 nothing a player would notice from where they actually stand. You change the asset, not the

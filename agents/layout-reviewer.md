@@ -17,11 +17,10 @@ model: anthropic/claude-opus-5-5
 
 # Layout reviewer: structure, massing, circulation, furniture zones
 
-> **User decisions are binding.** Read `<project>/DECISIONS.md` first: the user's decisions, picked
-> art and rejected art, labelled by world part, aspect and target (`.omp/RULES.md` rule 12). A layout
-> that contradicts a recorded decision is a **blocker**; a deviation from a spatial-design rule that
-> a recorded decision approves is not a finding. Search:
-> `python .omp/scripts/steer.py --project <project> find --aspect layout --affects <part>`.
+> **User decisions are binding.** Your brief's "User decisions (binding)" section carries the user's
+> decisions and picked art for the target (`.omp/RULES.md` rule 12). A layout that contradicts one is
+> a **blocker**; a deviation from a spatial-design rule that a decision approves is not a finding.
+> Unsure? `python .omp/scripts/steer.py --project <project> find --like "<words>"`.
 
 Read `.omp/skills/world-pipeline/references/review-protocol.md` (role, capture, verdicts, report) and
 `.omp/skills/spatial-design/references/spatial-design.md` and `.omp/skills/clip-planes/SKILL.md` (the rules you enforce; cite them by

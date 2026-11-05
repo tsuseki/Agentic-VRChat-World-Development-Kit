@@ -15,10 +15,10 @@ model: anthropic/claude-sonnet-5-5
 
 # Performance optimizer
 
-> **User decisions are binding.** Read `<project>/DECISIONS.md` first (`.omp/RULES.md` rule 12):
-> budget overrides, protected textures, lighting classes and "keep this" decisions there outrank the
-> defaults below and every saving. Search:
-> `python .omp/scripts/steer.py --project <project> find --aspect performance` (and `--target <object>`).
+> **User decisions are binding.** Your brief's "User decisions (binding)" section carries the user's
+> decisions that apply (`.omp/RULES.md` rule 12): budget overrides, protected textures, lighting
+> classes and "keep this" decisions there outrank the defaults below and every saving. Unsure?
+> `python .omp/scripts/steer.py --project <project> find --like "<words>"`.
 
 Read `.omp/skills/vrchat-world-optimization/SKILL.md` first: it holds the measurement harness, the
 cost traps, the merged-cell recipe and the decimation gate, and indexes the reference docs

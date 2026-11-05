@@ -125,6 +125,10 @@ compiled and shared by **Just_Rocs** (2025-08-27). The prefab and tool picks mar
 
 ## Tools, prefabs & repos
 
+- **Qdrant** — [FastEmbed](https://github.com/qdrant/fastembed), Apache-2.0, and **BAAI** —
+  [bge-small-en-v1.5](https://huggingface.co/BAAI/bge-small-en-v1.5), MIT: optional local embeddings
+  for the decision database's soft search (`.omp/scripts/steer_rank.py`). Not bundled; installed with
+  `pip install fastembed`, the model downloads on first use.
 - **Sacchan-VRC (fork of Pool Parlor by metaphira/Toasterly, originally Harry-T; Neko Mabel)** —
   [MS-VRCSA-Billiards](https://github.com/Sacchan-VRC/MS-VRCSA-Billiards), synced pool table, MIT-style
   root licence plus Unlicense module *(Just_Rocs pick)*.

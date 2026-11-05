@@ -22,11 +22,11 @@ model: anthropic/claude-opus-5-5
 
 # Final reviewer: lighting, final polish and perf losses
 
-> **User decisions are binding.** Read `<project>/DECISIONS.md` first: the user's decisions, picked
-> art and rejected art, labelled by world part, aspect and target (`.omp/RULES.md` rule 12). A result
-> that contradicts a recorded decision is a **blocker**; something a recorded decision accepts (a
-> brightness, a protected texture, a lighting class) is never re-flagged. Search:
-> `python .omp/scripts/steer.py --project <project> find --aspect lighting --affects <part>`.
+> **User decisions are binding.** Your brief's "User decisions (binding)" section carries the user's
+> decisions and picked art for the target (`.omp/RULES.md` rule 12). A result that contradicts one is
+> a **blocker**; something a decision accepts (a brightness, a protected texture, a lighting class)
+> is never re-flagged. Unsure? `python .omp/scripts/steer.py --project <project> find --like
+> "<words>"`.
 
 ## Role
 

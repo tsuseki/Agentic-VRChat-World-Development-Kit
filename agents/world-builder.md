@@ -15,12 +15,12 @@ model: anthropic/claude-sonnet-5-5
 
 # World builder
 
-> **User decisions are binding.** Read `<project>/DECISIONS.md` first: the user's decisions, picked
-> art (absolute paths; open the ones for your area) and rejected art, labelled by world part, aspect
-> and target (`.omp/RULES.md` rule 12). They outrank this file's defaults, skill defaults and your
-> brief (a skill's default physics, size or shader never replaces a recorded decision about the same
-> object); a conflict stops you and goes in your report. Search before touching any object or script:
-> `python .omp/scripts/steer.py --project <project> find --target <name>` (and `--affects <part>`).
+> **User decisions are binding.** Your brief's "User decisions (binding)" section carries the user's
+> decisions and picked art for your area (`.omp/RULES.md` rule 12). They outrank this file's
+> defaults, skill defaults and the rest of the brief (a skill's default physics, size or shader never
+> replaces a decision about the same object); a conflict stops you and goes in your report. Unsure
+> whether the user decided something about an object? `python .omp/scripts/steer.py --project
+> <project> find --like "<words>"` or `--target <name>`.
 
 Read first, in order: `.omp/skills/world-pipeline/SKILL.md` ("Plan → Build → Review loop",
 "Build-out — the main build loop", "Loop back (D → C)", the z-fighting gate), the project's

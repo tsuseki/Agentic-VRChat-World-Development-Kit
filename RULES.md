@@ -84,18 +84,22 @@ These stay in force for the whole session. Background and rationale live in `.om
     procedure: `bakery-light-baking` "Baking rules" (user, 2026-11-05: "don't bake more than 10
     min", "you can do rebakes I meant just do low samples so a quick test doesn't take 1h").
 
-12. **The user's decisions and picked art are binding: read them, record them, never override them.**
+12. **The user's decisions and picked art are binding: record them, feed them, never override them.**
     Each project keeps a decision database, `<project>/STEER.jsonl`, and its generated digest
-    `<project>/DECISIONS.md` (what holds now: picked art with absolute paths, rejected art, the
-    design lock, every decision labelled by world part, aspect and target). Before working on a
-    project, read `DECISIONS.md` for the parts you touch and open the picked images for them. A
-    recorded decision beats workspace defaults, skill defaults (a skill's "pickups get gravity"
-    loses to the project's "fumos have no gravity") and briefs; if a task contradicts one, stop and
-    ask. The moment the user decides, picks or rejects something, record it in their exact words
-    before acting: `python .omp/scripts/steer.py --project <project> add|pick ...` (`pick` copies
-    liked art to `Design/picks/`, rejected art to `Design/picks/rejected/`; only an explicit like is
-    a pick, only an explicit dislike a rejection, uncommented art is no signal), with `--aspect`
-    (size, layout, design, style, …) and `--target` (objects, scripts, scene paths). Briefs to
-    subagents quote the decisions and image paths they depend on. Details: `.omp/AGENTS.md`
-    "User decisions and picked art" (user, 2026-11-05: "persistent important goals and decisions
-    like the concept art and all the kind of user made decisions").
+    `<project>/DECISIONS.md` (picked art with absolute paths, rejected art, the design lock, every
+    decision labelled by world part, aspect, target and aliases). A recorded decision beats
+    workspace defaults, skill defaults (a skill's "pickups get gravity" loses to the project's
+    "fumos have no gravity") and briefs; a task that contradicts one stops for the user.
+    - **Orchestrator** (the main session): knows the decisions, checks them before deciding or
+      asking, and records every new one in the user's exact words before acting:
+      `python .omp/scripts/steer.py --project <project> add|pick ...` (`pick` copies liked art to
+      `Design/picks/`, `pick --reject` disliked art to `Design/picks/rejected/`; only an explicit
+      like is a pick, only an explicit dislike a rejection, uncommented art is no signal). Every
+      subagent brief carries the decisions and picked image paths the task depends on, under
+      "## User decisions (binding)".
+    - **Subagent:** follow the "User decisions (binding)" section of your brief; when unsure
+      whether the user decided something, `steer.py --project <project> find --like "<words>"`.
+    Details: `.omp/AGENTS.md` "User decisions and picked art" (user, 2026-11-05: "persistent
+    important goals and decisions like the concept art and all the kind of user made decisions";
+    "the only agent that needs to know all decisions is the orchestrator and he needs to basically
+    feed all the relevant decisions to the sub-agents").

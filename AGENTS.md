@@ -116,8 +116,9 @@ silently undid the user's "fumos should not be affected by gravity". Every proje
   `--help` for every command). Labels per record: `affects` (WHERE: world parts and areas from the
   project's `steer_parts.txt`, created from the template on first use), `aspect` (WHAT KIND: size,
   layout, design, style, materials, lighting, behaviour, audio, script, performance, process) and
-  `targets` (the concrete objects, scene paths, scripts and assets it governs; globs such as `Fumo_*`).
-  The latest record on a topic holds.
+  `targets` (the concrete objects, scene paths, scripts and assets it governs; globs such as `Fumo_*`),
+  plus `aliases` (other words for the subject: plushie, plush, gravity, fall for the fumo physics
+  record). The newest record on a topic holds.
 - `<project>/Design/picks/`: every image the user liked, copied there by `steer.py pick` (rejected
   art goes to `Design/picks/rejected/`), so a pick never gets lost in a generation folder.
 - Generated on every write, never edited: `DECISIONS.md` (the digest: picked art with absolute
@@ -128,8 +129,9 @@ Rules:
 
 1. **Record on the spot.** When the user decides, picks, likes or rejects something, record it
    before acting on it: `steer.py add` for decisions, `steer.py pick` (or `pick --reject`) for
-   images, always with `--aspect` and with `--target` whenever specific objects or scripts are
-   meant. A user decision that only lives in the chat is lost at the next compaction. The newest
+   images, always with `--aspect`, with `--target` whenever specific objects or scripts are meant,
+   and with `--alias` for the words people will use when the subject comes up again.
+   A user decision that only lives in the chat is lost at the next compaction. The newest
    record on a topic (by its `when` time) replaces the older ones, so keep one topic per facet
    (`canal-width` and `canal-depth`, not one `site-water`), and when a record does replace a topic,
    restate in `--decision` everything from the older records that still holds.
@@ -139,20 +141,31 @@ Rules:
    the image, or he made or marked it himself); an uncommented image is neither liked nor rejected and
    is never recorded or inferred as a pick. `pick --reject` only on an explicit dislike of that
    image; criticism that asks for a change ("needs more machinery") is a decision (`add`).
-2. **Read before acting.** Before working on a project, read its `DECISIONS.md` for the parts you
-   touch and open the picked images for them; search with `steer.py find --affects <part>
-   --aspect <kind> --target <object|script> --text <words>`.
+2. **The orchestrator holds the decisions; subagents get theirs in the brief** (user, 2026-11-05:
+   "the only agent that needs to know all decisions is the orchestrator and he needs to basically
+   feed all the relevant decisions to the sub-agents"). Before deciding, building or asking the user
+   anything, the orchestrator checks the decisions (a question already answered is not asked
+   again). Every subagent brief carries the decisions and picked image paths its task depends on,
+   under "## User decisions (binding)". Subagents follow that section and may search when unsure;
+   they never need the whole digest.
 3. **Decisions beat defaults.** A recorded decision outranks workspace defaults, skill defaults and
    briefs. A task that would contradict one stops for the user.
-4. **Briefs carry them.** Every subagent brief quotes the decisions and picked image paths it
-   depends on (subagents do not get this file; they get `.omp/RULES.md` rule 12).
+4. **Search softly.** `steer.py find --like "<free text>"` ranks records by shared words (stemmed),
+   meaning (a small local embedding model, `pip install fastembed`; lexical-only without it) and
+   alias or target hits; exact filters: `--affects <part> --aspect <kind> --target <name>
+   --text <words>`.
 
-The `world-decisions` omp extension (`.omp/extensions/world-decisions/`, loads when omp starts in
-the workspace root) enforces this mechanically in the main session and every subagent: the first
-time a session touches a project (its name in the prompt, a path, a Unity instance name) it injects
-the digest, it injects new records as they are added, and a tool call that names a record's
-`targets` gets that record as a reminder. `WORLD.md` keeps the pipeline state and the reasoning
-behind agent picks; the user's own words live in the database.
+The `world-decisions` omp extension (`.omp/extensions/world-decisions/`, loads when omp starts in the
+workspace root) does the feeding mechanically, in the main session only:
+- the first time the session touches a project (its name in a prompt, a path, a Unity instance
+  name): the rules, the picked and rejected art, and the decisions most relevant to the request;
+- each later prompt: the relevant decisions not shown recently; new records as they are added;
+- each `task` call: the decisions relevant to each brief are appended to it, and the orchestrator is
+  told which ones went where (it adds any the ranking missed);
+- a tool call that names a record's `targets` or `aliases`: that record as a reminder.
+Ranking runs in one `steer.py serve` process per omp session (model loaded once; record embeddings
+cached in `<project>/STEER.emb.npz`). `WORLD.md` keeps the pipeline state and the reasoning behind
+agent picks; the user's own words live in the database.
 
 **Scale: people are 1.4 m tall (eye 1.3 m) in all worlds; everything is ×0.8 of real-world size.** Use a
 1.4 m person for every scale figure, review camera, capture, fit test and brief. Shell, built-ins, loose

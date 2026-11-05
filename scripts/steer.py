@@ -20,6 +20,8 @@ Record fields
               lighting, behaviour, audio, script, performance, process)
   targets     the concrete things it governs: object names, scene paths, scripts, assets; globs ok
               (Fumo_*, FumoScream.cs, WORLD/ROOMS/GYM/). Mentioning one in a tool call triggers a reminder.
+  aliases     other words people use for the subject (plushie, plush, doll for fumos); soft search,
+              prompt ranking and tool-call reminders match them as whole words
   topic       stable kebab-case key for the subject; the latest record on a topic holds
   said        the user's exact words, verbatim
   images      image paths the user picked or pointed at (project-relative)
@@ -31,15 +33,17 @@ Record fields
 
 Commands
   add      --affects a,b --aspect x,y --topic t --said "..." [--said "..."] --decision "..."
-           [--target T ...] [--stage] [--image p] [--status] [--when] [--ref] [--supersedes S-0012,S-0020]
+           [--target T ...] [--alias word ...] [--stage] [--image p] [--status] [--when] [--ref] [--supersedes S-0012,S-0020]
   pick     --image p [--image p] --affects a --aspect style --topic t --said "..." --decision "..."
            [--reject] [--feel "..."] [--target T ...] ...   copies the art into Design/picks/ and records it
-  tag      ID [--aspect x,y] [--affects a,b] [--target T ...]   labels an existing record (appends an update)
+  tag      ID [--aspect x,y] [--affects a,b] [--target T ...] [--alias word ...]   labels a record (appends an update)
   status   ID --status s [--ref r]                              appends a status update (never edits)
   find     [--affects a] [--aspect x] [--target name] [--topic t] [--text words] [--image substr] [--since D] [--all]
+           [--like "free text" [--limit N]]   soft match: ranks by words, meaning, aliases (steer_rank.py)
   current  [--affects a] [--aspect x] [--target name]           what holds now
   topics                                                        topic -> latest id, count
   render                                                        rewrites STEER.md, DECISIONS.md, DECISIONS.json
+  serve                                                         ranking server for the world-decisions extension
 Run from the project folder or pass --project.
 """
 import argparse, datetime, fnmatch, json, pathlib, shutil, sys
@@ -86,7 +90,7 @@ def merged(recs):
     for r in recs:
         if r.get("kind") == "update" and r.get("target") in by:
             t = by[r["target"]]
-            for k in ("status", "aspect", "affects", "targets"):
+            for k in ("status", "aspect", "affects", "targets", "aliases"):
                 if k in r:
                     t[k] = r[k]
             t["refs"] = t.get("refs", []) + r.get("refs", [])
@@ -128,6 +132,8 @@ def line(r, now=True):
     imgs = f" · images: {', '.join(r['images'])}" if r.get("images") else ""
     pick = f" · **{r['pick']} art**" if r.get("pick") else ""
     tg = f"\n  - targets: {', '.join(f'`{t}`' for t in r['targets'])}" if r.get("targets") else ""
+    if r.get("aliases"):
+        tg += f"\n  - aliases: {', '.join(r['aliases'])}"
     said = " / ".join(f"“{s}”" for s in r["said"])
     tag = "" if now else " ~~(superseded)~~"
     return (f"- **{r['id']}** {r['when']} · `{r['topic']}` · {labels(r)}{pick}{tag}"
@@ -157,7 +163,7 @@ def new_record(args, recs, pf, rid, images, extra):
     prev = [r["id"] for r in merged(recs)
             if r["topic"] == args.topic and when_key(r) <= when.replace("~", "")] + extra_sup
     rec = {"kind": "steer", "id": rid, "when": when, "stage": args.stage,
-           "affects": aff, "aspect": asp, "targets": args.target, "topic": args.topic, "said": args.said,
+           "affects": aff, "aspect": asp, "targets": args.target, "aliases": args.alias, "topic": args.topic, "said": args.said,
            "images": images, "decision": args.decision, "status": args.status, "supersedes": prev, "refs": args.ref}
     rec.update(extra)
     return rec
@@ -190,6 +196,7 @@ def main():
         p.add_argument("--affects", required=True); p.add_argument("--aspect", required=True)
         p.add_argument("--topic", required=True); p.add_argument("--said", action="append", required=True)
         p.add_argument("--decision", required=True); p.add_argument("--target", action="append", default=[])
+        p.add_argument("--alias", action="append", default=[], help="another word for the subject (repeatable)")
         p.add_argument("--stage", default=""); p.add_argument("--image", action="append", default=[])
         p.add_argument("--status", default="pending"); p.add_argument("--when")
         p.add_argument("--ref", action="append", default=[])
@@ -203,14 +210,16 @@ def main():
     pk.add_argument("--reject", action="store_true", help="the user rejected this art: never build like it")
     pk.add_argument("--feel", default="", help="what to take from the image (or avoid, for --reject)")
     t = sp.add_parser("tag"); t.add_argument("id"); t.add_argument("--aspect"); t.add_argument("--affects")
-    t.add_argument("--target", action="append")
+    t.add_argument("--target", action="append"); t.add_argument("--alias", action="append")
     s = sp.add_parser("status"); s.add_argument("id"); s.add_argument("--status", required=True)
     s.add_argument("--ref", action="append", default=[])
     f = sp.add_parser("find"); filter_args(f)
     f.add_argument("--topic"); f.add_argument("--text"); f.add_argument("--image"); f.add_argument("--since")
     f.add_argument("--all", action="store_true", help="include superseded records")
+    f.add_argument("--like", help="soft match: rank by words, meaning and aliases")
+    f.add_argument("--limit", type=int, default=10)
     filter_args(sp.add_parser("current"))
-    sp.add_parser("topics"); sp.add_parser("render")
+    sp.add_parser("topics"); sp.add_parser("render"); sp.add_parser("serve")
     args = ap.parse_args()
 
     root = pathlib.Path(args.project).resolve()
@@ -245,12 +254,22 @@ def main():
                 check(up["affects"], parts_of(pf), "world part(s)", pf.name)
             if args.target is not None:
                 up["targets"] = args.target
+            if args.alias is not None:
+                up["aliases"] = args.alias
             if len(up) == 3:
-                sys.exit("tag needs --aspect, --affects or --target")
+                sys.exit("tag needs --aspect, --affects, --target or --alias")
         append(jf, up)
         render(merged(load(jf)), root)
         return
 
+    if args.cmd == "serve":
+        import steer_rank
+        def current_of(proj):
+            rs = merged(load(pathlib.Path(proj) / "STEER.jsonl"))
+            ids, _ = holds(rs)
+            return [r for r in rs if id(r) in ids]
+        steer_rank.serve(current_of)
+        return
     recs = merged(recs)
     now_ids, latest = holds(recs)
     if args.cmd == "render":
@@ -273,6 +292,11 @@ def main():
     if args.affects: sel = [r for r in sel if args.affects in r["affects"]]
     if args.aspect: sel = [r for r in sel if args.aspect in r.get("aspect", [])]
     if args.target: sel = [r for r in sel if hits_target(r, args.target)]
+    if args.cmd == "find" and args.like:
+        import steer_rank
+        for score, r in steer_rank.Index(root / "STEER.emb.npz").load(sel).rank(args.like, args.limit):
+            print(f"[{score:.2f}] " + line(r, id(r) in now_ids))
+        return
     for r in sel:
         print(line(r, id(r) in now_ids))
 
@@ -315,6 +339,8 @@ def render_decisions(cur, root):
         bits = []
         if r.get("targets"):
             bits.append("targets: " + ", ".join(f"`{t}`" for t in r["targets"]))
+        if r.get("aliases"):
+            bits.append("aliases: " + ", ".join(r["aliases"]))
         if r.get("status") in OPEN:
             bits.append(f"_{r['status']}_")
         return (" · " + " · ".join(bits)) if bits else ""
@@ -364,7 +390,8 @@ def render_decisions(cur, root):
     (root / "DECISIONS.md").write_text("\n".join(out), encoding="utf-8")
     machine = {"project": root.name, "generated": stamp(), "records": [
         {"id": r["id"], "when": r["when"], "topic": r["topic"], "affects": r["affects"], "aspect": r.get("aspect", []),
-         "targets": r.get("targets", []), "pick": r.get("pick", ""), "decision": r["decision"], "said": said(r, 240),
+         "targets": r.get("targets", []), "aliases": r.get("aliases", []), "pick": r.get("pick", ""),
+         "decision": r["decision"], "said": said(r, 240),
          "images": [ab(i) for i in r.get("images", [])], "status": r.get("status", "")} for r in cur]}
     (root / "DECISIONS.json").write_text(json.dumps(machine, ensure_ascii=False, indent=1), encoding="utf-8")
 
