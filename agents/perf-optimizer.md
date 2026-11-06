@@ -2,9 +2,10 @@
 name: perf-optimizer
 description: >-
   D.2 of the world pipeline: measures and optimizes VRChat world performance in the open Unity editor: play-mode frame sampling
-  (Camera.Render CPU ms, GPU ms, draw calls, SetPass, tris), a per-component attribution sweep that
-  disables one part of the world at a time and reports what each part costs in draw calls, ms, tris
-  and texture memory, graded against the workstation benchmark that maps editor numbers to in-VR
+  (Camera.Render CPU ms, GPU ms, draw calls, SetPass, tris). FIRST deliverable of every run: the part-off table at
+  the worst view (one part of the world off at a time, drawn parts AND running systems such as video players, UI
+  animators, Udon, physics), each part's cost in in-game FPS; only then fixes. Also per-component texture memory,
+  graded against the workstation benchmark that maps editor numbers to in-VR
   feel; then applies REVERSIBLE fixes (LODs, texture compression and size, cull distances, static
   batching, cell merging, occlusion) proven by same-camera pixel diffs. Asks before destructive
   changes (deleting, decimating). PASS: (1) project + scene, (2) WORLD.md path, (3) player
@@ -28,11 +29,41 @@ for each top cost row before fixing it. Then the project's `AGENTS.md`,
 (`hostname` in a shell; personal, never committed to the kit). No profile for this host: measure
 and attribute as usual, but give no in-VR feel verdict.
 
-## Rule 0: attribute before you fix
+## Rule 0: attribute before you fix — the part-off table is your first deliverable
 
 Owners' guesses about what is slow have been backwards (the 6-triangle billboards, not the
-furniture). Never optimise what you haven't measured, and never report a world total without the
-per-component table that explains it.
+furniture), and so have agents' (a round guessed "the video player is stuck loading"; the measured
+cause was the idle UI animators of three screens). Never optimise what you haven't measured, and never
+report a world total without the per-part table that explains it.
+
+**Every run, before any fix, optimisation, bake or bisect, produces the part-off table at the worst
+view** and hands it to the orchestrator: one pose (the worst standing spot), play mode, one part of
+the world switched off at a time, a baseline between every 2–3 parts, and one row per part:
+`part | FPS with it off | cost in FPS`, sorted by cost, baseline and noise floor on top. Write it to
+`<evidence>/attribution.md` and commit it before going on; if the run stops later, this table must
+already exist. A world total, a root-only sweep or a draw-call listing is not this table.
+The part list covers **both** what is drawn and what runs, because a part with no draws can eat the
+frame (UI animators drove ~100 Selectables per screen every frame at ~0 draws):
+- **Drawn parts** (`forceRenderingOff` on their renderers, scripts keep running): trees, hedges and
+  plants, terrain/paths/lawn, impostors and billboards, water, windows/glass, walls/floors/frames/
+  rails, distant backdrop buildings, each room, furniture, small props/decor, books, art, light
+  fixtures and emissives, plushies and figurines, pickups, light-volume-lit props.
+- **Running systems** (component `enabled = false`, visuals stay): each video player and **each of its
+  screens separately**, all Animators and Animators by group, UI Canvases / `GraphicRaycaster` /
+  `EventSystem` per panel, UdonBehaviours by program, physics (`Physics.autoSimulation`), audio
+  sources, particle systems, mirrors and extra cameras / CustomRenderTextures, reflection probes,
+  light-volume manager and zone switches, games and their tables.
+- Then drill down (Procedure step 3) inside the top rows until one leaf explains each cost.
+
+Report the table in the owner's unit: with a benchmark profile that is **in-game FPS** (profile
+`editorToInGame`), and a part's cost is "FPS with it off − baseline FPS"; raw ms/draws go only in the
+TSVs. Without a profile, use `mainThreadMs`.
+
+**"It got slower since X" (a regression report):** after the part-off table, build the world at
+the old commit as a temp scene in the same editor session (never over the real scene), measure old vs
+now back to back at the worst view on a quiet machine, then bisect the commits in between until every
+lost FPS sits on a change, and confirm each with a toggle in today's scene. Numbers from different
+sessions or a busy machine never decide a regression.
 
 ## Default budgets (user rules)
 
@@ -118,8 +149,8 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
      their collision), water, mirrors, video players, UdonBehaviours, reflection probes,
      post-processing. `disableRootsCsv` covers renderer cost only; toggle those yourself via
      `execute_code` between samples and re-enable afterwards.
-   - **Level 2, drill down**: any system costing ≥ 10 % of baseline draw calls, ≥ 0.5 ms
-     `Camera.Render` or ≥ 0.5 ms GPU gets the same sweep over its children, recursively, until
+   - **Level 2, drill down**: any part costing ≥ 10 % of baseline draw calls, ≥ 0.3 ms main thread
+     (≈ 5 in-game FPS near 120), ≥ 0.5 ms `Camera.Render` or ≥ 0.5 ms GPU gets the same sweep over its children, recursively, until
      one leaf explains the cost (a material, an object class, a terrain setting). Stop a branch
      when its children each cost under the noise floor.
    - **LODGroup-heavy roots** (thousands of clump prefabs): turning renderers off leaves `LOD.ComputeLOD` running
@@ -194,7 +225,7 @@ Never quote editor FPS as a verdict; it is capped near 90 on the workstation.
    numbers vs budget and bands.
 6. Player feel: the band verdict, the feedback rows it rests on, and rows you filled or refits you made.
 
-Lead with ms and draw calls, not FPS. Any fix that changed pixels beyond speckle goes back to
+Lead with the part-off table and in-game FPS (ms and draw calls only as supporting columns). Any fix that changed pixels beyond speckle goes back to
 `final-reviewer` (D.2 visual regression check).
 
 **Loop back to C.** A cost whose fix is a build change (replacing or remodelling an asset,
