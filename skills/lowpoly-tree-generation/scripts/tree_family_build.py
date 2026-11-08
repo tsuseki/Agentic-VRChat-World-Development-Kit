@@ -170,6 +170,16 @@
 #       so its face turns toward the outward normal of that ellipsoid at the card root (k = share of the normal vs
 #       the drawn roll): a dense mound seen from outside shows card faces, not edge-on streaks (SeaGrape review
 #       2026-10-30). Applied after roll_tilt. No extra random draws: off = identical builds.
+#   crown hang_side=dict(side=1, jitter=20, out=True) (sprig, opt-in; side-view hanging-shoot atlases, Norway spruce /
+#       larch 2026-11-08): the atlas cells are a limb segment seen from the side, the limb running from the attach point
+#       up the cell (along the card axis d) and its shoots hanging off one cell side (`side` +1 = the cell's +u / right
+#       edge, -1 = its left edge). Each card is rolled about d so that side faces world down (roll = UP x d), then turned
+#       by +-`jitter` deg about d (own random sequence 6131), so the shoots hang toward the ground and lean toward the
+#       limb tip. out=True: a card whose heading points back at the trunk (fill cards leaning inward) has its radial
+#       part mirrored outward first, so no painted limb or shoot points at the trunk. Applied to every sprig card
+#       (tip, main, fill, low) after face_out and overrides surface / roll_tilt / face_out rolls; U-mirror is off for
+#       these cards (it would turn the hanging side up) and floor_base keeps the roll. Card direction otherwise comes
+#       from tilt / upbias / max_rise / max_fall as before. No draws when unset: off = identical builds.
 #   crown fill up=0.6, minz=<crown minz>, t=(0.35, 0.97) (opt-in): the fill cards' up lean (d*0.4 + to_axis*inward +
 #       UP*up; < 0 leans them down over the limbs), the lowest fill root and the arc-fraction range along each limb (a
 #       wide fork's bare limb roots: BanyanGrove t 0.15). Defaults = the old fixed values: off = identical builds.
@@ -1641,6 +1651,8 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     cards = []  # every placed card (counts drive the loops below); dropped subset cards have first = None
     krng = random.Random(7919)  # own sequence: the subset choice never shifts the placement draws
     trng = random.Random(6007)  # own sequence for roll_tilt: card positions/directions stay those of the plain build
+    HS = C.get("hang_side") if C["mode"] == "sprig" else None  # opt-in: side-view hanging-shoot cells (see header)
+    hrng = random.Random(6131) if HS else None  # own sequence for hang_side jitter (no draws when unset)
     srng = random.Random(5381)  # own sequence for size_jitter
     CHAIN_UP = {id(x.cont): x for x in branches if getattr(x, "cont", None) is not None}  # floor_base: merged chain heads
     FBN = [0]  # floor_base: cards levelled
@@ -1716,6 +1728,18 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
                 w = roll if roll.dot(g) >= 0.0 else -roll  # the card is two-sided: start from the face nearer the normal
                 t = w.lerp(g.normalized(), FO.get("k", 0.8))
                 if (t - d * t.dot(d)).length > 1e-3: roll = t.normalized()
+        if HS and not hang:  # opt-in hang_side: the cell's hanging side faces world down, shoots lean toward the limb tip
+            if HS.get("out", True):  # a heading back toward the trunk is mirrored outward (radial part flipped)
+                rr = Vector((A.x, A.y, 0.0))
+                if rr.length > 1e-3:
+                    rr.normalize(); k = d.x * rr.x + d.y * rr.y
+                    if k < 0.0: d = (d - rr * (2.0 * k)).normalized()
+            nh = UP.cross(d)  # roll = UP x d: side = n x d = -(UP perpendicular to d), i.e. +u hangs down
+            if nh.length > 1e-3:
+                nh.normalize()
+                if HS.get("side", 1) < 0: nh = -nh
+                a = math.radians(hrng.uniform(-1.0, 1.0) * HS.get("jitter", 20.0))
+                roll = (nh * math.cos(a) + d.cross(nh) * math.sin(a)).normalized()
         FB = None
         if C.get("floor_base") and C["mode"] == "sprig" and not hang:
             # opt-in floor_base: no card hangs below the base of its limb (where its merged chain leaves its parent)
@@ -1727,7 +1751,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             lo = min(sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True), key=lambda x: x.z)
             if lo.z < h.pts[0].z and math.hypot(lo.x, lo.y) < math.hypot(A.x, A.y):
                 if d.z < 0.0 and Vector((d.x, d.y, 0.0)).length > 1e-6: d = Vector((d.x, d.y, 0.0)).normalized()
-                roll = (UP - d * UP.dot(d)).normalized() if (UP - d * UP.dot(d)).length > 1e-3 else roll
+                roll = (UP - d * UP.dot(d)).normalized() if (UP - d * UP.dot(d)).length > 1e-3 and not HS else roll
                 FB = min(h.pts[0].z, A.z - 0.01); FBN[0] += 1
         def fits(cl, s, m=False):  # the card's real surface must stay out of keep-out volumes and above `ground` (shrunk)
             if exact and CFG.get("clear"):  # the real card surface (its back overhang and corners too) must stay out of the volumes
@@ -1753,7 +1777,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         if roles is not None or C.get("mirror"):
             # crown roles: the cell of the card's role (own per-card sequence, no shared draws), `scale` = its card length
             # multiplier; crown mirror: half the cards U-mirrored. Each falls back (unmirrored, then drawn cell) if it won't fit.
-            M = (True, False) if C.get("mirror") and random.Random(7963 + idx).random() < 0.5 else (False,)
+            M = (True, False) if C.get("mirror") and not HS and random.Random(7963 + idx).random() < 0.5 else (False,)
             cands = [(cell, sz)]
             if roles is not None:
                 r = roles[idx]
