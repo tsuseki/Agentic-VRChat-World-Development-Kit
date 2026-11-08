@@ -58,8 +58,12 @@ picked image open and named in the brief.
   the same camera.
 - Prefer regenerable builds: layout as data (room polygons / lists) fed to an editor builder
   script, and hand dressing in separate roots outside generated ones.
-- **Boxes only from code** (`.omp/RULES.md` rule 10). Generators and editor builders make only
-  boxes (slabs, decks, walls, plinths, beams, treads). Every other shape is an imported prefab:
+- **Boxes only from code; shells from Blender** (`.omp/RULES.md` rule 10). Generators and editor
+  builders make only boxes (plinths, beams, treads, small trims, colliders, greybox massing).
+  Building shells (walls, floors, ceilings, roofs, soffits, slabs, reveals) are never assembled from
+  Unity blocks: export the approved greybox/shell data and have `blender-modeler` build merged,
+  welded shell meshes, then install them (user, 2026-11-08: overlapping blocks gave "weird
+  shadows"). Every other shape is an imported prefab:
   `asset-finder` first, then `blender-modeler` for simple geometric pieces, then Tripo
   (`image-to-3d`) for organic or irregular ones, each matched to the picked concept sheet. Never
   build a cylinder, pipe, dome, truss, gate or machine out of code-generated or primitive meshes,

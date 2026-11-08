@@ -169,6 +169,34 @@ When the user or WORLD.md supplies a reference image for the asset:
 4. Stop self-iterating after 3 passes and hand over with the remaining gaps stated honestly; the
    stage reviewer's loop then runs until SHIP IT as usual.
 
+## Building shells (always yours, never Unity blocks)
+
+User, 2026-11-08: "private rooms need to be made in blender with merged meshes not overlapping
+blocks cause then we get this weird shadows ... making shell is always in blender no placing unity
+blocks to form walls". Every building shell (walls, floors, ceilings, roofs, soffits, slabs, window
+and door reveals, sills, stair voids) is modelled here and imported; Unity only keeps greybox
+massing, colliders and small box trims (`.omp/RULES.md` rule 10).
+
+- **Input:** the approved greybox/shell data (JSON of boxes with world transforms, an OBJ/FBX of
+  the current shell renderers, plan/elevation captures, opening list). Match its volumes, heights
+  and openings exactly; the world's furniture and fixtures already sit against them.
+- **One merged, welded mesh per floor or room cluster:** boolean-union or rebuild the boxes as one
+  surface, delete every hidden/coplanar interior face, weld (merge by distance ~1 mm), no
+  overlapping or z-fighting faces, no T-junction slivers, no gaps where walls meet glazing, sills
+  or ceilings (light leaks and see-through slots are blockers). Walls get real thickness; outer
+  faces only where visible.
+- **Normals and shading:** flat walls flat-shaded or with sharp edges marked at every 90° corner;
+  consistent outward normals (check face orientation).
+- **Materials by submesh,** one slot per surface material (plaster, ceiling, floor, tile, stone);
+  report the slot → material order (a reordered slot list has blackened a whole floor before).
+- **UV0** in world-scale metres for tiling materials; **UV2** a clean non-overlapping lightmap unwrap
+  with Manual margin sized for the atlas (large planar charts, few seams on ceilings, no stretched
+  strips), so the bake has no blotches.
+- **Frames where glass meets the shell:** every glazing edge touching a wall, ceiling or floor gets a
+  jamb/head/sill frame (user, 2026-11-08).
+- **Export** in world space with the pivot the brief names, so the import replaces the old renderers
+  in place; hand back the list of old renderer paths it replaces.
+
 ## Modeling discipline
 
 - **Work in meters; target = real size ×k.** Blender's default unit = 1 m, VRChat

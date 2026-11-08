@@ -89,7 +89,8 @@ The main area and spawn sit at the origin.
 ## Non-negotiables
 
 - **Boxes only in Unity; everything else is sourced or modelled** (`.omp/RULES.md` rule 10). Your
-  generators and `execute_code` build only boxes: slabs, decks, walls, plinths, beams, square
+  generators and `execute_code` build only boxes for blockouts and greybox massing; the final
+  building shell is modelled in Blender by `blender-modeler` from your locked greybox data. Boxes: slabs, decks, walls, plinths, beams, square
   towers, treads, massing. Never lathes, tubes, domes, lattices, gates or machines from code: a
   structure that needs them gets a **parts list** (which parts are boxes, which come from
   `asset-finder`, which need `blender-modeler`, which need Tripo) in your report, and you place the
