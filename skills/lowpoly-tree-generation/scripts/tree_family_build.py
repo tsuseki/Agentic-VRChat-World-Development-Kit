@@ -162,6 +162,21 @@
 #   crown size_jitter=(lo, hi) (sprig, opt-in): every card's size x lo..hi on top of the drawn 0.85-1.15 (own random
 #       sequence): the painted leaf spacing and size differ from card to card (SeaGrape "coin necklace" review,
 #       2026-10-31). Off = identical builds.
+#   crown roles rin=<r> (opt-in): a card turns out (sparse shoot/sprig cell) only when its root lies at or beyond r in the
+#       crown-ellipsoid units of card_roles (0.75: roots in the inner quarter keep full cells). Off = identical builds.
+#   crown unstack=dict(deg=6, mm=8, stack_deg=15, stack_off=0.1, stack_rad=0.5, stack_max=0.6, tilt=(lo, hi), rounds=2,
+#       seed=0) (sprig, opt-in; JapaneseMaple fix round 2026-11-10, review jpmaple_family_1105 #2-#4, #6, #8): a roll pass on
+#       the FINAL cards (after snap_cards_to_bark, so the real LOD1 geometry, sizes, mirror and snap moves count). Each
+#       card may only be rolled about its own axis through its atlas attach point (the painted twig stays on the branch;
+#       centre, heading, size, cell and card count never change), to a roll inside `tilt` (default: the crown roll_tilt,
+#       else 10-90 deg; both signs). (1) Coincident cards: a card whose plane is within `deg` deg of another card's plane
+#       (|n1.n2| >= cos deg) while their surfaces come within `mm` mm over the overlap (11x11 samples of each card against
+#       the other's plane and quad) z-fights from some distance; it is re-rolled to the candidate with no such pair (nearest
+#       roll first; the least-bad candidate if none is clean, STAT prints the count left). (2) Parallel stacks: a card with
+#       `stack_max` m2 or more of other cards within `stack_rad` m whose plane is within `stack_deg` deg and `stack_off` m
+#       (the reviewer's stack measure: a plate when large, edge-on streaks seen along it) takes the candidate roll that
+#       lowers that sum most (accepted when it lowers it below 70 %), `rounds` sweeps, worst first. Deterministic (no random
+#       draws). Prints STAT <name> unstack coincident N rolled N left N stack_over N rolled N p90 a -> b. Off = identical builds.
 #   crown max_rise=<deg> (sprig, opt-in; weeping mounds): a card whose axis rises more than max_rise deg above
 #       horizontal is lowered to max_rise, keeping its heading (0: every card tip-out or tip-down, the willow rule).
 #       Applied after `flat`, before surface/roll_tilt. No extra random draws: off = identical builds.
@@ -254,6 +269,10 @@
 #       using the parent's actual meshed ring (lobe, 4/3 sides, taper, merge, declip): no light wedge of cone faces on the
 #       trunk's far side (BoothAssets olives 2026-10-23). Prints `STAT <name> base cones clamped N` only when it moves
 #       something, so trees that never poked stay geometry-identical (the Lightmap UV is re-laid from the UVMap charts).
+#   base_target_mm=<mm> (opt-in, shipped-scale mm; default 1.0): the depth the base-cone clamp pulls a child's ring and apex
+#       inside the host tube. A cone triangle left 1 mm under a flat 4-sided host face lies within the z-fight tolerance
+#       of it (JapaneseMapleWide limb-root socket, review jpmaple_family_1105 #3: 0.3 deg, 7-61 cm2 fight area); 2.5
+#       keeps it below the 2 mm kit offset rule. Off = identical builds.
 #   base_fix=True (default with base_clamp; False = the builds before 2026-10-26): after the clamp, `base_cones.contacts`
 #       flags child limbs whose base floats > 1 mm clear of every other tube, and flat caps (cones the clamp closed flush)
 #       showing >= 0.1 cm2 outside the other tubes. The flagged limb's MESHED axis (skeleton, cards, children unchanged)
@@ -372,6 +391,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from tree_normals import transfer_crown_normals, leaf_normal_spread
 from tree_checks import floating_bark_components, floating_islands
 import base_cones
+BASE_TARGET0 = base_cones.TARGET  # default clamp depth (m, shipped scale); CFG base_target_mm overrides
 from tree_uv import cylinder_uvs, stretch_stats
 import lightmap_uv
 import json, statistics
@@ -1603,6 +1623,116 @@ def snap_cards_to_bark(bm, branches, cards, meshed):
         moved.append(dd)
     return moved
 
+def roll_cards(bm, cards, DC, tilt, ground):
+    """crown unstack (header): roll cards about their own axis through the attach point so that no two cards are
+    coincident (z-fight) and no card sits in a large parallel stack. Returns a stats dict."""
+    import numpy as np
+    deg, mm = DC.get("deg", 6.0), DC.get("mm", 8.0) / 1000.0
+    cosd = math.cos(math.radians(deg)); K = DC.get("samples", 11)
+    sdeg, soff, srad, smax = DC.get("stack_deg", 15.0), DC.get("stack_off", 0.10), DC.get("stack_rad", 0.5), DC.get("stack_max", 0.6)
+    coss = math.cos(math.radians(sdeg))
+    lo, hi = tilt if tilt else (10.0, 90.0)
+    bm.verts.ensure_lookup_table()
+    cl = [c for c in cards if len(c[1]) == 4]  # unfolded cards only
+    n = len(cl)
+    if n < 2: return dict(cards=n)
+    V = np.array([[list(bm.verts[c[0] + k].co) for k in range(4)] for c in cl])  # (n, 4, 3): corners (0,0) (1,0) (1,1) (0,1)
+    ATT = np.array([list(card_attach_point({g: bm.verts[c[0] + k].co for k, g in enumerate(c[1])}, c[1], *c[2])) for c in cl])
+    g = np.linspace(0.0, 1.0, K); GU, GV = np.meshgrid(g, g); GU = GU.ravel(); GV = GV.ravel()
+    def frame(Vc):  # origin, e1, e2, unit normal, centre, radius, area
+        o = Vc[0]; e1 = Vc[1] - Vc[0]; e2 = Vc[3] - Vc[0]; nn = np.cross(e1, e2); a = np.linalg.norm(nn)
+        return o, e1, e2, nn / a, (Vc[0] + Vc[2]) * 0.5, 0.5 * np.linalg.norm(Vc[2] - Vc[0]), a
+    FR = [frame(V[i]) for i in range(n)]
+    O = np.array([f[0] for f in FR]); E1 = np.array([f[1] for f in FR]); E2 = np.array([f[2] for f in FR])
+    N = np.array([f[3] for f in FR]); Cc = np.array([f[4] for f in FR]); R = np.array([f[5] for f in FR]); Ar = np.array([f[6] for f in FR])
+    AX = E2 / np.linalg.norm(E2, axis=1)[:, None]  # card axis (base to tip)
+    D = np.linalg.norm(Cc[:, None] - Cc[None], axis=2)
+    near = [np.where((D[i] < R[i] + R + 1e-9) & (np.arange(n) != i))[0] for i in range(n)]  # footprint neighbours
+    snear = [np.where((D[i] < srad) & (np.arange(n) != i))[0] for i in range(n)]
+    def samples(o, e1, e2): return o + GU[:, None] * e1 + GV[:, None] * e2
+    def hits(o1, e11, e12, n1, j, o2=None):
+        """number of sample points of card (o1,e11,e12) within mm of card j's plane and inside j's quad, and the reverse"""
+        oj, e1j, e2j, nj = O[j], E1[j], E2[j], N[j]
+        if abs(float(n1 @ nj)) < cosd: return 0
+        c = 0
+        for (oa, ea, eb, ob, fa, fb, nb) in ((o1, e11, e12, oj, e1j, e2j, nj), (oj, e1j, e2j, o1, e11, e12, n1)):
+            S = samples(oa, ea, eb) - ob
+            dist = S @ nb; u = (S @ fa) / (fa @ fa); v = (S @ fb) / (fb @ fb)
+            c += int(((np.abs(dist) < mm) & (u > -0.02) & (u < 1.02) & (v > -0.02) & (v < 1.02)).any())
+        return c
+    def conflicts(i, o, e1, e2, nn):
+        return sum(1 for j in near[i] if hits(o, e1, e2, nn, j))
+    def stack(i, nn, cen):
+        j = snear[i]
+        if not len(j): return Ar[i]
+        par = np.abs(N[j] @ nn) > coss; off = np.abs((Cc[j] - cen) @ nn) < soff
+        return Ar[i] + float((Ar[j] * (par & off)).sum())
+    zlim = [min(float(V[i][:, 2].min()), ground) for i in range(n)]
+    def candidates(i):
+        d = AX[i]; u = np.array([0.0, 0.0, 1.0]) - d * d[2]
+        if np.linalg.norm(u) < 1e-3: return []
+        u /= np.linalg.norm(u); w = np.cross(d, u)
+        a0 = math.degrees(math.atan2(float(N[i] @ w), float(N[i] @ u)))
+        out = []
+        for sgn in (1.0, -1.0):
+            for a in np.arange(lo, hi + 1e-6, 4.0):
+                out.append(sgn * a)
+        # nearest roll first; a0 itself excluded
+        out = sorted(set(round(x, 3) for x in out), key=lambda x: abs(((x - a0 + 180.0) % 360.0) - 180.0))
+        return [(x, u, w, d) for x in out if abs(((x - a0 + 180.0) % 360.0) - 180.0) > 1.0]
+    def rolled(i, cand):
+        a, u, w, d = cand
+        nn = u * math.cos(math.radians(a)) + w * math.sin(math.radians(a))  # target card normal
+        cur = N[i]; ax = d
+        # rotation about the axis through the attach point taking the current normal onto nn (both perpendicular to d)
+        ang = math.atan2(float(np.cross(cur, nn) @ ax), float(cur @ nn))
+        c, s = math.cos(ang), math.sin(ang)
+        Vc = V[i] - ATT[i]
+        Vr = Vc * c + np.cross(ax, Vc) * s + ax * (Vc @ ax)[:, None] * (1 - c)
+        Vr = Vr + ATT[i]
+        return Vr
+    def commit(i, Vr):
+        V[i] = Vr; f = frame(Vr); O[i], E1[i], E2[i], N[i], Cc[i], R[i], Ar[i] = f
+        AX[i] = E2[i] / np.linalg.norm(E2[i])
+    st = dict(cards=n, coincident=0, rolled_c=0, left=0, stack_over=0, rolled_s=0)
+    sk0 = np.array([stack(i, N[i], Cc[i]) for i in range(n)]); st["p90_before"] = round(float(np.percentile(sk0, 90)), 3)
+    st["p50_before"] = round(float(np.percentile(sk0, 50)), 3)
+    # (1) coincident cards
+    for i in range(n):
+        if not conflicts(i, O[i], E1[i], E2[i], N[i]): continue
+        st["coincident"] += 1; best = None
+        for cand in candidates(i):
+            Vr = rolled(i, cand)
+            if float(Vr[:, 2].min()) < zlim[i] - 1e-9: continue
+            fr = frame(Vr); k = conflicts(i, fr[0], fr[1], fr[2], fr[3])
+            sc = (k, stack(i, fr[3], fr[4]))
+            if best is None or sc < best[0]: best = (sc, Vr)
+            if k == 0 and sc[1] < smax: break
+        if best is not None and best[0][0] < conflicts(i, O[i], E1[i], E2[i], N[i]):
+            commit(i, best[1]); st["rolled_c"] += 1
+        if conflicts(i, O[i], E1[i], E2[i], N[i]): st["left"] += 1
+    # (2) parallel stacks, worst first
+    for rd in range(DC.get("rounds", 2)):
+        sk = np.array([stack(i, N[i], Cc[i]) for i in range(n)])
+        if rd == 0: st["stack_over"] = int((sk >= smax).sum())
+        for i in np.argsort(-sk):
+            if sk[i] < smax: break
+            cur = stack(i, N[i], Cc[i]); best = None
+            for cand in candidates(i):
+                Vr = rolled(i, cand)
+                if float(Vr[:, 2].min()) < zlim[i] - 1e-9: continue
+                fr = frame(Vr)
+                if conflicts(i, fr[0], fr[1], fr[2], fr[3]): continue
+                sc = stack(i, fr[3], fr[4])
+                if best is None or sc < best[0]: best = (sc, Vr)
+            if best is not None and best[0] < 0.7 * cur: commit(i, best[1]); st["rolled_s"] += 1
+    sk1 = np.array([stack(i, N[i], Cc[i]) for i in range(n)]); st["p90_after"] = round(float(np.percentile(sk1, 90)), 3)
+    st["p50_after"] = round(float(np.percentile(sk1, 50)), 3)
+    st["still_over"] = int((sk1 >= smax).sum())
+    for i, c in enumerate(cl):
+        for k in range(4): bm.verts[c[0] + k].co = Vector(V[i][k].tolist())
+    return st
+
 def rand_unit(rng):
     v = Vector((rng.gauss(0, 1), rng.gauss(0, 1), rng.gauss(0, 1))); return v.normalized()
 
@@ -2218,7 +2348,7 @@ def bare_behind(probe, branches):
         out[i] = walk(h, me, ("card", i))
     return out
 
-def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None, bare=None, branches=None):
+def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None, bare=None, branches=None, rin=None):
     """crown roles: "out" for the cards that stick out of the crown, "full" for the rest. The crown is the ellipsoid
     through the far card ends (A + d x size) of the tip and main cards: horizontal centre = their mean, horizontal
     radius = 90th percentile distance, vertical centre/radius from z10..z90. Out = the `frac` share of tip and main
@@ -2233,7 +2363,10 @@ def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None, bare
     and taken from the furthest-out eligible ones.
     bare (opt-in, m): a card with more than `bare` m of bare limb behind its root on its limb chain (bare_behind) keeps
     a full cell: a long bare limb ending in a sparse sprig reads as a dead stick with a wisp (AleppoPineLean, review
-    C1-med-spray3 r2 nit 4). Same frac share, taken from the next eligible cards. Off = identical builds."""
+    C1-med-spray3 r2 nit 4). Same frac share, taken from the next eligible cards. Off = identical builds.
+    rin (opt-in): a card may turn out (seed, low_tips card or group member) only if its ROOT lies at or beyond `rin` in
+    the crown ellipsoid's units (1 = the ellipsoid through the far card ends; roots farther in keep full cells), so a long
+    shoot cell is never rooted deep inside the crown where it hangs as a stick (Laceleaf, review jpmaple_family_1105 #6)."""
     far = [(p[0] + p[1] * p[2]) for p in probe]
     ids = [i for i, p in enumerate(probe) if p[3] in ("tip", "main")]
     tz = [p[0].z for p in probe]
@@ -2243,8 +2376,13 @@ def card_roles(probe, frac=0.2, low=True, group=None, top=None, above=None, bare
         z10, z90 = pct([far[i].z for i in ids], 0.1), pct([far[i].z for i in ids], 0.9)
         zc, rz = (z10 + z90) / 2, max(1e-3, (z90 - z10) / 2)
     bb = bare_behind(probe, branches) if bare is not None else None
+    if ids and rin is not None:
+        cx = sum(far[i].x for i in ids) / len(ids); cy = sum(far[i].y for i in ids) / len(ids)
+        rh = max(1e-3, pct([math.hypot(far[i].x - cx, far[i].y - cy) for i in ids], 0.9))
     ok = lambda i: ((top is None or (far[i].z - zc) / rz <= top) and (above is None or tz[i] >= above)
-                    and (bb is None or bb[i] <= bare))
+                    and (bb is None or bb[i] <= bare)
+                    and (rin is None or not ids or math.hypot(math.hypot(probe[i][0].x - cx, probe[i][0].y - cy) / rh,
+                                                              (probe[i][0].z - zc) / rz) >= rin))
     roles = ["out" if low and p[3] == "low" and ok(i) else "full" for i, p in enumerate(probe)]
     if ids:
         cx = sum(far[i].x for i in ids) / len(ids); cy = sum(far[i].y for i in ids) / len(ids)
@@ -2274,7 +2412,7 @@ def crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None):
         r1 = random.Random(); r1.setstate(rng.getstate()); probe = []
         sprig_crown(bm, uvl, branches, r1, count, size, fold, lod1, keep, probe=probe)
         roles = card_roles(probe, R.get("frac", 0.2), R.get("low", True), R.get("group"), R.get("top"), R.get("above"),
-                           R.get("bare"), branches)
+                           R.get("bare"), branches, R.get("rin"))
         n_out = sum(r.startswith("out") for r in roles)
         print(f"STAT crown roles {'lod1' if lod1 else 'lod0'} cards {len(probe)} out {n_out} "
               f"(low {sum(p[3] == 'low' for p in probe)}) full {len(roles) - n_out} mirror {'Y' if C.get('mirror') else 'N'}"
@@ -2604,6 +2742,7 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
             bm.free(); bpy.data.meshes.remove(me)
             return make_lod(name, seed, lod1, full_rings | add, base_over, base_round, lv)
     if CFG.get("base_clamp", True):
+        base_cones.TARGET = (CFG["base_target_mm"] / 1000.0) if CFG.get("base_target_mm") is not None else BASE_TARGET0  # opt-in (header)
         nclamp = base_cones.clamp(bm)
         if CFG.get("base_fix", True):  # limbs floating off their branch / flat-capped bases: fix the axis, mesh again
             bad = [c for c in base_cones.contacts(bm, k=1.0 / base_cones.SHIP_SCALE) if c["floating"] or c["flat_cap"]]
@@ -2626,6 +2765,9 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
               C.get("size", 1.0) * (CFG.get("lod1_size", 1.35) if lod1 else 1.0), 0.0 if lod1 else C.get("fold", 0.0), lod1)
     if cards:  # every painted twig base on the bark that is actually meshed (LOD1: the thinned tubes that ship)
         SNAPPED[name] = snap_cards_to_bark(bm, branches, cards, meshed)
+    if cards and C.get("unstack") is not None:  # opt-in crown unstack (header): coincident cards / parallel stacks rolled on the final cards
+        st = roll_cards(bm, cards, C["unstack"], C["unstack"].get("tilt", C.get("roll_tilt")), C.get("ground", 0.0) or 0.0)
+        print("STAT", name, "unstack", json.dumps(st))
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(ob)
     cylinder_uvs(ob)
