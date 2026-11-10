@@ -13,6 +13,8 @@
 #       (5 x 5 samples) is checked last and the card dropped if any of it reaches into a volume (not screen cards:
 #       a screen is placed on purpose, e.g. beside a never-walked bridge it must hide)
 #   buttress=dict(n, z=(lo,hi), reach=(lo,hi), r)   flaring roots from the lower trunk down to z=0
+#       opt-in tip=<k> (end radius as a share of r, default 0.25) and dive=<m> (the root ends sink m under z=0 by t^3): thick, ground-hugging roots whose ends
+#       leave the floor like a root, not a blade lying on it (L5 OldTree). Off = identical builds (the new code only runs when a key is set).
 #   flare=dict(r=1.3, h=0.35, skirt=0.05, steps=2)   root flare: ground-rooted stems widen to r x at z=0 over h m
 #                                    (<= 30 % of the stem; `steps` rings), plus a closed skirt ring `skirt` m below ground
 #       opt-in skirt_axis=s: the skirt runs on along the stem's first segment instead of straight down (no kink at
@@ -1401,6 +1403,10 @@ def build_skeleton(seed):
             for i in range(1, 5):  # concave sweep: steep near the trunk, flat into the water
                 t = i / 4; pts.append(Vector((p.x, p.y, 0)) + out_d * (r * 0.6 + R * t ** 0.8) + Vector((0, 0, z * (1 - t) ** 2.2)))
                 radii.append(B["r"] * (1 - 0.75 * t))
+            if B.get("tip") is not None or B.get("dive"):  # opt-in (header): thicker root ends / ends diving under the ground
+                kt = 0.25 if B.get("tip") is None else B["tip"]
+                for i in range(1, 5):
+                    t = i / 4; radii[i] = B["r"] * (1 - (1 - kt) * t); pts[i] = pts[i] - Vector((0, 0, B.get("dive", 0.0) * t ** 3))
             out.append(Br(pts, radii, 1))
     if CFG.get("yaw"):  # opt-in: the whole skeleton turned about z (deg; no draws): faces a placed tree's set camera
         Rz = __import__("mathutils").Matrix.Rotation(math.radians(CFG["yaw"]), 3, 'Z')
