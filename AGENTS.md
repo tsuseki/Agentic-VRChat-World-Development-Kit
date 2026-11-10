@@ -192,6 +192,10 @@ asks.
 
 **Never add `VRC_Station` / `VRCStation` to furniture or other props without an explicit user request.** Strip stations from imported prefabs; never restore removed stations or add them for convenience. This is a user preference, not a performance tradeoff (2026-09-03). When the user does ask for seats, record it in the world's `WORLD.md`.
 
+### Player options persist
+
+Every setting or option a player picks in a world (toggles such as lie-down colliders, language, sliders, quality or comfort choices) is saved with VRChat Persistence and re-applied on later visits (user, 2026-11-10: "any world settings or options players pick are saved under persistence so they apply in the future visits too"). Use `PlayerData` (local player only, SDK >= 3.7.4): apply the default in `Start`, write in the handler that changes the option (`PlayerData.SetBool(key, v)`; the setter takes `(key, value)`, no player argument), read in `OnPlayerRestored(player)` for the local player (`PlayerData.TryGetBool(player, key, out v)`) and re-apply the option and its UI state there; guard writes with a flag set in `OnPlayerRestored`. One namespaced key per option (`<script>.<option>`). Nothing synced, no `VRCEnablePersistence` needed. Proof in ClientSim: change the option, read `ClientSimStorage/PlayerData/PlayerData_1_World_<Name>.json`, stop, play again, read the option back (reset the JSON to `{}` afterwards). Reference: `.omp/skills/unity-vrc-udon-sharp/references/persistence.md`; examples: `Assets/_World/Shared/EntryBoard/Udon/EntryBoard.cs`, `Assets/_World/Tropical/Udon/LieDownColliderToggle.cs` in BoothAssets.
+
 ### Pickups
 
 - Only explicitly requested objects become pickups.

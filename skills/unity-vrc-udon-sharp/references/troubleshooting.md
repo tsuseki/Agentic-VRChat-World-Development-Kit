@@ -751,7 +751,7 @@ public void SaveScore(int score)
         Debug.LogWarning("Data not ready!");
         return;
     }
-    PlayerData.SetInt(Networking.LocalPlayer, "score", score);
+    PlayerData.SetInt("score", score);
 }
 
 ```
@@ -775,7 +775,7 @@ public void SaveScore(int score)
 PlayerData.SetInt(otherPlayer, "score", 100); // Will fail silently
 
 // CORRECT - Write to local player only
-PlayerData.SetInt(Networking.LocalPlayer, "score", 100);
+PlayerData.SetInt("score", 100);
 
 // Debug storage usage
 string[] keys = PlayerData.GetKeys(Networking.LocalPlayer);

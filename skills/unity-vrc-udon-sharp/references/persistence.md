@@ -130,8 +130,8 @@ public void SaveHighScore(int score)
     VRCPlayerApi local = Networking.LocalPlayer;
 
     // Can only write to your own data
-    PlayerData.SetInt(local, "highScore", score);
-    PlayerData.SetString(local, "lastPlayed", System.DateTime.UtcNow.ToString());
+    PlayerData.SetInt("highScore", score);
+    PlayerData.SetString("lastPlayed", System.DateTime.UtcNow.ToString());
 }
 ```
 
@@ -518,7 +518,7 @@ public void SafeSaveData(string key, int value)
         return;
     }
 
-    PlayerData.SetInt(local, key, value);
+    PlayerData.SetInt(key, value);
 }
 ```
 
@@ -556,13 +556,13 @@ public class SettingsManager : UdonSharpBehaviour
     public void _OnVolumeChanged()
     {
         if (!initialized) return;
-        PlayerData.SetFloat(Networking.LocalPlayer, "musicVolume", volumeSlider.value);
+        PlayerData.SetFloat("musicVolume", volumeSlider.value);
     }
 
     public void _OnMusicToggled()
     {
         if (!initialized) return;
-        PlayerData.SetBool(Networking.LocalPlayer, "musicEnabled", musicToggle.isOn);
+        PlayerData.SetBool("musicEnabled", musicToggle.isOn);
     }
 }
 ```
@@ -586,7 +586,7 @@ public class DailyReward : UdonSharpBehaviour
             {
                 // New day - give reward
                 GiveReward(player);
-                PlayerData.SetString(player, "lastLogin", today);
+                PlayerData.SetString("lastLogin", today);
             }
             else
             {
@@ -597,7 +597,7 @@ public class DailyReward : UdonSharpBehaviour
         {
             // First time player
             GiveReward(player);
-            PlayerData.SetString(player, "lastLogin", today);
+            PlayerData.SetString("lastLogin", today);
         }
     }
 
@@ -605,11 +605,11 @@ public class DailyReward : UdonSharpBehaviour
     {
         if (PlayerData.TryGetInt(player, "gold", out int gold))
         {
-            PlayerData.SetInt(player, "gold", gold + rewardAmount);
+            PlayerData.SetInt("gold", gold + rewardAmount);
         }
         else
         {
-            PlayerData.SetInt(player, "gold", rewardAmount);
+            PlayerData.SetInt("gold", rewardAmount);
         }
 
         Debug.Log($"Daily reward: +{rewardAmount} gold!");
@@ -666,7 +666,7 @@ public class DataAgingExample : UdonSharpBehaviour
         // Initialize with an empty JSON object if no data exists yet
         if (!PlayerData.HasKey(player, DataKey))
         {
-            PlayerData.SetString(player, DataKey, "{}");
+            PlayerData.SetString(DataKey, "{}");
             return;
         }
 
@@ -760,7 +760,7 @@ public class DataAgingExample : UdonSharpBehaviour
         // --- Step 4: Serialize and write back ---
         if (VRCJson.TrySerializeToJson(pruned, JsonExportType.Minify, out DataToken result))
         {
-            PlayerData.SetString(player, DataKey, result.String);
+            PlayerData.SetString(DataKey, result.String);
 
             int removed = entryKeys.Count - pruned.Count;
             Debug.Log($"[DataAging] Pruned {removed} entries, kept {pruned.Count}");
@@ -796,7 +796,7 @@ public class DataAgingExample : UdonSharpBehaviour
 
         if (VRCJson.TrySerializeToJson(dict, JsonExportType.Minify, out DataToken updated))
         {
-            PlayerData.SetString(local, DataKey, updated.String);
+            PlayerData.SetString(DataKey, updated.String);
         }
     }
 }

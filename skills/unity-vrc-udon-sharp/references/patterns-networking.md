@@ -343,21 +343,21 @@ public class SettingsManager : UdonSharpBehaviour
     public void _OnVolumeChanged()
     {
         if (!initialized) return;
-        PlayerData.SetFloat(Networking.LocalPlayer, "volume", volumeSlider.value);
+        PlayerData.SetFloat("volume", volumeSlider.value);
         ApplyVolume(volumeSlider.value);
     }
 
     public void _OnMusicToggled()
     {
         if (!initialized) return;
-        PlayerData.SetBool(Networking.LocalPlayer, "musicEnabled", musicToggle.isOn);
+        PlayerData.SetBool("musicEnabled", musicToggle.isOn);
         ApplyMusic(musicToggle.isOn);
     }
 
     public void _OnQualityChanged()
     {
         if (!initialized) return;
-        PlayerData.SetInt(Networking.LocalPlayer, "quality", qualityDropdown.value);
+        PlayerData.SetInt("quality", qualityDropdown.value);
         ApplyQuality(qualityDropdown.value);
     }
 }
@@ -394,7 +394,7 @@ public class UnlockSystem : UdonSharpBehaviour
         if (!dataReady) return;
         if (index < 0 || index >= unlockKeys.Length) return;
 
-        PlayerData.SetBool(Networking.LocalPlayer, unlockKeys[index], true);
+        PlayerData.SetBool(unlockKeys[index], true);
         unlockableObjects[index].SetActive(true);
 
         Debug.Log($"Unlocked: {unlockKeys[index]}");

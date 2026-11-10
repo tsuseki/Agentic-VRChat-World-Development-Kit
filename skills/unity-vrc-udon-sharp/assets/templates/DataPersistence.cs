@@ -229,7 +229,7 @@ public class DataPersistence : UdonSharpBehaviour
         if (volumeSlider != null)
         {
             _volume = volumeSlider.value;
-            PlayerData.SetFloat(local, KEY_VOLUME, _volume);
+            PlayerData.SetFloat(KEY_VOLUME, _volume);
             LogDebug($"Auto-saved volume: {_volume}");
         }
     }
@@ -254,7 +254,7 @@ public class DataPersistence : UdonSharpBehaviour
         if (musicToggle != null)
         {
             _musicOn = musicToggle.isOn;
-            PlayerData.SetBool(local, KEY_MUSIC_ON, _musicOn);
+            PlayerData.SetBool(KEY_MUSIC_ON, _musicOn);
             LogDebug($"Auto-saved music: {_musicOn}");
         }
     }
@@ -269,15 +269,15 @@ public class DataPersistence : UdonSharpBehaviour
     /// </summary>
     private void WriteAllData(VRCPlayerApi player)
     {
-        PlayerData.SetInt(player, KEY_HIGH_SCORE, _highScore);
-        PlayerData.SetFloat(player, KEY_VOLUME, _volume);
-        PlayerData.SetBool(player, KEY_MUSIC_ON, _musicOn);
+        PlayerData.SetInt(KEY_HIGH_SCORE, _highScore);
+        PlayerData.SetFloat(KEY_VOLUME, _volume);
+        PlayerData.SetBool(KEY_MUSIC_ON, _musicOn);
 
         // Only update the saved name if the player has one
         string displayName = player.displayName;
         if (displayName != null && displayName.Length > 0)
         {
-            PlayerData.SetString(player, KEY_DISPLAY_NAME, displayName);
+            PlayerData.SetString(KEY_DISPLAY_NAME, displayName);
         }
     }
 
@@ -308,7 +308,7 @@ public class DataPersistence : UdonSharpBehaviour
         }
 
         _highScore = newScore;
-        PlayerData.SetInt(local, KEY_HIGH_SCORE, _highScore);
+        PlayerData.SetInt(KEY_HIGH_SCORE, _highScore);
 
         SetStatus("New high score: " + _highScore);
         LogDebug($"High score updated: {_highScore}");

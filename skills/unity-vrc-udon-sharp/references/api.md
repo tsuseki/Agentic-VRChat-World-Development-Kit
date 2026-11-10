@@ -892,10 +892,10 @@ if (PlayerData.TryGetInt(player, "highScore", out int score))
 }
 
 // Set values (only on local player's own data)
-PlayerData.SetInt(Networking.LocalPlayer, "highScore", 1000);
-PlayerData.SetString(Networking.LocalPlayer, "username", "Player1");
-PlayerData.SetFloat(Networking.LocalPlayer, "volume", 0.8f);
-PlayerData.SetBool(Networking.LocalPlayer, "tutorialComplete", true);
+PlayerData.SetInt("highScore", 1000);
+PlayerData.SetString("username", "Player1");
+PlayerData.SetFloat("volume", 0.8f);
+PlayerData.SetBool("tutorialComplete", true);
 
 // Delete key
 PlayerData.DeleteKey(Networking.LocalPlayer, "oldKey");
@@ -949,7 +949,7 @@ public class PersistentScore : UdonSharpBehaviour
         if (score > highScore)
         {
             highScore = score;
-            PlayerData.SetInt(Networking.LocalPlayer, "highScore", score);
+            PlayerData.SetInt("highScore", score);
         }
     }
 }
