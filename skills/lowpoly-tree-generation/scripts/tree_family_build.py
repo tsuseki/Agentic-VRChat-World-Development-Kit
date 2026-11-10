@@ -1623,9 +1623,14 @@ def snap_cards_to_bark(bm, branches, cards, meshed):
         moved.append(dd)
     return moved
 
-def roll_cards(bm, cards, DC, tilt, ground):
+UNSTACK_ROLLS = []  # (normal, axis, roll rad) of the cards the LOD1 roll pass turned: the far levels replay them (twin cards)
+
+def roll_cards(bm, cards, DC, tilt, ground, record=None, replay=None):
     """crown unstack (header): roll cards about their own axis through the attach point so that no two cards are
-    coincident (z-fight) and no card sits in a large parallel stack. Returns a stats dict."""
+    coincident (z-fight) and no card sits in a large parallel stack. Returns a stats dict.
+    record: list that gets (pre-roll normal, axis, net roll rad) per turned card; replay: such a list, applied instead of the
+    search (a far LOD level draws the LOD1 cards grown about their attach points; its cards must stay twins of the shipped
+    LOD1 cards, same axis and normal within ~1 deg, so it turns each card by the LOD1 roll of the card with that normal+axis)."""
     import numpy as np
     deg, mm = DC.get("deg", 6.0), DC.get("mm", 8.0) / 1000.0
     cosd = math.cos(math.radians(deg)); K = DC.get("samples", 11)
@@ -1694,6 +1699,20 @@ def roll_cards(bm, cards, DC, tilt, ground):
     def commit(i, Vr):
         V[i] = Vr; f = frame(Vr); O[i], E1[i], E2[i], N[i], Cc[i], R[i], Ar[i] = f
         AX[i] = E2[i] / np.linalg.norm(E2[i])
+    N0 = N.copy()
+    def turn(i, ang):
+        ax = AX[i]; c, s_ = math.cos(ang), math.sin(ang); Vc = V[i] - ATT[i]
+        commit(i, Vc * c + np.cross(ax, Vc) * s_ + ax * (Vc @ ax)[:, None] * (1 - c) + ATT[i])
+    if replay is not None:
+        RK = np.array([list(r[0]) + list(r[1]) for r in replay]).reshape(-1, 6); done = 0
+        for i in range(n):
+            if not len(RK): break
+            dd = np.linalg.norm(RK - np.concatenate([N[i], AX[i]]), axis=1); j = int(dd.argmin())
+            if dd[j] > 4e-3: continue
+            turn(i, replay[j][2]); done += 1
+        for i, c in enumerate(cl):
+            for k in range(4): bm.verts[c[0] + k].co = Vector(V[i][k].tolist())
+        return dict(cards=n, replayed=done, of=len(replay))
     st = dict(cards=n, coincident=0, rolled_c=0, left=0, stack_over=0, rolled_s=0)
     sk0 = np.array([stack(i, N[i], Cc[i]) for i in range(n)]); st["p90_before"] = round(float(np.percentile(sk0, 90)), 3)
     st["p50_before"] = round(float(np.percentile(sk0, 50)), 3)
@@ -1729,6 +1748,11 @@ def roll_cards(bm, cards, DC, tilt, ground):
     sk1 = np.array([stack(i, N[i], Cc[i]) for i in range(n)]); st["p90_after"] = round(float(np.percentile(sk1, 90)), 3)
     st["p50_after"] = round(float(np.percentile(sk1, 50)), 3)
     st["still_over"] = int((sk1 >= smax).sum())
+    if record is not None:
+        record.clear()
+        for i in range(n):
+            ang = math.atan2(float(np.cross(N0[i], N[i]) @ AX[i]), float(N0[i] @ N[i]))
+            if abs(ang) > 1e-6: record.append((N0[i].tolist(), AX[i].tolist(), ang))
     for i, c in enumerate(cl):
         for k in range(4): bm.verts[c[0] + k].co = Vector(V[i][k].tolist())
     return st
@@ -2766,7 +2790,9 @@ def make_lod(name, seed, lod1, full_rings=frozenset(), base_over=None, base_roun
     if cards:  # every painted twig base on the bark that is actually meshed (LOD1: the thinned tubes that ship)
         SNAPPED[name] = snap_cards_to_bark(bm, branches, cards, meshed)
     if cards and C.get("unstack") is not None:  # opt-in crown unstack (header): coincident cards / parallel stacks rolled on the final cards
-        st = roll_cards(bm, cards, C["unstack"], C["unstack"].get("tilt", C.get("roll_tilt")), C.get("ground", 0.0) or 0.0)
+        st = roll_cards(bm, cards, C["unstack"], C["unstack"].get("tilt", C.get("roll_tilt")), C.get("ground", 0.0) or 0.0,
+                        record=UNSTACK_ROLLS if (lod1 and lv is None) else None,
+                        replay=UNSTACK_ROLLS if (lv is not None and UNSTACK_ROLLS) else None)
         print("STAT", name, "unstack", json.dumps(st))
     bm.to_mesh(me); bm.free()
     ob = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(ob)
