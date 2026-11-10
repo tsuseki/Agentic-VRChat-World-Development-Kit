@@ -5,7 +5,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 ## Topics
 
 - [lighting-baking](#lighting-baking) (80)
-- [probes-reflection-and-light](#probes-reflection-and-light) (26)
+- [probes-reflection-and-light](#probes-reflection-and-light) (27)
 - [materials-textures-shaders](#materials-textures-shaders) (50)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (34)
 - [import-fbx-prefabs](#import-fbx-prefabs) (16)
@@ -112,6 +112,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Baked reflection probes capture only renderers flagged ReflectionProbeStatic](notes/reflection-probes-need-reflectionprobestatic-flag.md) — ContributeGI and ReflectionProbeStatic are independent flags; renderers without ReflectionProbeStatic are invisible to baked reflection probes, which then capture only the sky, and the tell is byte-identical cubemaps.
 - [Bakery light-probe bakes can die silently and leave flat probes](notes/bakery-probe-bake-can-fail-silently.md) — A Bakery probe pass can abort without an error and leave a full-looking but flat probe set; verify probe variance after every probe bake, and close the VRChat SDK panel first.
 - [Baking an alternate lighting state overwrites the shared light-probe asset](notes/alternate-lighting-state-bake-overwrites-probes.md) — A scene with day/night states has one probes asset; baking the night state leaves the day state lighting avatars with night probes — fingerprint: every probe has the same chromaticity.
+- [Blurred glass reflections need real-glass F0 (0.04), not Standard's 0.0083](notes/blurred-glass-needs-real-glass-f0.md) — Blurring a glass reflection (smoothness 0.90 → 0.70) spreads the same energy thin, so a 0.0083 head-on reflectance vanishes and the glass seems to reflect only at an angle; use F0 0.04 with Standard's Pow4 curve and 0.71 cap.
 - [Check Light Volume coverage over the whole walk zone, and again after adding structures](notes/lv-check-coverage-over-the-walk-zone.md) — Measure volume coverage as the share of reachable ground cells covered at feet, eye and head height; 3 % of one walk zone and three later buildings in another sat outside every volume until checked.
 - [Check receiveGI before adding lights to a black object](notes/check-receivegi-before-adding-lights.md) — A Baked light never lights a probe-lit renderer directly, so when objects read as black silhouettes despite lights aimed at them, query receiveGI first and move large ones onto the lightmap.
 - [Closed canopy needs box-projected reflection probes over the woods](notes/bake-canopy-needs-box-projected-reflection-probes.md) — Under a closed canopy, surfaces outside every probe box reflect open sky and read cold slate-grey; add box-projected custom probes over the woods and a sky-only default probe, and re-bake them after every lightmap bake and fog change.

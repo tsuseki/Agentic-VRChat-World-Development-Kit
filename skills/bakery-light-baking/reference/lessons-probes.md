@@ -10,6 +10,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **After moving any landmark or area, sweep every reflection probe against its site and re-seat + rebake the stale ones** — scene-placed probes don't follow code-positioned objects; the symptom shows up as a "glazed" glossy surface reflecting raw sky, misreported as a material defect.
 - **Before swapping a skybox, check what it feeds: it's cosmetic only if ambient is Flat and `BakerySkyLight.cubemap` is null; otherwise rebake. Rotate a lat-long HDRI with a closed-form `_Rotation` so its sun matches the baked light** — the bake locks the sun angle; pick a similar sun elevation, find the peak texel via `Blit` to `ARGBHalf` + `ReadPixels` (`GetPixels` fails on BC6H), and don't retry the MCP bridge during 4K HDR reimports.
 - **Cover closed canopy with box-projected Custom reflection probes (importance 1, blend 2 m, 256) plus a sky-only default probe (`cullingMask = 0`), and re-bake them after every lightmap bake and fog change** — outside every box, surfaces under the trees reflect open sky and read cold slate-grey.
+- **Blurred glass reflections need real-glass F0 0.04 with Standard's Pow4 curve and 0.71 cap; reload the scene before measuring after a scripted `ReflectionProbe.intensity` edit** — Standard Specular's 0.0083 is invisible once smoothness drops to ~0.70, so the glass seems to reflect only at an angle; a scripted intensity change left glass ~2.5× fainter until the scene was reopened.
 
 ## Light-probe bake verification
 

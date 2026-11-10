@@ -110,6 +110,9 @@ The builder checks every row that applies to the pass; the reviewer can verify e
 ### F. Special shaders and surfaces
 | Trap | Rule / pass |
 |---|---|
+| Window/facade/railing glass: see-through with a soft reflection | Use the kit recipe `references/window-glass.md` with `references/WindowGlass.shader` (`AWDK/WindowGlass`): Standard Pow4 Fresnel, F0 0.04, grazing 0.71, smoothness 0.70, per-facade exterior probes (infinite, isolated influence volume, intensity 3.0, 256 px) anchored per face, glass out of GI, occlusion and probe capture |
+| Glass reflection only visible at an angle, faint head-on | F0 too low for a blurred reflection: Standard Specular 0.09 sRGB is 0.0083 linear. Fine on a sharp reflection, invisible once smoothness drops to ~0.70. Use real-glass F0 0.04; don't flatten the curve or raise the grazing cap |
+| Glass suddenly fainter after a scripted probe edit | Save and reopen the scene before measuring; changing `ReflectionProbe.intensity` from a script left the glass ~2.5× fainter until the scene was reloaded |
 | World behind glass blurry, glass has no reflections | Mochie Glass: any `_Roughness` > 0 enables a blurred grab pass and a blurrier reflection mip. `_Roughness = 0` on see-through panes; frost via a roughness map only where wanted; read the glass material before the world outside |
 | Glass panes lightmapped | `receiveGI = LightProbes` before baking |
 | Cutout foliage burns white in front of a bright sky | The surface-shader `alphatest:_Cutoff` pragma leaves a framebuffer blend. Drop it, declare `_Cutoff`, `clip(c.a - _Cutoff)`, `o.Alpha = 1`; test identical quads against a wall and against the sky |
