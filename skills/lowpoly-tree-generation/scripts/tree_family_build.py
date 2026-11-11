@@ -177,6 +177,13 @@
 #       (the reviewer's stack measure: a plate when large, edge-on streaks seen along it) takes the candidate roll that
 #       lowers that sum most (accepted when it lowers it below 70 %), `rounds` sweeps, worst first. Deterministic (no random
 #       draws). Prints STAT <name> unstack coincident N rolled N left N stack_over N rolled N p90 a -> b. Off = identical builds.
+#       unstack view=dict(az=(-50, -10), radii=(3, 4, 5), eye=1.3, zr=(1.4, 2.4), deg=10, frac=0.3, other=0.25) (opt-in, inside
+#       unstack; review jpmaple r2 S1): a third pass for a viewing sector. Cameras (shipped m) sit on the ring azimuths `az`
+#       (atan2(y, x) deg, every 10 deg) at `radii` from the trunk axis, eye height `eye`; a card with centre in the height
+#       band `zr` is edge-on from a camera when its plane lies within `deg` deg of the sight line (streaks). A card edge-on from
+#       `frac` or more of the sector cameras takes the roll candidate (same candidate list, coincidence/stack rules as above)
+#       with the smallest score = sector edge-on share + `other` x the share over a 12-azimuth ring (the other sides must not
+#       gain a band); applied only when the score drops. STAT prints view flagged N rolled N. Off (no view key) = identical.
 #   crown max_rise=<deg> (sprig, opt-in; weeping mounds): a card whose axis rises more than max_rise deg above
 #       horizontal is lowered to max_rise, keeping its heading (0: every card tip-out or tip-down, the willow rule).
 #       Applied after `flat`, before surface/roll_tilt. No extra random draws: off = identical builds.
@@ -1745,6 +1752,35 @@ def roll_cards(bm, cards, DC, tilt, ground, record=None, replay=None):
                 sc = stack(i, fr[3], fr[4])
                 if best is None or sc < best[0]: best = (sc, Vr)
             if best is not None and best[0] < 0.7 * cur: commit(i, best[1]); st["rolled_s"] += 1
+    VW = DC.get("view")
+    if VW:  # (3) viewing-sector streak rule (header)
+        sc_ = 1.0 / base_cones.SHIP_SCALE
+        def cams(azs, radii):
+            return np.array([[r * math.cos(math.radians(a)), r * math.sin(math.radians(a)), VW.get("eye", 1.3)] for a in azs for r in radii]) * sc_
+        a0, a1 = VW.get("az", (-50, -10)); rad = VW.get("radii", (3, 4, 5))
+        CS = cams(np.arange(a0, a1 + 1e-6, 10.0), rad); CO = cams(np.arange(0.0, 360.0, 30.0), rad)
+        sd = math.sin(math.radians(VW.get("deg", 10.0))); z0_, z1_ = VW.get("zr", (1.4, 2.4)); wo = VW.get("other", 0.25)
+        def edge(nn, cen, C_):
+            d = C_ - cen; d /= np.linalg.norm(d, axis=1)[:, None]
+            return float((np.abs(d @ nn) < sd).mean())
+        def vscore(nn, cen): return edge(nn, cen, CS) + wo * edge(nn, cen, CO)
+        st["view_flagged"] = st["view_rolled"] = 0
+        for i in range(n):
+            zc = Cc[i][2] * base_cones.SHIP_SCALE
+            if not (z0_ <= zc <= z1_): continue
+            e0 = edge(N[i], Cc[i], CS)
+            if e0 < VW.get("frac", 0.3): continue
+            st["view_flagged"] += 1; cur = vscore(N[i], Cc[i]); best = None
+            for cand in candidates(i):
+                Vr = rolled(i, cand)
+                if float(Vr[:, 2].min()) < zlim[i] - 1e-9: continue
+                fr = frame(Vr)
+                if conflicts(i, fr[0], fr[1], fr[2], fr[3]): continue
+                if stack(i, fr[3], fr[4]) >= max(smax, stack(i, N[i], Cc[i]) * 1.1): continue
+                sc = vscore(fr[3], fr[4])
+                if best is None or sc < best[0]: best = (sc, Vr)
+            if best is not None and best[0] < cur - 1e-9 and edge(frame(best[1])[3], frame(best[1])[4], CS) < e0:
+                commit(i, best[1]); st["view_rolled"] += 1
     sk1 = np.array([stack(i, N[i], Cc[i]) for i in range(n)]); st["p90_after"] = round(float(np.percentile(sk1, 90)), 3)
     st["p50_after"] = round(float(np.percentile(sk1, 50)), 3)
     st["still_over"] = int((sk1 >= smax).sum())
