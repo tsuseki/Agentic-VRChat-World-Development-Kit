@@ -36,6 +36,12 @@ in a fix loop (user: "don't bake more than 10 min"). Re-baking is fine; the rule
 one bake takes (user: "nonono you can do rebakes I meant just do low samples so a quick test
 doesn't take 1h").
 
+**GPU gate (user, 2026-11-11):** never start a bake while another runs. Before every launch:
+`python .omp/scripts/gpu_bake_gate.py acquire --owner "<project>/<agent>"` (exit 1 = busy, retry
+later); after it ends or is cancelled: `... release --owner ...`. The gate checks the shared lock
+file, Bakery tracer processes (`ftrace*`, `lmrebake*`, denoisers) and `nvidia-smi` utilization
+averaged over 10 s (busy ≥ 60 %).
+
 1. **Every test or iteration bake is QUICK, with a hard 10-minute cap on wall time:**
    - GI samples 4, Samples Multiplier 1/8, half the draft texel density;
    - fast denoise, no AO, no SSS;

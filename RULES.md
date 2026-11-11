@@ -89,6 +89,14 @@ These stay in force for the whole session. Background and rationale live in `.om
     procedure: `bakery-light-baking` "Baking rules" (user, 2026-11-05: "don't bake more than 10
     min", "you can do rebakes I meant just do low samples so a quick test doesn't take 1h").
 
+    **One bake on the machine at a time; bake only when the GPU is free.** Several agents share one
+    GPU. Before launching any bake (Bakery, GLIM, Progressive), run
+    `python .omp/scripts/gpu_bake_gate.py acquire --owner "<project>/<agent>"`; exit 1 = busy (a lock
+    held by another agent, a Bakery tracer process running, or GPU ≥ 60 % over 10 s): don't bake, do
+    other work and retry later. Release with `... release --owner ...` the moment the bake finishes,
+    fails or is cancelled (user, 2026-11-11: "not to bake unless GPU is free cause I have multiple
+    agents running so we don't start two bakes at the same time").
+
 12. **The user's decisions and picked art are binding: record them, feed them, never override them.**
     Each project keeps a decision database, `<project>/STEER.jsonl`, and its generated digest
     `<project>/DECISIONS.md` (picked art with absolute paths, rejected art, the design lock, every
