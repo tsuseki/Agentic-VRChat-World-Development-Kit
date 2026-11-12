@@ -116,3 +116,13 @@ These stay in force for the whole session. Background and rationale live in `.om
     important goals and decisions like the concept art and all the kind of user made decisions";
     "the only agent that needs to know all decisions is the orchestrator and he needs to basically
     feed all the relevant decisions to the sub-agents").
+
+13. **Every world has world sounds, switchable at spawn.** A world with a video player gets an idle
+    playlist that plays when nobody queued anything (VizVid idle mode PlayDefaultPlaylist, ≥ 4 h,
+    verified playable, pure-music uploads only: no music videos with talking, skits or other
+    non-music sound). A world without one gets looping global 2D ambience matching the world (rain
+    where it rains, wind and rustling leaves for forests and tree worlds, waves at the sea or
+    coast). The spawn settings menu turns world sound off or quieter, local only, saved with
+    Persistence. Details: `.omp/AGENTS.md` "World sounds" (user, 2026-11-12: "all worlds need to
+    have some kind of world sounds ... this should all be togglable off or made quieter in the
+    spawn menu").

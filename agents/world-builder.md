@@ -238,6 +238,9 @@ Once the real objects exist:
 - **Udon**: clickable teleport doors on the real doors, the teleport islands with their return doors
   and landings, toggles, video, pickups only where requested, the VIP gate. No mirror unless the
   plan puts a real one in a bathroom, gym or dance/dressing room (then start it off).
+- **World sounds** (RULES 13): the idle playlist on the video player, or the world's looping global
+  2D ambience; the spawn settings board's world-sound control (off / quieter, persisted). Prove it in
+  ClientSim: playing, off silences it, quieter lowers it, the choice survives a second play.
 - **Movement between floors and levels** (user, 2026-11-03), three systems, all on the one
   click-to-teleport script `.omp/templates/udon/TeleportDoor.cs.txt` (Interact → `TeleportTo` a
   landing transform, 3 m interaction distance, optional sfx, local only; a trigger BoxCollider over
