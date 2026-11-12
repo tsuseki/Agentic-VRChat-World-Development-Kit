@@ -5,14 +5,21 @@ using VRC.Udon;
 
 /// <summary>
 /// Local underwater look of a VRChat world: while the local player's HEAD is below the surface of a water volume,
-/// a full-screen overlay (tint, murk, gentle wobble, optional fake caustics), the scene fog (colour and density), the
-/// view of the water surface from below and a light muffle of the world's own audio sources are switched on, and
-/// everything is put back exactly on surfacing. Nothing is synced; nobody else is touched; there is no toggle.
+/// a full-screen overlay (tint, murk, gentle wobble, the view bent through the rippled surface, optional fake caustics),
+/// the scene fog (colour and density), the view of the water surface from below and a light muffle of the world's own
+/// audio sources are switched on, and everything is put back exactly on surfacing. Nothing is synced; nobody else is
+/// touched; there is no toggle.
 ///
 /// Water volumes are plain axis-aligned boxes (no colliders, no triggers): centre = the volume transform's position,
 /// size = its lossy scale, the TOP FACE is the water surface. Rotation is ignored. A head is "in" a volume when it is
 /// inside the box footprint and below the top face. Two presets sit on the same component (0 Subtle default, 1 Strong).
 /// Player voices are never touched (they are not scene audio sources); other players are not affected.
+///
+/// Surface ripples: an always-on swell and chop (strength per preset times a per-volume multiplier) plus splash rings:
+/// every player's feet are sampled round-robin (playersPerFrame per frame, at most one round per sampleInterval), and a
+/// player whose feet cross a volume's surface downward (or who wades fast) pushes a ring into an 8-slot buffer, the
+/// shader global array _UdonUW_Rings. Rings are tracked even while the local head is dry, so a world's own top-surface
+/// shader can use them too. Local only; no per-frame array allocations; 1-80+ players.
 ///
 /// The world's fog mode is kept (Exp, ExpSq or Linear; a build only keeps the fog variants its scenes use, so the mode
 /// must not be changed at runtime). Needs fog on in the world: with it off, builds have no fog variants at all.
@@ -42,6 +49,8 @@ public class UnderwaterFX : UdonSharpBehaviour
     public float exitHeight = 0.03f;
     [Tooltip("Bed height of each volume (same index): the fake caustics are projected onto this plane. Set by the installer")]
     public float[] bedY;
+    [Tooltip("Ripple multiplier of each volume (same index): calm pond 0.5, open water 1.5. Missing entries count as 1")]
+    public float[] volumeRipple;
 
     // index 0 = Subtle, 1 = Strong
     [Header("Per-preset values")]
@@ -61,10 +70,37 @@ public class UnderwaterFX : UdonSharpBehaviour
     public float[] lowpassHz = { 5000f, 4000f };
     [Tooltip("Gain of the muffled world audio sources, dB")]
     public float[] gainDb = { -2f, -2f };
+    [Tooltip("Surface normal tilt of the swell and chop (0 = flat mirror-calm water)")]
+    public float[] rippleStrength = { 0.45f, 0.7f };
+    [Tooltip("Swell scale, 1/m (larger = shorter swell)")]
+    public float[] rippleScale = { 0.8f, 0.8f };
+    public float[] rippleSpeed = { 0.6f, 0.8f };
+    [Tooltip("Overlay: screen shift per unit surface slope when looking up through the surface (bends the Snell window)")]
+    public float[] refraction = { 0.03f, 0.05f };
+    [Tooltip("Extra overlay wobble (x the preset wobble) while a fresh ring is within 4 m of the head")]
+    public float[] ringWobble = { 1.0f, 0.5f };
+
+    [Header("Splash rings (every player's feet crossing a surface; local only)")]
+    public float ringSpeed = 1.2f;
+    public float ringLife = 3f;
+    public float ringWavelength = 0.35f;
+    [Tooltip("Ring amplitude of a slow step in; a fall adds splashPerSpeed per m/s of downward speed (max 1)")]
+    public float splashMin = 0.25f;
+    public float splashPerSpeed = 0.2f;
+    [Tooltip("Wading: a ring of this amplitude (x horizontal speed / 4 m/s) every wakeInterval while feet are in the water and moving faster than wakeMinSpeed; 0 = off")]
+    public float wakeStrength = 0.2f;
+    public float wakeInterval = 0.6f;
+    public float wakeMinSpeed = 1f;
+    [Tooltip("Players farther than this from the local head (horizontally) make no rings, metres")]
+    public float ringRange = 40f;
+    [Tooltip("Players sampled per frame (round robin); a full round starts at most every sampleInterval seconds")]
+    public int playersPerFrame = 8;
+    public float sampleInterval = 0.05f;
 
     // runtime state, readable for tests
     [System.NonSerialized] public float amount;      // 0..1 linear fade state
     [System.NonSerialized] public bool submerged;    // head state with hysteresis
+    [System.NonSerialized] public int ringsPushed;   // splash and wake rings since start
 
     private bool _ready;
     private bool _active;                            // effect objects currently on
@@ -74,13 +110,30 @@ public class UnderwaterFX : UdonSharpBehaviour
     private float _worldFogDensity;
     private float[] _baseVolume;
 
-    private int _idParams, _idTint, _idMurk, _idFloor;
+    private int _idParams, _idTint, _idMurk, _idFloor, _idWave, _idRingCfg, _idRings;
 
     // active preset, cached
     private Color _tint, _fogColor, _murkColor;
     private float _desat, _fogDensity, _fogEndUW, _murk, _wobble, _wobbleSpeed, _caustics, _lowpass, _gain;
-    private float _worldFogStart, _worldFogEnd, _floorY;
+    private float _ripple, _rippleScale, _rippleSpeed, _refraction, _ringWobble;
+    private float _worldFogStart, _worldFogEnd, _floorY, _surfY, _curTop, _ringBoost;
     private int _curVolume = -1;
+    private int _waveVolume = -2;                    // volume whose ripple multiplier is in _UdonUW_Wave
+
+    // volumes, cached for the player tracking (static water)
+    private float[] _vxMin, _vxMax, _vzMin, _vzMax, _vTop, _vBot;
+
+    // player tracking: one round-robin snapshot of the players; per-player state in 256 slots keyed by playerId & 255
+    private VRCPlayerApi[] _players;
+    private int _count, _cursor;
+    private float _roundStart = -100f;
+    private int[] _slotId;
+    private float[] _slotX, _slotY, _slotZ, _slotT, _slotRing;
+
+    // ring buffer = the shader global array (always 8 long: the first set fixes a global array's length)
+    private Vector4[] _rings;
+    private int _ringNext;
+    private float _ringsUntil = -100f;
 
     void Start()
     {
@@ -89,6 +142,9 @@ public class UnderwaterFX : UdonSharpBehaviour
         _idTint = VRCShader.PropertyToID("_UdonUW_Tint");
         _idMurk = VRCShader.PropertyToID("_UdonUW_Murk");
         _idFloor = VRCShader.PropertyToID("_UdonUW_Floor");
+        _idWave = VRCShader.PropertyToID("_UdonUW_Wave");
+        _idRingCfg = VRCShader.PropertyToID("_UdonUW_RingCfg");
+        _idRings = VRCShader.PropertyToID("_UdonUW_Rings");
 
         _worldFog = RenderSettings.fog;
         _worldFogMode = RenderSettings.fogMode;
@@ -100,13 +156,36 @@ public class UnderwaterFX : UdonSharpBehaviour
         int n = 0;
         if (mutedSources != null) n = mutedSources.Length;
         _baseVolume = new float[n];
+        _CaptureBaseVolumes();
         for (int i = 0; i < n; i++)
         {
-            if (mutedSources[i] != null) _baseVolume[i] = mutedSources[i].volume;
             if (mutedFilters != null && i < mutedFilters.Length && mutedFilters[i] != null) mutedFilters[i].enabled = false;
         }
 
+        int nv = 0;
+        if (volumes != null) nv = volumes.Length;
+        _vxMin = new float[nv]; _vxMax = new float[nv]; _vzMin = new float[nv]; _vzMax = new float[nv];
+        _vTop = new float[nv]; _vBot = new float[nv];
+        for (int i = 0; i < nv; i++)
+        {
+            Transform v = volumes[i];
+            if (v == null) { _vxMin[i] = 1f; _vxMax[i] = -1f; continue; } // empty footprint: never matches
+            Vector3 c = v.position;
+            Vector3 h = v.lossyScale * 0.5f;
+            _vxMin[i] = c.x - h.x; _vxMax[i] = c.x + h.x; _vzMin[i] = c.z - h.z; _vzMax[i] = c.z + h.z;
+            _vTop[i] = c.y + h.y; _vBot[i] = c.y - h.y;
+        }
+
+        _players = new VRCPlayerApi[128];
+        _slotId = new int[256]; _slotX = new float[256]; _slotY = new float[256]; _slotZ = new float[256];
+        _slotT = new float[256]; _slotRing = new float[256];
+        for (int i = 0; i < 256; i++) _slotId[i] = -1;
+        _rings = new Vector4[8];
+        VRCShader.SetGlobalVectorArray(_idRings, _rings);
+        VRCShader.SetGlobalVector(_idRingCfg, new Vector4(ringSpeed, ringLife, ringWavelength, Time.time));
+
         _ReadPreset();
+        _SetWave(_curVolume);
         _SetObjects(false);
         _ready = true;
     }
@@ -115,6 +194,7 @@ public class UnderwaterFX : UdonSharpBehaviour
     public void _ApplyPreset()
     {
         _ReadPreset();
+        _SetWave(_curVolume);
     }
 
     private void _ReadPreset()
@@ -135,6 +215,33 @@ public class UnderwaterFX : UdonSharpBehaviour
         _caustics = causticStrength[p];
         _lowpass = Mathf.Clamp(lowpassHz[p], 500f, 22000f);
         _gain = Mathf.Pow(10f, gainDb[p] / 20f);
+        _ripple = rippleStrength[p];
+        _rippleScale = rippleScale[p];
+        _rippleSpeed = rippleSpeed[p];
+        _refraction = refraction[p];
+        _ringWobble = ringWobble[p];
+    }
+
+    /// <summary>Takes the current volume of every muffled source as its dry volume. Call it (SendCustomEvent or a U#
+    /// reference) from a world sound control after it changes a volume, so surfacing restores the player's level, not
+    /// the one at Start. While submerged the next frame re-applies the muffle gain on top of the new volume.</summary>
+    public void _CaptureBaseVolumes()
+    {
+        if (mutedSources == null) return;
+        if (_baseVolume == null || _baseVolume.Length != mutedSources.Length) _baseVolume = new float[mutedSources.Length];
+        for (int i = 0; i < mutedSources.Length; i++)
+        {
+            if (mutedSources[i] != null) _baseVolume[i] = mutedSources[i].volume;
+        }
+    }
+
+    // swell / chop strength of the preset times the volume's multiplier (vi < 0: no volume yet = x1)
+    private void _SetWave(int vi)
+    {
+        _waveVolume = vi;
+        float mul = 1f;
+        if (vi >= 0 && volumeRipple != null && vi < volumeRipple.Length) mul = volumeRipple[vi];
+        VRCShader.SetGlobalVector(_idWave, new Vector4(_ripple * mul, _rippleScale, _rippleSpeed, _refraction));
     }
 
     void Update()
@@ -144,12 +251,24 @@ public class UnderwaterFX : UdonSharpBehaviour
         VRCPlayerApi lp = Networking.LocalPlayer;
         if (!Utilities.IsValid(lp)) return;
 
-        float depth = _HeadDepth(lp.GetTrackingData(VRCPlayerApi.TrackingDataType.Head).position);
+        float now = Time.time;
+        Vector3 head = lp.GetTrackingData(VRCPlayerApi.TrackingDataType.Head).position;
+
+        _Track(now, head);
+        // the rings' clock: only while a ring lives (plus one last update after the last one has faded out)
+        if (now < _ringsUntil + 0.1f) VRCShader.SetGlobalVector(_idRingCfg, new Vector4(ringSpeed, ringLife, ringWavelength, now));
+
+        float depth = _HeadDepth(head);
         // on as soon as the head is under the surface (a world water surface is usually back-face culled, so any later
         // switch shows a drained pond); off only exitHeight above it, which is the hysteresis against head-tracking jitter
         if (submerged) { if (depth < -exitHeight) submerged = false; }
         else { if (depth > 0f) submerged = true; }
-        if (submerged && _curVolume >= 0 && bedY != null && _curVolume < bedY.Length) _floorY = bedY[_curVolume];
+        if (submerged && _curVolume >= 0)
+        {
+            if (bedY != null && _curVolume < bedY.Length) _floorY = bedY[_curVolume];
+            _surfY = _curTop;
+            if (_curVolume != _waveVolume) _SetWave(_curVolume);
+        }
 
         float target = submerged ? 1f : 0f;
         if (amount == target && amount == 0f)
@@ -168,11 +287,12 @@ public class UnderwaterFX : UdonSharpBehaviour
         }
 
         if (!_active) _SetObjects(true);
+        _ringBoost = _RingBoost(now, head);
         _Apply(amount * amount * (3f - 2f * amount));
     }
 
     // metres the point is below the top face of the deepest volume that holds it; a large negative number when none does.
-    // (the volume that holds the point is remembered in _curVolume: its bed height anchors the caustics)
+    // (the volume that holds the point is remembered in _curVolume and its top in _curTop: its bed anchors the caustics)
     private float _HeadDepth(Vector3 head)
     {
         float best = -1000f;
@@ -186,10 +306,117 @@ public class UnderwaterFX : UdonSharpBehaviour
             if (Mathf.Abs(head.x - c.x) > h.x || Mathf.Abs(head.z - c.z) > h.z) continue;
             if (head.y < c.y - h.y) continue;
             float d = (c.y + h.y) - head.y;
-            if (d > best) { best = d; _curVolume = i; }
+            if (d > best) { best = d; _curVolume = i; _curTop = c.y + h.y; }
         }
         return best;
     }
+
+    // ---- splash rings -------------------------------------------------------------------------------------------
+
+    // samples up to playersPerFrame players this frame; a new snapshot of the player list starts each round
+    private void _Track(float now, Vector3 head)
+    {
+        if (_vTop.Length == 0) return;
+        if (_cursor >= _count)
+        {
+            if (now - _roundStart < sampleInterval) return;
+            _roundStart = now;
+            VRCPlayerApi.GetPlayers(_players);
+            _count = Mathf.Min(VRCPlayerApi.GetPlayerCount(), _players.Length);
+            _cursor = 0;
+        }
+        int end = Mathf.Min(_cursor + Mathf.Max(playersPerFrame, 1), _count);
+        while (_cursor < end)
+        {
+            _Sample(_players[_cursor], now, head);
+            _cursor++;
+        }
+    }
+
+    private void _Sample(VRCPlayerApi p, float now, Vector3 head)
+    {
+        if (!Utilities.IsValid(p)) return;
+        int id = p.playerId;
+        int s = id & 255;
+        Vector3 pos = p.GetPosition();
+        if (_slotId[s] != id)
+        {
+            // new player in this slot (or a slot collision): start tracking, no ring this time
+            _slotId[s] = id; _slotX[s] = pos.x; _slotY[s] = pos.y; _slotZ[s] = pos.z; _slotT[s] = now; _slotRing[s] = -100f;
+            return;
+        }
+        float dt = now - _slotT[s];
+        float px = _slotX[s], py = _slotY[s], pz = _slotZ[s];
+        _slotX[s] = pos.x; _slotY[s] = pos.y; _slotZ[s] = pos.z; _slotT[s] = now;
+        if (dt <= 0.001f || dt > 1f) return;
+
+        // the surface under the feet: the volume whose top is nearest the feet
+        float top = 0f; float bestGap = 1000f;
+        for (int i = 0; i < _vTop.Length; i++)
+        {
+            if (pos.x < _vxMin[i] || pos.x > _vxMax[i] || pos.z < _vzMin[i] || pos.z > _vzMax[i]) continue;
+            if (pos.y < _vBot[i] - 1f) continue;
+            float gap = Mathf.Abs(pos.y - _vTop[i]);
+            if (gap < bestGap) { bestGap = gap; top = _vTop[i]; }
+        }
+        if (bestGap >= 1000f) return;
+
+        float hx = pos.x - head.x, hz = pos.z - head.z;
+        if (hx * hx + hz * hz > ringRange * ringRange) return;
+
+        float vy = (py - pos.y) / dt;                                   // downward speed
+        float mx = pos.x - px, mz = pos.z - pz;
+        float hs = Mathf.Sqrt(mx * mx + mz * mz) / dt;                  // horizontal speed
+        if (vy > 40f || vy < -40f || hs > 12f) return;                  // teleport (or a vehicle), not a body entering water
+
+        if (py > top && pos.y <= top)
+        {
+            float a = Mathf.Clamp01(splashMin + vy * splashPerSpeed);
+            // a slow wade across a sloping bank must not ring on every step
+            if (a < 0.5f && now - _slotRing[s] < wakeInterval) return;
+            _PushRing(pos.x, pos.z, now, a);
+            _slotRing[s] = now;
+        }
+        else if (wakeStrength > 0f && pos.y < top - 0.05f && pos.y > top - 1.2f && hs > wakeMinSpeed && now - _slotRing[s] > wakeInterval)
+        {
+            _PushRing(pos.x, pos.z, now, wakeStrength * Mathf.Clamp01(hs / 4f));
+            _slotRing[s] = now;
+        }
+    }
+
+    private void _PushRing(float x, float z, float now, float a)
+    {
+        _rings[_ringNext] = new Vector4(x, z, now, a);
+        _ringNext = (_ringNext + 1) & 7;
+        VRCShader.SetGlobalVectorArray(_idRings, _rings);
+        float until = now + ringLife;
+        if (until > _ringsUntil) _ringsUntil = until;
+        ringsPushed++;
+    }
+
+    // 0..1: how strongly a fresh ring near the head (within 4 m, head within 2 m of the surface) should shake the view
+    private float _RingBoost(float now, Vector3 head)
+    {
+        if (now >= _ringsUntil) return 0f;
+        float near = Mathf.Clamp01(1f - (_surfY - head.y) / 2f);
+        if (near <= 0f) return 0f;
+        float best = 0f;
+        for (int i = 0; i < 8; i++)
+        {
+            Vector4 r = _rings[i];
+            if (r.w <= 0f) continue;
+            float age = now - r.z;
+            if (age <= 0f || age >= ringLife) continue;
+            float dx = head.x - r.x, dz = head.z - r.y;
+            float k = 1f - Mathf.Sqrt(dx * dx + dz * dz) / 4f;
+            if (k <= 0f) continue;
+            k *= r.w * (1f - age / ringLife);
+            if (k > best) best = k;
+        }
+        return best * near;
+    }
+
+    // ---- effect on / off ----------------------------------------------------------------------------------------
 
     private void _SetObjects(bool on)
     {
@@ -205,8 +432,8 @@ public class UnderwaterFX : UdonSharpBehaviour
     // e = eased amount 0..1
     private void _Apply(float e)
     {
-        VRCShader.SetGlobalVector(_idParams, new Vector4(e, _wobble, _wobbleSpeed, _caustics));
-        VRCShader.SetGlobalVector(_idFloor, new Vector4(_floorY, 0f, 0f, 0f));
+        VRCShader.SetGlobalVector(_idParams, new Vector4(e, _wobble * (1f + _ringWobble * _ringBoost), _wobbleSpeed, _caustics));
+        VRCShader.SetGlobalVector(_idFloor, new Vector4(_floorY, _surfY, 0f, 0f));
         VRCShader.SetGlobalVector(_idTint, new Vector4(_tint.r, _tint.g, _tint.b, _desat));
         VRCShader.SetGlobalVector(_idMurk, new Vector4(_murkColor.r, _murkColor.g, _murkColor.b, _murk));
 
@@ -234,6 +461,7 @@ public class UnderwaterFX : UdonSharpBehaviour
     private void _Restore()
     {
         amount = 0f;
+        _ringBoost = 0f;
         VRCShader.SetGlobalVector(_idParams, Vector4.zero);
 
         RenderSettings.fog = _worldFog;

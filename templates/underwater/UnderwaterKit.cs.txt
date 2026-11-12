@@ -78,6 +78,10 @@ namespace AWDK.Underwater
             var ss = Shader.Find("World/UnderwaterSurface");
             if (so == null || ss == null)
                 return "ERROR shader missing (copy both .shader files and let Unity import them): overlay=" + (so != null) + " surface=" + (ss != null);
+            var inc = Path.GetDirectoryName(AssetDatabase.GetAssetPath(so)).Replace('\\', '/') + "/UnderwaterRipples.cginc";
+            if (!File.Exists(inc)) return "ERROR " + inc + " missing (copy UnderwaterRipples.cginc next to both shaders)";
+            if (ShaderUtil.ShaderHasError(so) || ShaderUtil.ShaderHasError(ss))
+                return "ERROR shader compile errors: overlay=" + ShaderUtil.ShaderHasError(so) + " surface=" + ShaderUtil.ShaderHasError(ss) + " (see the shader inspector)";
 
             if (AssetDatabase.LoadAssetAtPath<Mesh>(dir + "Meshes/UnderwaterOverlayQuad.asset") == null)
             {
@@ -166,7 +170,7 @@ namespace AWDK.Underwater
 
             GameObject root = FindRoot(scene);
             UnderwaterFX fx = null;
-            var volumes = new List<Transform>(); var surfaces = new List<GameObject>(); var bed = new List<float>();
+            var volumes = new List<Transform>(); var surfaces = new List<GameObject>(); var bed = new List<float>(); var ripple = new List<float>();
             if (append && root != null)
             {
                 fx = root.GetComponent<UnderwaterFX>();
@@ -175,6 +179,8 @@ namespace AWDK.Underwater
                 if (fx.surfaces != null) surfaces.AddRange(fx.surfaces);
                 if (fx.bedY != null) bed.AddRange(fx.bedY);
                 while (bed.Count < volumes.Count) bed.Add(surfaceY - 1f);
+                if (fx.volumeRipple != null) ripple.AddRange(fx.volumeRipple);
+                while (ripple.Count < volumes.Count) ripple.Add(1f);
                 // an underside that was copied to a per-scene material by SetUnderside keeps using it
                 if (surfaces.Count > 0 && surfaces[0] != null)
                 {
@@ -208,6 +214,7 @@ namespace AWDK.Underwater
                 v.transform.localScale = new Vector3(sx, sy, sz);
                 volumes.Add(v.transform);
                 bed.Add(MedianBed(f, surfaceY));
+                ripple.Add(1f);
 
                 // underside: 1 mm under the surface (Cull Front vs the world water's Cull Back: never the same camera side)
                 var s = Child(surfRoot, "Surface_" + n);
@@ -233,7 +240,7 @@ namespace AWDK.Underwater
             bool created = fx == null;
             if (created) fx = root.AddUdonSharpComponent<UnderwaterFX>();
             fx.volumes = volumes.ToArray(); fx.surfaces = surfaces.ToArray(); fx.overlay = root.transform.Find("Overlay").gameObject;
-            fx.mutedSources = srcs.ToArray(); fx.mutedFilters = filters.ToArray(); fx.bedY = bed.ToArray();
+            fx.mutedSources = srcs.ToArray(); fx.mutedFilters = filters.ToArray(); fx.bedY = bed.ToArray(); fx.volumeRipple = ripple.ToArray();
             var fogNote = "";
             if (created)
             {
@@ -303,6 +310,18 @@ namespace AWDK.Underwater
             fx.tint[p] = tint; fx.fogColor[p] = fogColor; fx.murkColor[p] = murkColor;
             if (fogEnd > 0f) fx.fogEnd[p] = fogEnd;
             return Commit(fx, "OK preset " + p + " tint/fog/murk set, fogEnd=" + fx.fogEnd[p].ToString("F1", Inv));
+        }
+
+        /// <summary>Ripple multiplier of one water body (volume index as in the Install report): calm pond 0.5, open water 1.5.</summary>
+        public static string SetRipple(int volume, float multiplier)
+        {
+            var fx = FindFx();
+            if (fx == null || fx.volumes == null || volume < 0 || volume >= fx.volumes.Length) return "ERROR no " + RootName + " or no volume " + volume;
+            var r = new float[fx.volumes.Length];
+            for (int i = 0; i < r.Length; i++) r[i] = fx.volumeRipple != null && i < fx.volumeRipple.Length ? fx.volumeRipple[i] : 1f;
+            r[volume] = Mathf.Max(0f, multiplier);
+            fx.volumeRipple = r;
+            return Commit(fx, "OK volume " + volume + " ripple x" + r[volume].ToString("F2", Inv));
         }
 
         /// <summary>The preset the world ships with: 0 Subtle (default), 1 Strong.</summary>

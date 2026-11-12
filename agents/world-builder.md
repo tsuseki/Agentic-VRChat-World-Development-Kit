@@ -269,7 +269,8 @@ Once the real objects exist:
   per water body, preset 0 Subtle unless the user picked Strong, tint matched to the world's water,
   Exponential-fog worlds ~1.6× the fog distance, scene fog on). Proof in ClientSim per its README:
   `sweep` (on at the surface, off 3 cm above, one switch each way, 0 drained frames), `bob` (no flicker
-  at ±1–2.5 cm), `dive` (one on / one off, fog restored bit-exact), nothing visible from above,
+  at ±1–2.5 cm), `dive` (one on / one off, fog restored bit-exact), `splash` (a jump-in ring spreads over
+  the underside and bends the Snell window, calm again after ~3 s), nothing visible from above,
   Subtle/Strong frames from 3–4 poses plus above-water references, render in play mode (edit-mode
   renders can show the water black), and the cost on vs off. Record the volumes and settings in WORLD.md.
 - **Clip planes and fog** per the plan's near/far and fog values (`.omp/skills/clip-planes/SKILL.md` §2, §7).
@@ -319,7 +320,7 @@ invalidates (rebake the area, rebake the probes, re-measure, rerun the final rev
    lie-down toggle on and off; where a walk is impractical, use a downward-raycast grid over the
    floors plus a capsule check at each landing (see `.omp/knowledge/notes/` on landings). Report
    each route/door/toggle → pass/fail with positions, plus the underwater job logs (`sweep`, `bob`,
-   `dive`, `audio`, `perf`) and the Subtle/Strong contact sheet per water body; this is the play-test
+   `dive`, `splash`, `audio`, `perf`) and the Subtle/Strong contact sheet per water body; this is the play-test
    evidence dressing-reviewer's C.2 review needs (reviewers never enter play mode).
 4. **D.1 only:** report the newest lightmap file timestamp and every reflection-probe texture
    timestamp (probes must be newer), and the post-bake verify numbers; final-reviewer requires them.

@@ -283,7 +283,8 @@ yaw), never from pixels, and quote the measured value in each finding.
     the surface and off ~3 cm above it, one switch each way, 0 drained frames (head under the surface
     with no underside: a "drained pond") and no flicker at ±1–2.5 cm bob; fog restored bit-exact with the
     world's fog mode unchanged (scene fog on); nothing of the effect visible from above; frames rendered
-    in play mode (flat-black water = edit-mode artefact, reject). Judge the look per preset: reads as
+    in play mode (flat-black water = edit-mode artefact, reject); the `splash` frames show a ring spreading
+    from the drop point and the surface is rippled, not glass-flat. Judge the look per preset: reads as
     underwater, tint matches the world's water, the bed stays readable at Subtle, an Exponential-fog
     world not murkier than intended (`fogEnd` ~1.6×), sync None, only `_UdonUW_*` globals, voices
     untouched. A failed switch, restore or fog check is a should-fix; the near-clip band within ~1 cm

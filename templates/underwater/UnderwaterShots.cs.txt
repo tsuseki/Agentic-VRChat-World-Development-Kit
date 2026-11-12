@@ -23,6 +23,9 @@ namespace AWDK.Underwater
     ///   Start("shots", outDir, w, h)  above-water reference + Subtle + Strong frames per pose (PNG in outDir)
     ///   Start("perf", outDir, w, h)   render cost with the overlay and underside on vs off (editor numbers)
     ///   Start("audio", outDir)  every muffled source: filter and volume surfaced / submerged / surfaced
+    ///   Start("splash", outDir, w, h) the local player drops into the water from 1.2 m: one splash ring (ringsPushed +1,
+    ///                           amplitude near 1), then the head goes under next to it and frames look up at the ring
+    ///                           as it spreads (_splash_<age>.png) plus a calm frame; logs the ring globals
     /// volume = index of the water volume to test (-1 = the deepest). posesJson (optional, shots/perf):
     ///   {"poses":[{"name":"A","x":0,"z":0,"headY":-0.6,"yaw":90,"pitch":2}]}  (world metres and degrees)
     /// Default poses are measured at the deepest point: across, up at the surface, toward the shore, down at the bed.
@@ -81,7 +84,8 @@ namespace AWDK.Underwater
             else if (mode == "audio") job = AudioJob();
             else if (mode == "bob") job = BobJob();
             else if (mode == "sweep") job = SweepJob();
-            else return "ERROR unknown mode " + mode + " (sweep, bob, dive, shots, perf, audio)";
+            else if (mode == "splash") job = SplashJob(outDir, w, h);
+            else return "ERROR unknown mode " + mode + " (sweep, bob, dive, shots, perf, audio, splash)";
 
             Log.Clear(); _name = mode; _running = true;
             Say("volume=" + _vol + " surface=" + F(_surface) + " deepest bed=" + F(_deepBed) + " at (" + F(_deep.x, "F2") + ", " + F(_deep.y, "F2") + ")"
@@ -114,6 +118,7 @@ namespace AWDK.Underwater
         static IEnumerator Finally(IEnumerator job)
         {
             yield return job;
+            Say("ringsPushed total=" + Var("ringsPushed"));
             GoHome();
             yield return WaitFrames(5);
         }
@@ -211,7 +216,7 @@ namespace AWDK.Underwater
         static float Var(string n)
         {
             var v = Fx().GetProgramVariable(n);
-            return v is float ? (float)v : (v is bool ? ((bool)v ? 1f : 0f) : float.NaN);
+            return v is float ? (float)v : (v is int ? (int)v : (v is bool ? ((bool)v ? 1f : 0f) : float.NaN));
         }
 
         static void SetPreset(int p) { var fx = Fx(); fx.SetProgramVariable("preset", p); fx.SendCustomEvent("_ApplyPreset"); }
@@ -362,6 +367,59 @@ namespace AWDK.Underwater
             Say("after  " + Fog() + " amount=" + Var("amount"));
             Say("EXACT_RESTORE=" + (before == Fog()));
             Say("overlayActive=" + OverlayOn());
+        }
+
+        // splash rings: the local player falls into the water (its own feet cross the surface), then its head goes under
+        // 2 m away and frames look up at the spreading ring
+        static IEnumerator SplashJob(string outDir, int w, int h)
+        {
+            var lp = Networking.LocalPlayer;
+            SetPreset(0);
+            yield return Surface();
+            // camera spot: a wet point 2-2.5 m from the deepest point, deep enough for the head 0.3 m under the surface
+            Vector2 cam = _deep; bool side = false;
+            for (int k = 0; k < 8 && !side; k++)
+            {
+                float a = k * Mathf.PI / 4f;
+                for (float s = 2f; s <= 2.5f && !side; s += 0.5f)
+                {
+                    var p = _deep + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * s;
+                    float b = Bed(p.x, p.y);
+                    if (!float.IsNaN(b) && b < _surface - 0.6f) { cam = p; side = true; }
+                }
+            }
+            float before = Var("ringsPushed");
+            lp.TeleportTo(new Vector3(_deep.x, _surface + 1.2f, _deep.y), Quaternion.identity);
+            float t0 = Time.time;
+            while (Var("ringsPushed") <= before && Time.time - t0 < 4f) yield return WaitFrames(1);
+            float tSplash = Time.time;
+            Say("splash: ringsPushed " + before + " -> " + Var("ringsPushed") + " after " + F(tSplash - t0, "F2") + " s");
+            var rings = Shader.GetGlobalVectorArray("_UdonUW_Rings");
+            if (rings == null) Say("ERROR global _UdonUW_Rings not set");
+            else
+            {
+                Vector4 last = Vector4.zero;
+                foreach (var r in rings) if (r.z >= last.z) last = r;
+                Say("rings global length=" + rings.Length + " newest=(x " + F(last.x, "F2") + ", z " + F(last.y, "F2") + ", t " + F(last.z, "F2") + ", amp " + F(last.w, "F2")
+                    + ") drop at (" + F(_deep.x, "F2") + ", " + F(_deep.y, "F2") + ")");
+            }
+
+            float headY = Mathf.Max(_surface - 0.3f, Bed(cam.x, cam.y) + 0.3f);
+            float yaw = side ? Yaw(cam, _deep) : 0f;
+            // looking 25 degrees up toward the drop point: the ring near the frame's lower third, the Snell window above it
+            float pitch = side ? -25f : -80f;
+            PlaceHead(cam.x, cam.y, headY, yaw);
+            int g = 0; while (g++ < 600 && Var("amount") < 0.999f) yield return WaitFrames(1);
+            foreach (float age in new[] { 0.4f, 0.9f, 1.6f, 2.4f, 4.5f })
+            {
+                while (Time.time - tSplash < age) yield return WaitFrames(1);
+                float real = Time.time - tSplash;
+                var cfg = Shader.GetGlobalVector("_UdonUW_RingCfg"); var prm = Shader.GetGlobalVector("_UdonUW_Params");
+                Say("frame age=" + F(real, "F2") + " s head=" + Head().ToString("F3") + " amount=" + F(Var("amount")) + " ringBoost=" + F(Var("_ringBoost"))
+                    + " wobble=" + F(prm.y, "F4") + " ringNow=" + F(cfg.w, "F2") + " wave=" + Shader.GetGlobalVector("_UdonUW_Wave").ToString("F3"));
+                Shoot(new Vector3(cam.x, headY, cam.y), yaw, pitch, Path.Combine(outDir, "splash_" + F(age, "F1") + "s.png"), w, h);
+            }
+            Say("ringsPushed after the frames=" + Var("ringsPushed") + " (more than one after the splash = wake rings from the head placement)");
         }
 
         // render cost at the first pose: overlay and underside on vs off (render + GPU sync, editor numbers)

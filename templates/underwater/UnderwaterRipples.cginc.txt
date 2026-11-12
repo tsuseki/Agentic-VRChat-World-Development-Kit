@@ -1,0 +1,79 @@
+// UnderwaterRipples.cginc: the water surface's slope field, shared by World/UnderwaterSurface (the underside it
+// draws) and World/UnderwaterOverlay (the view bent through the surface). A world's own top-surface water shader
+// may include it too and add UW_Rings(worldPos.xz) to its normal (the rings are tracked even while nobody is under).
+// Procedural only: no textures, no depth, no RenderTexture. Written from scratch.
+// Globals, set by UnderwaterFX (Udon may only set globals named _Udon*); all zero = flat water:
+//   _UdonUW_Wave     x swell + chop tilt, y swell scale (1/m), z swell speed, w overlay refraction (screen per unit slope)
+//   _UdonUW_RingCfg  x ring speed (m/s), y ring life (s), z ring wavelength (m), w now (UnderwaterFX's Time.time)
+//   _UdonUW_Rings[8] x, z world position, start time (same clock as RingCfg.w), amplitude 0..1 (0 = empty slot)
+// AWDK templates/underwater: copy as Shaders/UnderwaterRipples.cginc (next to both shaders).
+#ifndef UNDERWATER_RIPPLES_INCLUDED
+#define UNDERWATER_RIPPLES_INCLUDED
+
+float4 _UdonUW_Wave;
+float4 _UdonUW_RingCfg;
+float4 _UdonUW_Rings[8];
+
+// long gentle swell: gradient of a few crossing sine trains (p already scaled to 1/m * scale)
+float2 UW_Swell(float2 p, float t)
+{
+    float2 g = 0;
+    g += float2(0.9, 0.3) * cos(dot(p, float2(0.9, 0.3)) * 2.1 + t * 1.7);
+    g += float2(-0.4, 0.8) * cos(dot(p, float2(-0.4, 0.8)) * 2.9 - t * 1.3);
+    g += float2(0.5, -0.7) * cos(dot(p, float2(0.5, -0.7)) * 3.7 + t * 2.1);
+    g += float2(-0.8, -0.5) * cos(dot(p, float2(-0.8, -0.5)) * 5.3 - t * 1.1);
+    return g * 0.25;
+}
+
+// fine chop, 0.3-0.5 m wavelengths in world metres
+float2 UW_Chop(float2 p, float t)
+{
+    float2 g = 0;
+    g += float2(0.8, 0.6) * cos(dot(p, float2(0.8, 0.6)) * 13.0 + t * 3.1);
+    g += float2(-0.6, 0.8) * cos(dot(p, float2(-0.6, 0.8)) * 17.0 - t * 2.7);
+    g += float2(0.28, -0.96) * cos(dot(p, float2(0.28, -0.96)) * 21.0 + t * 3.7);
+    return g * 0.12;
+}
+
+// 1 where a pixel covers well under the chop wavelength, 0 where it would alias. Call OUTSIDE any branch (fwidth).
+float UW_ChopFade(float2 xz)
+{
+    float2 fw = fwidth(xz);
+    return saturate(1.0 - (max(fw.x, fw.y) - 0.02) / 0.06);
+}
+
+// expanding, decaying rings from players entering the water: radial slope of a travelling wave packet
+float2 UW_Rings(float2 xz)
+{
+    float2 g = 0;
+    float now = _UdonUW_RingCfg.w;
+    float speed = _UdonUW_RingCfg.x;
+    float life = max(_UdonUW_RingCfg.y, 0.01);
+    float k = 6.2831853 / max(_UdonUW_RingCfg.z, 0.05);
+    [unroll]
+    for (int i = 0; i < 8; i++)
+    {
+        float4 r = _UdonUW_Rings[i];
+        float age = now - r.z;
+        if (r.w > 0.0 && age > 0.0 && age < life)
+        {
+            float2 d = xz - r.xy;
+            float dist = length(d) + 1e-4;
+            float front = age * speed;
+            float x = (dist - front) / (0.12 + 0.18 * age);
+            float fade = 1.0 - age / life;
+            float env = exp(-x * x) * fade * fade * r.w / (1.0 + 0.6 * front);
+            g += (d / dist) * (cos((dist - front) * k) * env);
+        }
+    }
+    return g * 0.6;
+}
+
+// the full surface slope (x, z) at world position xz; t = _Time.y
+float2 UW_SurfaceSlope(float2 xz, float t, float chopFade)
+{
+    float2 s = UW_Swell(xz * _UdonUW_Wave.y, t * _UdonUW_Wave.z) + UW_Chop(xz, t) * chopFade;
+    return s * _UdonUW_Wave.x + UW_Rings(xz);
+}
+
+#endif

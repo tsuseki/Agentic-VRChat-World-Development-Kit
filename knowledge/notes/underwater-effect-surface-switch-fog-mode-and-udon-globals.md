@@ -63,3 +63,14 @@ water.
   it is inherent and transient.
 - Shaders that apply fog from their own uniforms (radial fog for mirrors) ignore a `RenderSettings` swap
   unless the effect drives those uniforms too.
+- Udon can set global **arrays**: `VRCShader.SetGlobalVectorArray` and `SetGlobalFloatArray` are exposed (their
+  extern names are in the SDK 3.10.5 Udon modules). Unity fixes a global array's length at its first set, so
+  allocate the array once at the shader's declared length (`float4 _UdonX[8]`), upload it in `Start` and always
+  pass the same array.
+- Per-player state without dictionaries or per-frame allocation: fixed slot arrays indexed by `playerId & 255`
+  (store the id to detect a reused slot), one `VRCPlayerApi.GetPlayers(array)` per round into a preallocated
+  array of 128, and a few players sampled per frame round-robin. Ignore moves faster than a body can make
+  (teleports) before treating them as entering the water. (The kit's splash rings use this; its play-mode
+  and 80-player cost proof is still open.)
+- In a fragment shader, take `fwidth` (for distance fades of fine ripples) outside any branch; compute the
+  world point unconditionally and mask the result instead.
