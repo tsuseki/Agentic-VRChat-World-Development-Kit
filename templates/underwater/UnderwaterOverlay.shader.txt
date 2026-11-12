@@ -1,0 +1,132 @@
+// World/UnderwaterOverlay: full-screen underwater look (tint, murk vignette, gentle wobble, optional fake caustics).
+// One draw, no depth texture (VRChat worlds without a realtime light have none), no extra camera, no RenderTexture.
+// The mesh only carries bounds; the vertex shader writes the clip-space quad itself, so it covers both eyes of a
+// single-pass-instanced HMD and a desktop camera alike, and needs no transform to follow the head.
+// Driven by VRCShader globals set by UnderwaterFX (all zero = no effect; Udon may only set globals named _Udon*):
+//   _UdonUW_Params  x amount 0..1 (fade in/out), y wobble amplitude (screen heights), z wobble speed, w caustic strength
+//   _UdonUW_Tint    rgb colour multiplied into the scene, a desaturation 0..1
+//   _UdonUW_Murk    rgb murk colour mixed in towards the screen edges, a strength 0..1
+//   _UdonUW_Floor   x bed height of the volume the head is in (the caustics' plane)
+// Written from scratch (the Mochie "Underwater Visuals" shader was only a behavioural reference; no code copied).
+// AWDK templates/underwater: copy as UnderwaterOverlay.shader.
+Shader "World/UnderwaterOverlay"
+{
+    SubShader
+    {
+        Tags { "Queue"="Transparent+100" "RenderType"="Transparent" "IgnoreProjector"="True" "ForceNoShadowCasting"="True" "DisableBatching"="True" }
+
+        GrabPass { "_UWGrab" }
+
+        Pass
+        {
+            Name "UNDERWATER"
+            Cull Off
+            ZTest Always
+            ZWrite Off
+            Blend Off
+
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma target 3.0
+            #pragma multi_compile_instancing
+            #include "UnityCG.cginc"
+
+            UNITY_DECLARE_SCREENSPACE_TEXTURE(_UWGrab);
+
+            float4 _UdonUW_Params;
+            float4 _UdonUW_Tint;
+            float4 _UdonUW_Murk;
+            float4 _UdonUW_Floor;
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                UNITY_VERTEX_INPUT_INSTANCE_ID
+            };
+
+            struct v2f
+            {
+                float4 pos : SV_POSITION;
+                float3 viewRay : TEXCOORD0;
+                UNITY_VERTEX_OUTPUT_STEREO
+            };
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                UNITY_SETUP_INSTANCE_ID(v);
+                UNITY_INITIALIZE_OUTPUT(v2f, o);
+                UNITY_INITIALIZE_VERTEX_OUTPUT_STEREO(o);
+
+                // the mesh is a quad of vertices at +-0.5: stretch it over the whole viewport
+                float2 ndc = v.vertex.xy * 2.0;
+                o.pos = float4(ndc, UNITY_NEAR_CLIP_VALUE, 1.0);
+
+                // world-space ray of this corner (stereo-safe: unity_CameraInvProjection and UNITY_MATRIX_I_V are per eye)
+                float4 vp = mul(unity_CameraInvProjection, float4(ndc.x, ndc.y * _ProjectionParams.x, 1.0, 1.0));
+                float3 viewDir = vp.xyz / vp.w;
+                o.viewRay = mul((float3x3)UNITY_MATRIX_I_V, viewDir);
+                return o;
+            }
+
+            // thin bright network lines, the cheap stand-in for caustics
+            float Caustic(float2 p, float t)
+            {
+                float2 q = p + 0.35 * float2(sin(p.y * 1.3 + t), cos(p.x * 1.1 - t * 0.8));
+                float a = 1.0 - abs(sin(q.x * 3.1 + sin(q.y * 2.3 + t * 0.7)));
+                float b = 1.0 - abs(sin(q.y * 3.3 + sin(q.x * 2.1 - t * 0.6)));
+                float c = 1.0 - abs(sin((q.x + q.y) * 2.4 + sin((q.x - q.y) * 1.9 + t * 0.5)));
+                return saturate(pow(a, 28.0) + pow(b, 28.0) + pow(c, 28.0));
+            }
+
+            fixed4 frag(v2f i) : SV_Target
+            {
+                UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
+
+                float amount = _UdonUW_Params.x;
+                // pixel position -> texture coordinate of the grabbed copy (same pixel grid, same orientation)
+                float2 uv = i.pos.xy * (_ScreenParams.zw - 1.0);
+                float t = _Time.y * _UdonUW_Params.z;
+
+                // gentle wobble: slow sine layers that depend on the screen row only. Both eyes of an HMD share rows, so a
+                // point gets the same offset in both eyes (no added vertical or horizontal disparity); a horizontal
+                // displacement varying with y is what the old two-axis field did best anyway.
+                float2 w;
+                w.x = sin(uv.y * 23.0 + t * 1.3) + 0.6 * sin(uv.y * 51.0 - t * 0.9);
+                w.y = 0.5 * cos(uv.y * 17.0 + t);
+                float2 suv = uv + w * (_UdonUW_Params.y * amount);
+
+                float3 scene = UNITY_SAMPLE_SCREENSPACE_TEXTURE(_UWGrab, UnityStereoTransformScreenSpaceTex(suv)).rgb;
+
+                float luma = dot(scene, float3(0.299, 0.587, 0.114));
+                float3 c = lerp(scene, luma.xxx, _UdonUW_Tint.a);
+                c *= _UdonUW_Tint.rgb;
+
+                // murk gathers towards the screen edge (a soft tunnel, like a mask with water between the eye and the world)
+                float2 e = (uv - 0.5) * 2.0;
+                float vig = smoothstep(0.35, 1.25, length(e));
+                c = lerp(c, _UdonUW_Murk.rgb * (0.35 + luma), saturate(_UdonUW_Murk.a * vig));
+
+                // fake caustics: light lines projected on the bed plane (_UdonUW_Floor.x = bed height of the volume),
+                // only where the ray points down and the eye is clearly above that bed
+                float floorH = _WorldSpaceCameraPos.y - _UdonUW_Floor.x;
+                if (_UdonUW_Params.w > 0.0 && floorH > 0.05)
+                {
+                    float3 dir = normalize(i.viewRay);
+                    float down = saturate(-dir.y - 0.04);
+                    if (down > 0.0)
+                    {
+                        float dist = min(floorH / max(-dir.y, 0.05), 40.0);
+                        float2 p = (_WorldSpaceCameraPos.xz + dir.xz * dist) * 3.2;
+                        float ca = Caustic(p, _Time.y * 0.9);
+                        c += float3(0.55, 0.95, 0.9) * ca * _UdonUW_Params.w * saturate(floorH / 0.3) * smoothstep(0.0, 0.5, down) * exp(-dist * 0.15);
+                    }
+                }
+
+                return fixed4(lerp(scene, c, amount), 1);
+            }
+            ENDCG
+        }
+    }
+}

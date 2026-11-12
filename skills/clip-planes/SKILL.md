@@ -137,3 +137,4 @@ off-axis points at up to 1.56 n in a wide VR view. 1 cm is "close enough for hea
 | 11 | Sky matching | sun azimuth and elevation match the bake; Bakery sky light uses the sky cubemap; probes rebaked |
 | 12 | Close-up jitter spot test | at the farthest cuddle spot, a camera 2 cm from a surface shows no shimmer while moving |
 | 13 | Layer culls | small-prop and island layers culled with `LayerCullDistances` where it helps; reserved layers untouched |
+| 14 | Fog with enterable water | scene fog on (any mode) and the mode never switched at runtime: builds strip unused fog modes, and the underwater kit (`.omp/templates/underwater/`) swaps fog numbers only |

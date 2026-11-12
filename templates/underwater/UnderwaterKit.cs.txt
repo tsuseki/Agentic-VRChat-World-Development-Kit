@@ -1,0 +1,421 @@
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using UdonSharp;
+using UdonSharpEditor;
+using UnityEditor;
+using UnityEditor.SceneManagement;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+namespace AWDK.Underwater
+{
+    /// <summary>
+    /// Installer of the local underwater effect (UnderwaterFX.cs). A scene only needs its water volumes:
+    ///   UnderwaterKit.Install(footprints, surfaceY, bottomY)        builds the scene root "UnderwaterFX" (re-runnable: replaces it)
+    ///   UnderwaterKit.Install(footprints, surfaceY, bottomY, true)  adds another water body (other surface height) to it
+    /// A footprint is (xMin, xMax, zMin, zMax) in world metres; the volume reaches from the water surface y down to bottomY.
+    /// Install creates what it needs on first use (two quad meshes, two materials, the U# program asset) under the
+    /// folder of UnderwaterFX.cs or AssetFolder. When it had to create the program asset it returns PREPARED: wait for
+    /// the UdonSharp compile, then call Install again.
+    /// Every AudioSource of the scene gets a disabled AudioLowPassFilter and joins the muffle list (sources that already
+    /// carry their own active or tuned low-pass filter are skipped and reported).
+    /// New objects only: nothing existing is touched except those AudioLowPassFilter components.
+    /// All entry points are static and return a plain-text report (call them from the Unity MCP execute_code tool).
+    /// </summary>
+    public static class UnderwaterKit
+    {
+        public const string RootName = "UnderwaterFX";
+
+        /// <summary>Folder (Assets/...) for the generated Materials/ and Meshes/. Empty = the folder that holds UnderwaterFX.cs.</summary>
+        public static string AssetFolder = "";
+
+        /// <summary>
+        /// fogEnd multiplier for both presets when the scene fog is Exponential: with the same fogEnd, Exp fog is much
+        /// murkier near the eye than ExpSq (transmittance at 2 m of an 8 m fogEnd: 0.25 vs 0.71); x1.6 gives similar mid-range clarity.
+        /// </summary>
+        public static float ExpFogScale = 1.6f;
+
+        static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+        // ---- assets -------------------------------------------------------------------------------------------------
+
+        static MonoScript FindScript()
+        {
+            foreach (var guid in AssetDatabase.FindAssets("UnderwaterFX t:MonoScript"))
+            {
+                var p = AssetDatabase.GUIDToAssetPath(guid);
+                if (Path.GetFileName(p) == "UnderwaterFX.cs") return AssetDatabase.LoadAssetAtPath<MonoScript>(p);
+            }
+            return null;
+        }
+
+        static string ScriptDir(MonoScript script)
+        {
+            return Path.GetDirectoryName(AssetDatabase.GetAssetPath(script)).Replace('\\', '/') + "/";
+        }
+
+        static string Dir()
+        {
+            if (!string.IsNullOrEmpty(AssetFolder)) return AssetFolder.TrimEnd('/') + "/";
+            var script = FindScript();
+            return script == null ? null : ScriptDir(script);
+        }
+
+        [MenuItem("Tools/AWDK/Underwater/Prepare Assets")]
+        static void PrepareMenu() { Debug.Log("[Underwater] " + Prepare()); }
+
+        /// <summary>Creates the missing meshes, materials and the U# program asset. Existing assets are kept as they are.</summary>
+        public static string Prepare()
+        {
+            var script = FindScript();
+            if (script == null) return "ERROR UnderwaterFX.cs not found in the project";
+            var dir = Dir();
+            var sb = new StringBuilder("OK folder=" + dir);
+
+            var so = Shader.Find("World/UnderwaterOverlay");
+            var ss = Shader.Find("World/UnderwaterSurface");
+            if (so == null || ss == null)
+                return "ERROR shader missing (copy both .shader files and let Unity import them): overlay=" + (so != null) + " surface=" + (ss != null);
+
+            if (AssetDatabase.LoadAssetAtPath<Mesh>(dir + "Meshes/UnderwaterOverlayQuad.asset") == null)
+            {
+                // overlay quad: only bounds matter (the vertex shader writes clip space); huge bounds so it is never frustum culled
+                var oq = new Mesh { name = "UnderwaterOverlayQuad" };
+                oq.vertices = new[] { new Vector3(-0.5f, -0.5f, 0), new Vector3(-0.5f, 0.5f, 0), new Vector3(0.5f, 0.5f, 0), new Vector3(0.5f, -0.5f, 0) };
+                oq.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+                oq.bounds = new Bounds(Vector3.zero, new Vector3(4000, 4000, 4000));
+                CreateAsset(oq, dir + "Meshes/UnderwaterOverlayQuad.asset");
+                sb.Append(" overlayQuad=created");
+            }
+            if (AssetDatabase.LoadAssetAtPath<Mesh>(dir + "Meshes/UnderwaterSurfaceQuad.asset") == null)
+            {
+                // surface quad: 1 x 1 in XZ, faces up, clockwise seen from above (= front face up), so Cull Front draws it from below only
+                var sq = new Mesh { name = "UnderwaterSurfaceQuad" };
+                sq.vertices = new[] { new Vector3(-0.5f, 0, -0.5f), new Vector3(-0.5f, 0, 0.5f), new Vector3(0.5f, 0, 0.5f), new Vector3(0.5f, 0, -0.5f) };
+                sq.normals = new[] { Vector3.up, Vector3.up, Vector3.up, Vector3.up };
+                sq.uv = new[] { new Vector2(0, 0), new Vector2(0, 1), new Vector2(1, 1), new Vector2(1, 0) };
+                sq.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+                sq.RecalculateBounds();
+                CreateAsset(sq, dir + "Meshes/UnderwaterSurfaceQuad.asset");
+                sb.Append(" surfaceQuad=created");
+            }
+            if (EnsureMat(dir + "Materials/UnderwaterOverlay.mat", so)) sb.Append(" overlayMat=created");
+            if (EnsureMat(dir + "Materials/UnderwaterSurface.mat", ss)) sb.Append(" surfaceMat=created");
+
+            if (UdonSharpEditorUtility.GetUdonSharpProgramAsset(typeof(UnderwaterFX)) == null)
+            {
+                var pa = ScriptableObject.CreateInstance<UdonSharpProgramAsset>();
+                pa.sourceCsScript = script;
+                AssetDatabase.CreateAsset(pa, ScriptDir(script) + "UnderwaterFX.asset");
+                AssetDatabase.SaveAssets();
+                UdonSharpProgramAsset.CompileAllCsPrograms(true);
+                sb.Append(" programAsset=created (wait for the UdonSharp compile before Install)");
+            }
+            AssetDatabase.SaveAssets();
+            return sb.ToString();
+        }
+
+        static void CreateAsset(Object o, string path)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            AssetDatabase.CreateAsset(o, path);
+        }
+
+        static bool EnsureMat(string path, Shader sh)
+        {
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m != null)
+            {
+                if (m.shader != sh) { m.shader = sh; EditorUtility.SetDirty(m); }
+                return false;
+            }
+            m = new Material(sh) { name = Path.GetFileNameWithoutExtension(path) };
+            CreateAsset(m, path);
+            return true;
+        }
+
+        // ---- install ------------------------------------------------------------------------------------------------
+
+        /// <summary>
+        /// Builds (append = false: replaces) or extends (append = true) the scene root "UnderwaterFX" with one volume and one
+        /// underside quad per footprint (xMin, xMax, zMin, zMax). surfaceY = the water surface, bottomY = below the deepest bed.
+        /// undersideMargin grows each underside quad by that many metres per side (large seas: cover what is visible from inside).
+        /// </summary>
+        public static string Install(Vector4[] footprints, float surfaceY, float bottomY, bool append = false, float undersideMargin = 0f)
+        {
+            var scene = EditorSceneManager.GetActiveScene();
+            if (EditorApplication.isPlaying || !scene.IsValid() || string.IsNullOrEmpty(scene.path)) return "ERROR play mode or no saved scene open";
+            if (footprints == null || footprints.Length == 0) return "ERROR no footprints";
+            if (bottomY >= surfaceY) return "ERROR bottomY must be below surfaceY";
+            for (int i = 0; i < footprints.Length; i++)
+                if (footprints[i].y <= footprints[i].x || footprints[i].w <= footprints[i].z) return "ERROR footprint " + i + ": want (xMin, xMax, zMin, zMax)";
+
+            bool hadProgram = UdonSharpEditorUtility.GetUdonSharpProgramAsset(typeof(UnderwaterFX)) != null;
+            var prep = Prepare();
+            if (prep.StartsWith("ERROR")) return prep;
+            if (!hadProgram) return "PREPARED " + prep + " | call Install again once the UdonSharp compile has finished";
+
+            var dir = Dir();
+            var overlayMesh = AssetDatabase.LoadAssetAtPath<Mesh>(dir + "Meshes/UnderwaterOverlayQuad.asset");
+            var surfaceMesh = AssetDatabase.LoadAssetAtPath<Mesh>(dir + "Meshes/UnderwaterSurfaceQuad.asset");
+            var overlayMat = AssetDatabase.LoadAssetAtPath<Material>(dir + "Materials/UnderwaterOverlay.mat");
+            var surfaceMat = AssetDatabase.LoadAssetAtPath<Material>(dir + "Materials/UnderwaterSurface.mat");
+            if (overlayMesh == null || surfaceMesh == null || overlayMat == null || surfaceMat == null) return "ERROR kit assets missing after Prepare: " + prep;
+
+            GameObject root = FindRoot(scene);
+            UnderwaterFX fx = null;
+            var volumes = new List<Transform>(); var surfaces = new List<GameObject>(); var bed = new List<float>();
+            if (append && root != null)
+            {
+                fx = root.GetComponent<UnderwaterFX>();
+                if (fx == null) return "ERROR root " + RootName + " has no UnderwaterFX: call Install without append";
+                if (fx.volumes != null) volumes.AddRange(fx.volumes);
+                if (fx.surfaces != null) surfaces.AddRange(fx.surfaces);
+                if (fx.bedY != null) bed.AddRange(fx.bedY);
+                while (bed.Count < volumes.Count) bed.Add(surfaceY - 1f);
+                // an underside that was copied to a per-scene material by SetUnderside keeps using it
+                if (surfaces.Count > 0 && surfaces[0] != null)
+                {
+                    var r0 = surfaces[0].GetComponent<MeshRenderer>();
+                    if (r0 != null && r0.sharedMaterial != null) surfaceMat = r0.sharedMaterial;
+                }
+            }
+            else
+            {
+                if (root != null) Object.DestroyImmediate(root);
+                root = new GameObject(RootName);
+                UnityEngine.SceneManagement.SceneManager.MoveGameObjectToScene(root, scene);
+                Child(root, "Volumes"); Child(root, "Surfaces");
+                var overlay = Child(root, "Overlay");
+                Visual(overlay, overlayMesh, overlayMat);
+                overlay.SetActive(false);
+            }
+            var volRoot = root.transform.Find("Volumes").gameObject;
+            var surfRoot = root.transform.Find("Surfaces").gameObject;
+
+            Physics.SyncTransforms();
+            int first = volumes.Count;
+            for (int i = 0; i < footprints.Length; i++)
+            {
+                var f = footprints[i];
+                int n = first + i;
+                float sx = f.y - f.x, sz = f.w - f.z, sy = surfaceY - bottomY;
+                // volume marker: centre = box centre, scale = box size, top face = surfaceY
+                var v = Child(volRoot, "Volume_" + n);
+                v.transform.position = new Vector3((f.x + f.y) * 0.5f, surfaceY - sy * 0.5f, (f.z + f.w) * 0.5f);
+                v.transform.localScale = new Vector3(sx, sy, sz);
+                volumes.Add(v.transform);
+                bed.Add(MedianBed(f, surfaceY));
+
+                // underside: 1 mm under the surface (Cull Front vs the world water's Cull Back: never the same camera side)
+                var s = Child(surfRoot, "Surface_" + n);
+                s.transform.position = new Vector3((f.x + f.y) * 0.5f, surfaceY - 0.001f, (f.z + f.w) * 0.5f);
+                s.transform.localScale = new Vector3(sx + 2f * undersideMargin, 1f, sz + 2f * undersideMargin);
+                Visual(s, surfaceMesh, surfaceMat);
+                s.SetActive(false);
+                surfaces.Add(s);
+            }
+
+            // scene audio sources: a disabled low-pass filter each, listed for the script (voices are not scene sources)
+            var srcs = new List<AudioSource>(); var filters = new List<AudioLowPassFilter>(); var skipped = new List<string>();
+            foreach (var a in Object.FindObjectsOfType<AudioSource>(true))
+            {
+                if (a.gameObject.scene != scene || a.transform.IsChildOf(root.transform)) continue;
+                var lp = a.GetComponent<AudioLowPassFilter>();
+                if (lp != null && (lp.enabled || lp.cutoffFrequency < 21999f)) { skipped.Add(a.name); continue; } // the source's own filter
+                if (lp == null) lp = a.gameObject.AddComponent<AudioLowPassFilter>();
+                lp.enabled = false; lp.cutoffFrequency = 22000f;
+                srcs.Add(a); filters.Add(lp);
+            }
+
+            bool created = fx == null;
+            if (created) fx = root.AddUdonSharpComponent<UnderwaterFX>();
+            fx.volumes = volumes.ToArray(); fx.surfaces = surfaces.ToArray(); fx.overlay = root.transform.Find("Overlay").gameObject;
+            fx.mutedSources = srcs.ToArray(); fx.mutedFilters = filters.ToArray(); fx.bedY = bed.ToArray();
+            var fogNote = "";
+            if (created)
+            {
+                fx.preset = 0;
+                if (RenderSettings.fogMode == FogMode.Exponential)
+                {
+                    fx.fogEnd = new[] { 8f * ExpFogScale, 4f * ExpFogScale };
+                    fogNote = " (Exponential world: fogEnd x" + ExpFogScale.ToString(Inv) + ")";
+                }
+            }
+            UdonSharpEditorUtility.CopyProxyToUdon(fx);
+            UdonSharpEditorUtility.GetBackingUdonBehaviour(fx).SyncMethod = VRC.SDKBase.Networking.SyncType.None;
+            EditorUtility.SetDirty(fx);
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            var sb = new StringBuilder("OK volumes=" + volumes.Count + " (+" + footprints.Length + ") surfaces=" + surfaces.Count);
+            sb.Append(" audioSources=" + srcs.Count + " surfaceY=" + surfaceY.ToString("F3", Inv) + " bottomY=" + bottomY.ToString("F3", Inv));
+            sb.Append(" bedY=");
+            for (int i = 0; i < bed.Count; i++) sb.Append((i > 0 ? "," : "") + bed[i].ToString("F2", Inv));
+            sb.Append(" fogMode=" + RenderSettings.fogMode + " fogEnd=" + fx.fogEnd[0].ToString("F1", Inv) + "/" + fx.fogEnd[1].ToString("F1", Inv) + fogNote);
+            if (skipped.Count > 0) sb.Append(" skippedAudio(own low-pass)=" + string.Join(",", skipped));
+            if (!RenderSettings.fog) sb.Append(" WARNING: scene fog is OFF; builds then contain no fog variants and the underwater fog will not render: turn fog on (any mode) first");
+            sb.Append(" | save the scene");
+            return sb.ToString();
+        }
+
+        [MenuItem("Tools/AWDK/Underwater/Install On Selected Water")]
+        static void InstallSelectionMenu() { Debug.Log("[Underwater] " + InstallFromRenderers(Selection.gameObjects)); }
+
+        /// <summary>
+        /// One water body per object: footprint = the world bounds of its renderers (axis-aligned), surface = bounds top,
+        /// bottom = 0.5 m under the lowest collider found under the footprint. The first replaces the root, the rest append.
+        /// Meant for flat water planes; check surfaceY in the report and use Install with measured values otherwise.
+        /// </summary>
+        public static string InstallFromRenderers(GameObject[] waters)
+        {
+            if (waters == null || waters.Length == 0) return "ERROR select the water surface objects first";
+            Physics.SyncTransforms();
+            var sb = new StringBuilder();
+            bool append = false;
+            foreach (var w in waters)
+            {
+                var rs = w.GetComponentsInChildren<Renderer>(true);
+                if (rs.Length == 0) { sb.Append(w.name + ": no renderer; "); continue; }
+                var b = rs[0].bounds;
+                for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+                var f = new Vector4(b.min.x, b.max.x, b.min.z, b.max.z);
+                float surface = b.max.y;
+                float low = LowestBed(f, surface);
+                float bottom = float.IsNaN(low) ? surface - 10f : low - 0.5f;
+                var res = Install(new[] { f }, surface, bottom, append);
+                sb.Append(w.name + ": " + res + "; ");
+                if (!res.StartsWith("OK")) break;
+                append = true;
+            }
+            return sb.ToString();
+        }
+
+        // ---- per-world look -----------------------------------------------------------------------------------------
+
+        /// <summary>Colours (and optionally the fog distance) of one preset, 0 Subtle / 1 Strong, on this scene's UnderwaterFX.</summary>
+        public static string SetLook(int preset, Color tint, Color fogColor, Color murkColor, float fogEnd = -1f)
+        {
+            var fx = FindFx();
+            if (fx == null) return "ERROR no " + RootName + " in the open scene: Install first";
+            int p = Mathf.Clamp(preset, 0, 1);
+            fx.tint[p] = tint; fx.fogColor[p] = fogColor; fx.murkColor[p] = murkColor;
+            if (fogEnd > 0f) fx.fogEnd[p] = fogEnd;
+            return Commit(fx, "OK preset " + p + " tint/fog/murk set, fogEnd=" + fx.fogEnd[p].ToString("F1", Inv));
+        }
+
+        /// <summary>The preset the world ships with: 0 Subtle (default), 1 Strong.</summary>
+        public static string SetPreset(int preset)
+        {
+            var fx = FindFx();
+            if (fx == null) return "ERROR no " + RootName + " in the open scene: Install first";
+            fx.preset = Mathf.Clamp(preset, 0, 1);
+            return Commit(fx, "OK preset=" + fx.preset);
+        }
+
+        /// <summary>
+        /// Underside colours for this scene only: copies the shared material to Materials/UnderwaterSurface_&lt;Scene&gt;.mat
+        /// (once) and assigns it to this scene's Surface_* quads, so other worlds of the project keep theirs.
+        /// </summary>
+        public static string SetUnderside(Color color, Color mirrorColor)
+        {
+            var fx = FindFx();
+            if (fx == null || fx.surfaces == null || fx.surfaces.Length == 0) return "ERROR no " + RootName + " with surfaces in the open scene";
+            var scene = EditorSceneManager.GetActiveScene();
+            var path = Dir() + "Materials/UnderwaterSurface_" + scene.name + ".mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (m == null)
+            {
+                var shared = AssetDatabase.LoadAssetAtPath<Material>(Dir() + "Materials/UnderwaterSurface.mat");
+                if (shared == null) return "ERROR shared UnderwaterSurface.mat missing: run Prepare";
+                m = new Material(shared) { name = Path.GetFileNameWithoutExtension(path) };
+                CreateAsset(m, path);
+            }
+            m.SetColor("_Color", color); m.SetColor("_MirrorColor", mirrorColor);
+            EditorUtility.SetDirty(m);
+            foreach (var s in fx.surfaces)
+            {
+                if (s == null) continue;
+                var r = s.GetComponent<MeshRenderer>();
+                if (r != null) { r.sharedMaterial = m; EditorUtility.SetDirty(r); }
+            }
+            AssetDatabase.SaveAssets();
+            EditorSceneManager.MarkSceneDirty(scene);
+            return "OK underside material " + path + " on " + fx.surfaces.Length + " surfaces | save the scene";
+        }
+
+        static string Commit(UnderwaterFX fx, string msg)
+        {
+            UdonSharpEditorUtility.CopyProxyToUdon(fx);
+            EditorUtility.SetDirty(fx);
+            EditorSceneManager.MarkSceneDirty(fx.gameObject.scene);
+            return msg + " | save the scene";
+        }
+
+        // ---- helpers ------------------------------------------------------------------------------------------------
+
+        static GameObject FindRoot(UnityEngine.SceneManagement.Scene scene)
+        {
+            foreach (var r in scene.GetRootGameObjects()) if (r.name == RootName) return r;
+            return null;
+        }
+
+        static UnderwaterFX FindFx()
+        {
+            var root = FindRoot(EditorSceneManager.GetActiveScene());
+            return root == null ? null : root.GetComponent<UnderwaterFX>();
+        }
+
+        // first collider hit straight down from above the surface; NaN when nothing is under the point
+        static float Ground(float x, float z, float fromY)
+        {
+            RaycastHit h;
+            return Physics.Raycast(new Vector3(x, fromY, z), Vector3.down, out h, 500f, ~0, QueryTriggerInteraction.Ignore) ? h.point.y : float.NaN;
+        }
+
+        // median bed height over the 1 m grid cells of the footprint whose floor is under the water (the caustics' plane)
+        static float MedianBed(Vector4 f, float surfaceY)
+        {
+            var ys = new List<float>();
+            for (float x = f.x + 0.5f; x < f.y; x += 1f)
+                for (float z = f.z + 0.5f; z < f.w; z += 1f)
+                {
+                    float y = Ground(x, z, surfaceY + 30f);
+                    if (!float.IsNaN(y) && y < surfaceY - 0.05f) ys.Add(y);
+                }
+            if (ys.Count == 0) return surfaceY - 1f;
+            ys.Sort();
+            return ys[ys.Count / 2];
+        }
+
+        static float LowestBed(Vector4 f, float surfaceY)
+        {
+            float low = float.NaN;
+            for (float x = f.x + 0.5f; x < f.y; x += 1f)
+                for (float z = f.z + 0.5f; z < f.w; z += 1f)
+                {
+                    float y = Ground(x, z, surfaceY + 30f);
+                    if (!float.IsNaN(y) && y < surfaceY - 0.05f && (float.IsNaN(low) || y < low)) low = y;
+                }
+            return low;
+        }
+
+        static GameObject Child(GameObject parent, string name)
+        {
+            var g = new GameObject(name); g.transform.SetParent(parent.transform, false); return g;
+        }
+
+        static void Visual(GameObject g, Mesh mesh, Material mat)
+        {
+            g.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var r = g.AddComponent<MeshRenderer>();
+            r.sharedMaterial = mat;
+            r.shadowCastingMode = ShadowCastingMode.Off; r.receiveShadows = false;
+            r.lightProbeUsage = LightProbeUsage.Off; r.reflectionProbeUsage = ReflectionProbeUsage.Off;
+            r.motionVectorGenerationMode = MotionVectorGenerationMode.ForceNoMotion;
+            r.allowOcclusionWhenDynamic = false;
+            GameObjectUtility.SetStaticEditorFlags(g, 0);
+        }
+    }
+}

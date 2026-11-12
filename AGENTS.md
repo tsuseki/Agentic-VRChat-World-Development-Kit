@@ -73,7 +73,7 @@ The reviewer may leave `__CapCam__` **and an active realtime directional `__CapL
 | Scale, reference eye height, dimensions | spatial-design guide ([spatial-design.md](skills/spatial-design/references/spatial-design.md)) §5.9, §5.11 |
 | Clip planes, fog vs far clip, float precision, world extent, teleport-island placement, distant scenery/skybox backdrops, z-fight separation | [`.omp/skills/clip-planes/SKILL.md`](skills/clip-planes/SKILL.md) |
 | Separate rooms as teleport islands | agent `world-architect` "Separate rooms: teleport islands" (design); `world-builder` "Unity rules" (doors, landings) |
-| Execute a build stage (Build-out, interactions, lighting); collision fitting, lie-down colliders, geometry standard, in-world UI ("show, don't tell") | agent `world-builder` |
+| Execute a build stage (Build-out, interactions, lighting); collision fitting, lie-down colliders, geometry standard, in-world UI ("show, don't tell"), underwater effect on enterable water | agent `world-builder`; kit `.omp/templates/underwater/` |
 | Review anything visual; dispatching reviewers and the fix loop | agents in "Visual acceptance gate"; [`.omp/skills/world-pipeline/references/review-protocol.md`](skills/world-pipeline/references/review-protocol.md) |
 | Prove your own work: renders vs metrics, positive controls, before/after, handoffs | [`.omp/skills/agent-verification/SKILL.md`](skills/agent-verification/SKILL.md) |
 | Find existing models/textures; local library and owned packs | agent `asset-finder`; [`.omp/skills/worldbuilding-assets/SKILL.md`](skills/worldbuilding-assets/SKILL.md) (licences, `.unitypackage` import, prop shader default) |

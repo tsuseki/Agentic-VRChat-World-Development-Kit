@@ -1,0 +1,267 @@
+using UdonSharp;
+using UnityEngine;
+using VRC.SDKBase;
+using VRC.Udon;
+
+/// <summary>
+/// Local underwater look of a VRChat world: while the local player's HEAD is below the surface of a water volume,
+/// a full-screen overlay (tint, murk, gentle wobble, optional fake caustics), the scene fog (colour and density), the
+/// view of the water surface from below and a light muffle of the world's own audio sources are switched on, and
+/// everything is put back exactly on surfacing. Nothing is synced; nobody else is touched; there is no toggle.
+///
+/// Water volumes are plain axis-aligned boxes (no colliders, no triggers): centre = the volume transform's position,
+/// size = its lossy scale, the TOP FACE is the water surface. Rotation is ignored. A head is "in" a volume when it is
+/// inside the box footprint and below the top face. Two presets sit on the same component (0 Subtle default, 1 Strong).
+/// Player voices are never touched (they are not scene audio sources); other players are not affected.
+///
+/// The world's fog mode is kept (Exp, ExpSq or Linear; a build only keeps the fog variants its scenes use, so the mode
+/// must not be changed at runtime). Needs fog on in the world: with it off, builds have no fog variants at all.
+/// Built by the editor installer UnderwaterKit (AWDK templates/underwater); see its README.
+/// </summary>
+[UdonBehaviourSyncMode(BehaviourSyncMode.None)]
+public class UnderwaterFX : UdonSharpBehaviour
+{
+    [Header("Water volumes: box centre = position, size = lossy scale, top face = water surface")]
+    public Transform[] volumes;
+    [Tooltip("Underside quad of each volume (same index): enabled while submerged")]
+    public GameObject[] surfaces;
+    [Tooltip("Full-screen overlay (World/UnderwaterOverlay), enabled while submerged")]
+    public GameObject overlay;
+
+    [Header("World audio sources to muffle (their AudioLowPassFilter, same index). Voices are never in this list")]
+    public AudioSource[] mutedSources;
+    public AudioLowPassFilter[] mutedFilters;
+
+    [Header("Preset: 0 = Subtle (default), 1 = Strong")]
+    public int preset = 0;
+
+    [Header("Timing")]
+    public float fadeInSeconds = 0.12f;
+    public float fadeOutSeconds = 0.35f;
+    [Tooltip("Metres the head must rise above the surface before the effect switches off (it switches on at the surface)")]
+    public float exitHeight = 0.03f;
+    [Tooltip("Bed height of each volume (same index): the fake caustics are projected onto this plane. Set by the installer")]
+    public float[] bedY;
+
+    // index 0 = Subtle, 1 = Strong
+    [Header("Per-preset values")]
+    public Color[] tint = { new Color(0.80f, 0.97f, 0.97f, 1f), new Color(0.55f, 0.85f, 0.80f, 1f) };
+    public float[] desaturate = { 0.10f, 0.25f };
+    public Color[] fogColor = { new Color(0.20f, 0.42f, 0.42f, 1f), new Color(0.07f, 0.22f, 0.21f, 1f) };
+    [Tooltip("Distance at which the underwater fog is opaque (1/255 left), metres")]
+    public float[] fogEnd = { 8f, 4f };
+    public Color[] murkColor = { new Color(0.10f, 0.28f, 0.28f, 1f), new Color(0.03f, 0.14f, 0.14f, 1f) };
+    [Tooltip("How much murk gathers at the screen edges, 0..1")]
+    public float[] murkStrength = { 0.25f, 0.55f };
+    [Tooltip("Wobble amplitude in screen heights")]
+    public float[] wobbleAmplitude = { 0.003f, 0.0085f };
+    public float[] wobbleSpeed = { 1.0f, 1.5f };
+    public float[] causticStrength = { 0f, 0.35f };
+    [Tooltip("Low-pass cutoff of the muffled world audio sources, Hz (22000 = no muffle)")]
+    public float[] lowpassHz = { 5000f, 4000f };
+    [Tooltip("Gain of the muffled world audio sources, dB")]
+    public float[] gainDb = { -2f, -2f };
+
+    // runtime state, readable for tests
+    [System.NonSerialized] public float amount;      // 0..1 linear fade state
+    [System.NonSerialized] public bool submerged;    // head state with hysteresis
+
+    private bool _ready;
+    private bool _active;                            // effect objects currently on
+    private bool _worldFog;
+    private FogMode _worldFogMode;
+    private Color _worldFogColor;
+    private float _worldFogDensity;
+    private float[] _baseVolume;
+
+    private int _idParams, _idTint, _idMurk, _idFloor;
+
+    // active preset, cached
+    private Color _tint, _fogColor, _murkColor;
+    private float _desat, _fogDensity, _fogEndUW, _murk, _wobble, _wobbleSpeed, _caustics, _lowpass, _gain;
+    private float _worldFogStart, _worldFogEnd, _floorY;
+    private int _curVolume = -1;
+
+    void Start()
+    {
+        // VRChat only lets Udon set shader globals whose name starts with _Udon
+        _idParams = VRCShader.PropertyToID("_UdonUW_Params");
+        _idTint = VRCShader.PropertyToID("_UdonUW_Tint");
+        _idMurk = VRCShader.PropertyToID("_UdonUW_Murk");
+        _idFloor = VRCShader.PropertyToID("_UdonUW_Floor");
+
+        _worldFog = RenderSettings.fog;
+        _worldFogMode = RenderSettings.fogMode;
+        _worldFogColor = RenderSettings.fogColor;
+        _worldFogDensity = RenderSettings.fogDensity;
+        _worldFogStart = RenderSettings.fogStartDistance;
+        _worldFogEnd = RenderSettings.fogEndDistance;
+
+        int n = 0;
+        if (mutedSources != null) n = mutedSources.Length;
+        _baseVolume = new float[n];
+        for (int i = 0; i < n; i++)
+        {
+            if (mutedSources[i] != null) _baseVolume[i] = mutedSources[i].volume;
+            if (mutedFilters != null && i < mutedFilters.Length && mutedFilters[i] != null) mutedFilters[i].enabled = false;
+        }
+
+        _ReadPreset();
+        _SetObjects(false);
+        _ready = true;
+    }
+
+    /// <summary>Custom event for tests or a later picker: set the field "preset" (0 Subtle, 1 Strong) first, then SendCustomEvent.</summary>
+    public void _ApplyPreset()
+    {
+        _ReadPreset();
+    }
+
+    private void _ReadPreset()
+    {
+        int p = Mathf.Clamp(preset, 0, 1);
+        _tint = tint[p];
+        _desat = desaturate[p];
+        _fogColor = fogColor[p];
+        // transmittance 1/255 at fogEnd: exp(-d * density) with density 5.54 / fogEnd, exp(-(d * density)^2) with 2.355 / fogEnd
+        float fe = Mathf.Max(fogEnd[p], 0.5f);
+        _fogEndUW = fe;
+        if (_worldFogMode == FogMode.Exponential) _fogDensity = 5.54f / fe;
+        else _fogDensity = 2.355f / fe;
+        _murkColor = murkColor[p];
+        _murk = murkStrength[p];
+        _wobble = wobbleAmplitude[p];
+        _wobbleSpeed = wobbleSpeed[p];
+        _caustics = causticStrength[p];
+        _lowpass = Mathf.Clamp(lowpassHz[p], 500f, 22000f);
+        _gain = Mathf.Pow(10f, gainDb[p] / 20f);
+    }
+
+    void Update()
+    {
+        if (!_ready) return;
+
+        VRCPlayerApi lp = Networking.LocalPlayer;
+        if (!Utilities.IsValid(lp)) return;
+
+        float depth = _HeadDepth(lp.GetTrackingData(VRCPlayerApi.TrackingDataType.Head).position);
+        // on as soon as the head is under the surface (a world water surface is usually back-face culled, so any later
+        // switch shows a drained pond); off only exitHeight above it, which is the hysteresis against head-tracking jitter
+        if (submerged) { if (depth < -exitHeight) submerged = false; }
+        else { if (depth > 0f) submerged = true; }
+        if (submerged && _curVolume >= 0 && bedY != null && _curVolume < bedY.Length) _floorY = bedY[_curVolume];
+
+        float target = submerged ? 1f : 0f;
+        if (amount == target && amount == 0f)
+        {
+            if (_active) _Restore();
+            return;
+        }
+
+        float seconds = submerged ? fadeInSeconds : fadeOutSeconds;
+        amount = Mathf.MoveTowards(amount, target, Time.deltaTime / Mathf.Max(seconds, 0.01f));
+
+        if (amount <= 0f)
+        {
+            _Restore();
+            return;
+        }
+
+        if (!_active) _SetObjects(true);
+        _Apply(amount * amount * (3f - 2f * amount));
+    }
+
+    // metres the point is below the top face of the deepest volume that holds it; a large negative number when none does.
+    // (the volume that holds the point is remembered in _curVolume: its bed height anchors the caustics)
+    private float _HeadDepth(Vector3 head)
+    {
+        float best = -1000f;
+        if (volumes == null) return best;
+        for (int i = 0; i < volumes.Length; i++)
+        {
+            Transform v = volumes[i];
+            if (v == null) continue;
+            Vector3 c = v.position;
+            Vector3 h = v.lossyScale * 0.5f;
+            if (Mathf.Abs(head.x - c.x) > h.x || Mathf.Abs(head.z - c.z) > h.z) continue;
+            if (head.y < c.y - h.y) continue;
+            float d = (c.y + h.y) - head.y;
+            if (d > best) { best = d; _curVolume = i; }
+        }
+        return best;
+    }
+
+    private void _SetObjects(bool on)
+    {
+        _active = on;
+        if (overlay != null) overlay.SetActive(on);
+        if (surfaces == null) return;
+        for (int i = 0; i < surfaces.Length; i++)
+        {
+            if (surfaces[i] != null) surfaces[i].SetActive(on);
+        }
+    }
+
+    // e = eased amount 0..1
+    private void _Apply(float e)
+    {
+        VRCShader.SetGlobalVector(_idParams, new Vector4(e, _wobble, _wobbleSpeed, _caustics));
+        VRCShader.SetGlobalVector(_idFloor, new Vector4(_floorY, 0f, 0f, 0f));
+        VRCShader.SetGlobalVector(_idTint, new Vector4(_tint.r, _tint.g, _tint.b, _desat));
+        VRCShader.SetGlobalVector(_idMurk, new Vector4(_murkColor.r, _murkColor.g, _murkColor.b, _murk));
+
+        // keep the world's fog mode (a build keeps only the fog variants the scenes use); only the numbers change
+        RenderSettings.fog = true;
+        RenderSettings.fogColor = Color.Lerp(_worldFogColor, _fogColor, e);
+        RenderSettings.fogDensity = Mathf.Lerp(_worldFogDensity, _fogDensity, e);
+        RenderSettings.fogStartDistance = Mathf.Lerp(_worldFogStart, 0f, e);
+        RenderSettings.fogEndDistance = Mathf.Lerp(_worldFogEnd, _fogEndUW, e);
+
+        if (mutedSources == null) return;
+        float logCut = Mathf.Log(_lowpass / 22000f);
+        for (int i = 0; i < mutedSources.Length; i++)
+        {
+            if (mutedSources[i] != null) mutedSources[i].volume = _baseVolume[i] * Mathf.Lerp(1f, _gain, e);
+            if (mutedFilters != null && i < mutedFilters.Length && mutedFilters[i] != null)
+            {
+                mutedFilters[i].enabled = true;
+                mutedFilters[i].cutoffFrequency = 22000f * Mathf.Exp(logCut * e);
+            }
+        }
+    }
+
+    // surfaced: put every value back exactly as the world had it
+    private void _Restore()
+    {
+        amount = 0f;
+        VRCShader.SetGlobalVector(_idParams, Vector4.zero);
+
+        RenderSettings.fog = _worldFog;
+        RenderSettings.fogMode = _worldFogMode;
+        RenderSettings.fogColor = _worldFogColor;
+        RenderSettings.fogDensity = _worldFogDensity;
+        RenderSettings.fogStartDistance = _worldFogStart;
+        RenderSettings.fogEndDistance = _worldFogEnd;
+
+        if (mutedSources != null)
+        {
+            for (int i = 0; i < mutedSources.Length; i++)
+            {
+                if (mutedSources[i] != null) mutedSources[i].volume = _baseVolume[i];
+                if (mutedFilters != null && i < mutedFilters.Length && mutedFilters[i] != null)
+                {
+                    mutedFilters[i].enabled = false;
+                    mutedFilters[i].cutoffFrequency = 22000f;
+                }
+            }
+        }
+        _SetObjects(false);
+    }
+
+    void OnDisable()
+    {
+        if (_ready && _active) _Restore();
+        submerged = false;
+        amount = 0f;
+    }
+}

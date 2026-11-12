@@ -4,7 +4,8 @@ description: >-
   Executes ONE build pass of the VRChat world pipeline in the open Unity editor: a C.1 Build-out pass
   on one area (shell finish, real furniture sourced and placed directly in 3D by the seating and
   layout rules and recorded from the scene, dressing; assets sourced on demand), C.2 interactions and playability (colliders incl. lie-down colliders, stair
-  ramps, spawn, walk test, UdonSharp teleport doors, islands, toggles, clip planes and fog), D.1
+  ramps, spawn, walk test, UdonSharp teleport doors, islands, toggles, underwater effect on enterable
+  water, clip planes and fog), D.1
   lighting bake plus reflection probes, or a D → C loop-back fix. Works from WORLD.md and a pass
   plan, runs the z-fighting gate and the workspace rule checks on what it touched, and returns a
   change list plus evidence ready for the stage's reviewer. Does not review its own work visually as
@@ -259,6 +260,15 @@ Once the real objects exist:
 - **Ambience** per spatial-design §5.8: one 3D base bed per area (Volumetric Radius ≈ room, never
   2D) plus placed emitters; walk the routes listening for 180° swings, flanging and silent rooms;
   distant sources disabled by zone.
+- **Underwater effect on every body of water players can enter** (pond, lake, sea, pool, stream; a
+  world default like jumping, never a question for the user): the local UdonSharp kit from
+  `.omp/templates/underwater/` (copy the five files, then `UnderwaterKit.Install(footprints, surfaceY, bottomY)`
+  per water body, preset 0 Subtle unless the user picked Strong, tint matched to the world's water,
+  Exponential-fog worlds ~1.6× the fog distance, scene fog on). Proof in ClientSim per its README:
+  `sweep` (on at the surface, off 3 cm above, one switch each way, 0 drained frames), `bob` (no flicker
+  at ±1–2.5 cm), `dive` (one on / one off, fog restored bit-exact), nothing visible from above,
+  Subtle/Strong frames from 3–4 poses plus above-water references, render in play mode (edit-mode
+  renders can show the water black), and the cost on vs off. Record the volumes and settings in WORLD.md.
 - **Clip planes and fog** per the plan's near/far and fog values (`.omp/skills/clip-planes/SKILL.md` §2, §7).
 
 ## Lighting (D.1)
@@ -305,8 +315,9 @@ invalidates (rebake the area, rebake the probes, re-measure, rerun the final rev
    the spawn and both directions of every teleport door, and lie on one bed or couch with the
    lie-down toggle on and off; where a walk is impractical, use a downward-raycast grid over the
    floors plus a capsule check at each landing (see `.omp/knowledge/notes/` on landings). Report
-   each route/door/toggle → pass/fail with positions; this is the play-test evidence
-   dressing-reviewer's C.2 review needs (reviewers never enter play mode).
+   each route/door/toggle → pass/fail with positions, plus the underwater job logs (`sweep`, `bob`,
+   `dive`, `audio`, `perf`) and the Subtle/Strong contact sheet per water body; this is the play-test
+   evidence dressing-reviewer's C.2 review needs (reviewers never enter play mode).
 4. **D.1 only:** report the newest lightmap file timestamp and every reflection-probe texture
    timestamp (probes must be newer), and the post-bake verify numbers; final-reviewer requires them.
 5. Save the scene; report: what changed (object paths), scan output, audit output, the furniture

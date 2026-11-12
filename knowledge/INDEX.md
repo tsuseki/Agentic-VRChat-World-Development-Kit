@@ -11,7 +11,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [import-fbx-prefabs](#import-fbx-prefabs) (16)
 - [placement-layout-design](#placement-layout-design) (52)
 - [colliders-physics](#colliders-physics) (13)
-- [udonsharp-networking](#udonsharp-networking) (11)
+- [udonsharp-networking](#udonsharp-networking) (12)
 - [vrchat-sdk-upload-components](#vrchat-sdk-upload-components) (4)
 - [performance](#performance) (28)
 - [unity-editor-scripting-mcp](#unity-editor-scripting-mcp) (34)
@@ -321,6 +321,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Hidden collectibles: global vs per-player finds, one shared popup, and placement traps](notes/hidden-collectibles-architecture-and-traps.md) — Mix one global synced catchable with local once-per-player finds, drive one always-active "+N" popup by direct U# calls, and size trigger colliders in local units on scaled imports.
 - [In-world number readouts follow each player's locale; format floats manually in Udon](notes/udon-number-formatting-follows-each-players-locale.md) — Udon runs on each client under that player's culture, so formatted floats show '3:02,412' for some players; convert to integers and join with a literal '.'.
 - [Integrate third-party minigames with a shared currency at each game's single money-backend class](notes/bridge-third-party-games-to-one-currency-at-the-backend-class.md) — Each game usually has exactly one class that reads/writes money; swap that class to the shared purse and the whole game follows.
+- [Local underwater effect in Udon — switch on at the surface, keep the fog mode, set only _Udon globals](notes/underwater-effect-surface-switch-fog-mode-and-udon-globals.md) — A head-in-water screen effect needs an asymmetric switch (on at depth > 0, off ~3 cm above), the world's own fog mode with per-mode density (Exp 5.54/d, ExpSq 2.355/d), _Udon-prefixed shader globals, no depth texture, and play-mode proof renders.
 - [Private room lock: one synced bool, owner-run auto-unlock when the room is empty](notes/occupancy-based-room-lock-design.md) — A Manual-sync lever toggles one synced bool; every client runs a slow check loop but only the owner acts, unlocking after two consecutive empty checks.
 - [Removing a renderer from a runtime toggle list leaks its ON state](notes/removing-a-renderer-from-a-toggle-list-leaks-state.md) — In a symmetric ON/OFF toggle over a renderer list, dropping a renderer from the list leaves its stale property block and any serialized renderer fields the ON path set, because the OFF path no longer visits it.
 - [Runtime writes to U# serialized arrays can leak into the saved scene](notes/udonsharp-play-mode-inspector-can-save-runtime-values.md) — If a UdonSharp component's inspector is drawn during play mode, runtime values written into its serialized arrays get copied back onto the C# proxy and can be saved into the scene; snapshot and restore them around play mode.

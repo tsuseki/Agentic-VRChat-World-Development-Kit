@@ -49,7 +49,8 @@ agents/            subagent prompts: world-architect, world-builder, asset-finde
                    blender-optimizer, layout-, dressing- and final-reviewer, perf-optimizer
 knowledge/         single-lesson notes (symptom -> cause -> fix -> verify) + INDEX.md
 docs/              bootstrap, hosts, new world, Unity tools, troubleshooting
-templates/         WORLD.template.md, the per-world brief
+templates/         WORLD.template.md (the per-world brief), udon/ (jumping, teleport doors),
+                   underwater/ (local underwater effect + installer)
 unity-package/     com.awdk.agenttools: z-fight scan, captures, perf sampling, world audit
 scripts/           host installer, MCP helpers, perf grading, kit checks
 local.example/     template for your personal layer (local/, never committed)

@@ -278,6 +278,16 @@ yaw), never from pixels, and quote the measured value in each finding.
     solid-mass colliders present; one ramp per stair flight; spawn facing into the space; every
     teleport door on a real door, both directions, landings floored and prop-free; clip planes and
     fog set per the plan. You never enter play mode; a missing walk-test result is a blocker.
+13. **Underwater** (C.2, every body of water players can enter; `.omp/templates/underwater/README.md`):
+    a missing effect on enterable water is a blocker. From the builder's logs and frames: switch-on at
+    the surface and off ~3 cm above it, one switch each way, 0 drained frames (head under the surface
+    with no underside: a "drained pond") and no flicker at ±1–2.5 cm bob; fog restored bit-exact with the
+    world's fog mode unchanged (scene fog on); nothing of the effect visible from above; frames rendered
+    in play mode (flat-black water = edit-mode artefact, reject). Judge the look per preset: reads as
+    underwater, tint matches the world's water, the bed stays readable at Subtle, an Exponential-fog
+    world not murkier than intended (`fogEnd` ~1.6×), sync None, only `_UdonUW_*` globals, voices
+    untouched. A failed switch, restore or fog check is a should-fix; the near-clip band within ~1 cm
+    of the surface is inherent, not a finding.
 
 ## Shots
 

@@ -1,0 +1,488 @@
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using UnityEditor;
+using UnityEngine;
+using VRC.SDKBase;
+using VRC.Udon;
+
+namespace AWDK.Underwater
+{
+    /// <summary>
+    /// Play-mode (ClientSim) proof jobs of the underwater effect. The REAL local player's head drives the effect: eye height
+    /// plus teleport put the head where a job needs it (no test hook in the shipped script). Jobs run on
+    /// EditorApplication.update: Start(...) returns "STARTED <mode>", then poll Status() until it shows "DONE <mode>";
+    /// never re-Start a running job.
+    ///   Start("sweep", outDir)  head lowered / raised through the surface 2.5 mm per step: one switch each way (on at the
+    ///                           surface, off exitHeight above it), drainedFrames = head under the surface with no underside = 0
+    ///   Start("bob", outDir)    head bobbed +-1 / 2 / 2.5 / 4 / 5 cm around the surface: switches, drained frames, fog restore
+    ///   Start("dive", outDir)   walk-in from the shore to the deepest point and back at crouch height: one on / one off,
+    ///                           fog restored bit-exact (EXACT_RESTORE=True), overlay inactive after surfacing
+    ///   Start("shots", outDir, w, h)  above-water reference + Subtle + Strong frames per pose (PNG in outDir)
+    ///   Start("perf", outDir, w, h)   render cost with the overlay and underside on vs off (editor numbers)
+    ///   Start("audio", outDir)  every muffled source: filter and volume surfaced / submerged / surfaced
+    /// volume = index of the water volume to test (-1 = the deepest). posesJson (optional, shots/perf):
+    ///   {"poses":[{"name":"A","x":0,"z":0,"headY":-0.6,"yaw":90,"pitch":2}]}  (world metres and degrees)
+    /// Default poses are measured at the deepest point: across, up at the surface, toward the shore, down at the bed.
+    /// Every job ends with the player back where it started, its eye height restored.
+    /// </summary>
+    public static class UnderwaterShots
+    {
+        const string RootName = "UnderwaterFX";
+        static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+        // Player, PlayerLocal, and the two ClientSim layers (local avatar robot, menu): never ground, never in the frames
+        const int PlayerLayers = (1 << 9) | (1 << 10) | (1 << 18) | (1 << 19);
+
+        [System.Serializable] public class Pose { public string name; public float x, z, headY, yaw, pitch; }
+        [System.Serializable] class PoseList { public Pose[] poses; }
+
+        static bool _running; static string _name = "idle";
+        static readonly List<string> Log = new List<string>();
+        static readonly Stack<IEnumerator> Jobs = new Stack<IEnumerator>();
+        static Camera _cam; static RenderTexture _rt;
+
+        // the water body under test, measured at Start
+        static int _vol; static float _surface; static float _ratio;
+        static Vector2 _deep; static float _deepBed; static Vector2 _shore; static bool _hasShore;
+        static Vector3 _homePos; static Quaternion _homeRot; static float _homeEye;
+        static Pose[] _poses;
+
+        public static string Status()
+        {
+            return "STATE=" + (_running ? "running " + _name : "idle (" + _name + ")") + "\n" + string.Join("\n", Log);
+        }
+
+        static void Say(string s) { Log.Add(s); }
+        static string F(float v, string fmt = "F3") { return v.ToString(fmt, Inv); }
+
+        public static string Start(string mode, string outDir, int w = 1600, int h = 900, int volume = -1, string posesJson = null)
+        {
+            if (!EditorApplication.isPlaying) return "ERROR not in play mode";
+            if (_running) return "ERROR job running: " + _name;
+            if (Fx() == null || Networking.LocalPlayer == null) return "ERROR no " + RootName + " or no local player yet";
+            var err = Measure(volume);
+            if (err != null) return err;
+            _poses = null;
+            if (!string.IsNullOrEmpty(posesJson))
+            {
+                var pl = JsonUtility.FromJson<PoseList>(posesJson);
+                if (pl == null || pl.poses == null || pl.poses.Length == 0) return "ERROR posesJson: want {\"poses\":[{\"name\":..,\"x\":..,\"z\":..,\"headY\":..,\"yaw\":..,\"pitch\":..}]}";
+                _poses = pl.poses;
+            }
+            if (_poses == null) _poses = DefaultPoses();
+            if (!string.IsNullOrEmpty(outDir)) Directory.CreateDirectory(outDir);
+
+            IEnumerator job;
+            if (mode == "shots") job = ShotsJob(outDir, w, h);
+            else if (mode == "dive") job = DiveJob();
+            else if (mode == "perf") job = PerfJob(w, h);
+            else if (mode == "audio") job = AudioJob();
+            else if (mode == "bob") job = BobJob();
+            else if (mode == "sweep") job = SweepJob();
+            else return "ERROR unknown mode " + mode + " (sweep, bob, dive, shots, perf, audio)";
+
+            Log.Clear(); _name = mode; _running = true;
+            Say("volume=" + _vol + " surface=" + F(_surface) + " deepest bed=" + F(_deepBed) + " at (" + F(_deep.x, "F2") + ", " + F(_deep.y, "F2") + ")"
+                + " depth=" + F(_surface - _deepBed, "F2") + " shore=" + (_hasShore ? "(" + F(_shore.x, "F2") + ", " + F(_shore.y, "F2") + ")" : "none found")
+                + " head/eye ratio=" + F(_ratio));
+            Jobs.Clear(); Jobs.Push(Finally(job));
+            EditorApplication.update += Tick;
+            return "STARTED " + mode;
+        }
+
+        // runs the job as nested coroutines: a yielded IEnumerator (WaitFrames) is run to its end before the parent continues
+        static void Tick()
+        {
+            try
+            {
+                while (Jobs.Count > 0)
+                {
+                    var top = Jobs.Peek();
+                    if (!top.MoveNext()) { Jobs.Pop(); continue; }
+                    var nested = top.Current as IEnumerator;
+                    if (nested != null) { Jobs.Push(nested); continue; }
+                    if (!EditorApplication.isPlaying) { Say("ABORTED play mode ended"); Jobs.Clear(); break; }
+                    return;
+                }
+            }
+            catch (System.Exception e) { Say("EXCEPTION " + e); Jobs.Clear(); }
+            _running = false; EditorApplication.update -= Tick; Say("DONE " + _name);
+        }
+
+        static IEnumerator Finally(IEnumerator job)
+        {
+            yield return job;
+            GoHome();
+            yield return WaitFrames(5);
+        }
+
+        // ---- measuring ------------------------------------------------------------------------------------------------
+
+        static UdonBehaviour Fx() { var g = GameObject.Find(RootName); return g != null ? g.GetComponent<UdonBehaviour>() : null; }
+
+        static GameObject FindInactive(string path)
+        {
+            var parts = path.Split('/'); var root = GameObject.Find(parts[0]); if (root == null) return null;
+            Transform t = root.transform; for (int i = 1; i < parts.Length; i++) { t = t.Find(parts[i]); if (t == null) return null; }
+            return t.gameObject;
+        }
+
+        static Transform Volume(int i) { var g = FindInactive(RootName + "/Volumes/Volume_" + i); return g != null ? g.transform : null; }
+
+        // first collider straight down from fromY (players and triggers ignored); NaN when nothing is there
+        static float Ground(float x, float z, float fromY)
+        {
+            RaycastHit hit;
+            return Physics.Raycast(new Vector3(x, fromY, z), Vector3.down, out hit, 500f, ~PlayerLayers, QueryTriggerInteraction.Ignore) ? hit.point.y : float.NaN;
+        }
+
+        static float Bed(float x, float z) { return Ground(x, z, _surface + 0.5f); }
+
+        static string Measure(int volume)
+        {
+            var lp = Networking.LocalPlayer;
+            _homePos = lp.GetPosition(); _homeRot = lp.GetRotation(); _homeEye = lp.GetAvatarEyeHeightAsMeters();
+            _ratio = (Head().y - _homePos.y) / Mathf.Max(_homeEye, 0.01f);
+            if (_ratio < 0.5f || _ratio > 1.5f) _ratio = 0.92f; // ClientSim: head = feet + 0.92 x eye height
+
+            int best = -1; float bestBed = float.MaxValue; Vector2 bestXZ = Vector2.zero; float bestSurf = 0f;
+            for (int i = 0; ; i++)
+            {
+                var v = Volume(i);
+                if (v == null) break;
+                if (volume >= 0 && i != volume) continue;
+                Vector3 c = v.position, e = v.lossyScale * 0.5f;
+                float surf = c.y + e.y;
+                float step = Mathf.Max(0.5f, Mathf.Max(e.x, e.z) / 150f); // at most ~90k rays per volume on a big sea
+                for (float x = c.x - e.x + step * 0.5f; x < c.x + e.x; x += step)
+                    for (float z = c.z - e.z + step * 0.5f; z < c.z + e.z; z += step)
+                    {
+                        float y = Ground(x, z, surf + 0.5f);
+                        if (float.IsNaN(y) || y > surf - 0.05f) continue;
+                        if (y < bestBed) { bestBed = y; best = i; bestXZ = new Vector2(x, z); bestSurf = surf; }
+                    }
+            }
+            if (best < 0) return "ERROR no wet floor found under " + (volume >= 0 ? "Volume_" + volume : "any volume") + " (colliders under the water?)";
+            _vol = best; _surface = bestSurf; _deep = bestXZ; _deepBed = bestBed;
+
+            // shore: the nearest dry floor from the deepest point along 8 directions, 1.5 m further on
+            _hasShore = false; float bestD = float.MaxValue;
+            for (int k = 0; k < 8; k++)
+            {
+                float a = k * Mathf.PI / 4f; var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                for (float s = 0.5f; s < 80f; s += 0.5f)
+                {
+                    var p = _deep + d * s;
+                    float y = Ground(p.x, p.y, _surface + 5f);
+                    if (float.IsNaN(y)) break;
+                    if (y >= _surface + 0.02f)
+                    {
+                        if (s < bestD) { bestD = s; _shore = p + d * 1.5f; _hasShore = true; }
+                        break;
+                    }
+                }
+            }
+            return null;
+        }
+
+        // yaw (degrees) looking from a to b in XZ
+        static float Yaw(Vector2 a, Vector2 b) { var d = b - a; return Mathf.Atan2(d.x, d.y) * Mathf.Rad2Deg; }
+
+        static Pose[] DefaultPoses()
+        {
+            float depth = _surface - _deepBed;
+            float head = Mathf.Clamp(_surface - 0.4f, _deepBed + 0.3f, _surface - 0.12f);
+            float toShore = _hasShore ? Yaw(_deep, _shore) : 0f;
+            float away = toShore + 180f;
+            if (depth < 0.45f) head = _surface - depth * 0.5f;
+            return new[]
+            {
+                new Pose { name = "A_across", x = _deep.x, z = _deep.y, headY = head, yaw = away, pitch = 2f },
+                new Pose { name = "B_up", x = _deep.x, z = _deep.y, headY = head, yaw = away, pitch = -68f },
+                new Pose { name = "C_shore", x = _deep.x, z = _deep.y, headY = head, yaw = toShore, pitch = 2f },
+                new Pose { name = "D_bed", x = _deep.x, z = _deep.y, headY = head, yaw = away, pitch = 28f },
+            };
+        }
+
+        static Vector3 Head() { return Networking.LocalPlayer.GetTrackingData(VRCPlayerApi.TrackingDataType.Head).position; }
+
+        static float Var(string n)
+        {
+            var v = Fx().GetProgramVariable(n);
+            return v is float ? (float)v : (v is bool ? ((bool)v ? 1f : 0f) : float.NaN);
+        }
+
+        static void SetPreset(int p) { var fx = Fx(); fx.SetProgramVariable("preset", p); fx.SendCustomEvent("_ApplyPreset"); }
+
+        static string Fog()
+        {
+            var c = RenderSettings.fogColor;
+            return "fog=" + RenderSettings.fog + " mode=" + RenderSettings.fogMode
+                + " color=(" + c.r.ToString("R", Inv) + "," + c.g.ToString("R", Inv) + "," + c.b.ToString("R", Inv) + "," + c.a.ToString("R", Inv) + ")"
+                + " density=" + RenderSettings.fogDensity.ToString("R", Inv)
+                + " linear=" + RenderSettings.fogStartDistance.ToString("R", Inv) + "/" + RenderSettings.fogEndDistance.ToString("R", Inv);
+        }
+
+        static bool OverlayOn() { var g = FindInactive(RootName + "/Overlay"); return g != null && g.activeSelf; }
+        static GameObject Underside() { return FindInactive(RootName + "/Surfaces/Surface_" + _vol); }
+
+        // put the local player's head at (x, headY, z): feet on the floor there, eye height = the difference
+        static float PlaceHead(float x, float z, float headY, float yaw)
+        {
+            var lp = Networking.LocalPlayer;
+            float bed = Bed(x, z);
+            if (float.IsNaN(bed)) bed = headY - 1.2f;
+            float eye = Mathf.Max(0.25f, (headY - bed - 0.02f) / _ratio);
+            lp.SetAvatarEyeHeightByMeters(eye);
+            lp.TeleportTo(new Vector3(x, bed + 0.02f, z), Quaternion.Euler(0, yaw, 0));
+            return eye;
+        }
+
+        static void GoHome()
+        {
+            var lp = Networking.LocalPlayer;
+            if (lp == null) return;
+            lp.SetAvatarEyeHeightByMeters(_homeEye);
+            lp.TeleportTo(_homePos, _homeRot);
+        }
+
+        static IEnumerator WaitFrames(int n) { int f = Time.frameCount + n; while (Time.frameCount < f) yield return null; }
+
+        // surfaced (home), then until the fade is over
+        static IEnumerator Surface()
+        {
+            GoHome();
+            int g = 0; while (g++ < 900 && Var("amount") > 0f) yield return WaitFrames(1);
+            yield return WaitFrames(5);
+        }
+
+        // ---- capture --------------------------------------------------------------------------------------------------
+
+        static Camera GetCam(int w, int h)
+        {
+            if (_cam == null)
+            {
+                var g = GameObject.Find("__UWCapCam__"); if (g == null) g = new GameObject("__UWCapCam__");
+                _cam = g.GetComponent<Camera>(); if (_cam == null) _cam = g.AddComponent<Camera>();
+                _cam.enabled = false; _cam.nearClipPlane = 0.01f; _cam.farClipPlane = 1000f; _cam.fieldOfView = 65f;
+                _cam.clearFlags = CameraClearFlags.Skybox; _cam.allowMSAA = true; _cam.allowHDR = false;
+                _cam.cullingMask = ~((1 << 5) | PlayerLayers); // no UI, no local avatar, no ClientSim menu
+            }
+            if (_rt == null || _rt.width != w || _rt.height != h)
+            {
+                if (_rt != null) _rt.Release();
+                _rt = new RenderTexture(w, h, 24, RenderTextureFormat.ARGB32) { antiAliasing = 4 };
+            }
+            _cam.targetTexture = _rt;
+            return _cam;
+        }
+
+        static void Shoot(Vector3 pos, float yaw, float pitch, string path, int w, int h)
+        {
+            var cam = GetCam(w, h);
+            cam.transform.SetPositionAndRotation(pos, Quaternion.Euler(pitch, yaw, 0));
+            cam.Render();
+            var prev = RenderTexture.active; RenderTexture.active = _rt;
+            var tex = new Texture2D(w, h, TextureFormat.RGB24, false);
+            tex.ReadPixels(new Rect(0, 0, w, h), 0, 0); tex.Apply();
+            RenderTexture.active = prev;
+            File.WriteAllBytes(path, tex.EncodeToPNG());
+            Object.Destroy(tex);
+        }
+
+        // ---- jobs -----------------------------------------------------------------------------------------------------
+
+        static IEnumerator ShotsJob(string outDir, int w, int h)
+        {
+            foreach (var p in _poses)
+            {
+                // reference: the head dry at home, the camera 1 m above the water at the pose: nothing of the effect may show
+                SetPreset(0);
+                yield return Surface();
+                Say(p.name + " above: amount=" + F(Var("amount"), "F2") + " overlay=" + OverlayOn() + " underside=" + (Underside() != null && Underside().activeSelf) + " " + Fog());
+                Shoot(new Vector3(p.x, _surface + 1.0f, p.z), p.yaw, Mathf.Max(p.pitch, 10f), Path.Combine(outDir, p.name + "_0_above.png"), w, h);
+
+                for (int pr = 0; pr < 2; pr++)
+                {
+                    SetPreset(pr);
+                    float eye = PlaceHead(p.x, p.z, p.headY, p.yaw);
+                    int guard = 0;
+                    while (guard++ < 600 && !(Var("amount") >= 0.999f && Mathf.Abs(Head().y - p.headY) < 0.05f)) yield return WaitFrames(1);
+                    yield return WaitFrames(8);
+                    Say(p.name + (pr == 0 ? " subtle" : " strong") + " eye=" + F(eye, "F2") + " head=" + Head().ToString("F3") + " amount=" + F(Var("amount")) + " " + Fog() + " guard=" + guard);
+                    Shoot(new Vector3(p.x, p.headY, p.z), p.yaw, p.pitch, Path.Combine(outDir, p.name + (pr == 0 ? "_1_subtle.png" : "_2_strong.png")), w, h);
+                }
+            }
+            SetPreset(0);
+            yield return Surface();
+            Say("end amount=" + Var("amount") + " " + Fog());
+        }
+
+        // walk the head from the shore to the deepest point and back at crouch height, one teleport step (3 cm) per frame
+        static IEnumerator DiveJob()
+        {
+            if (!_hasShore) { Say("SKIPPED no dry shore found within 80 m of the deepest point"); yield break; }
+            float depth = _surface - _deepBed;
+            float eyeH = Mathf.Clamp((depth - 0.15f) / _ratio, 0.25f, 0.85f);
+            if (depth < 0.4f) Say("WARNING max depth " + F(depth, "F2") + " m: a head can barely submerge here");
+            SetPreset(0);
+            yield return Surface();
+            var before = Fog();
+            Say("before " + before);
+            var lp = Networking.LocalPlayer;
+            lp.SetAvatarEyeHeightByMeters(eyeH);
+            var pts = new List<Vector2>();
+            float len = Vector2.Distance(_shore, _deep);
+            for (float s = 0f; s <= len; s += 0.03f) pts.Add(Vector2.Lerp(_shore, _deep, s / len));
+            for (float s = len; s >= 0f; s -= 0.03f) pts.Add(Vector2.Lerp(_shore, _deep, s / len));
+            float yaw = Yaw(_shore, _deep);
+            int flipsOn = 0, flipsOff = 0, frames = 0, reversals = 0, dir = 0; bool prev = false; float maxAmt = 0f, prevAmt = 0f;
+            var transitions = new StringBuilder();
+            for (int i = 0; i < pts.Count; i++)
+            {
+                float x = pts[i].x, z = pts[i].y;
+                float floor = Ground(x, z, _surface + 5f);
+                if (float.IsNaN(floor)) continue;
+                lp.TeleportTo(new Vector3(x, floor + 0.02f, z), Quaternion.Euler(0, yaw, 0));
+                yield return WaitFrames(1);
+                frames++;
+                float amt = Var("amount"); bool sub = Var("submerged") > 0.5f; var hd = Head();
+                if (sub && !prev) { flipsOn++; transitions.Append("ON head=" + F(hd.y) + "; "); }
+                if (!sub && prev) { flipsOff++; transitions.Append("OFF head=" + F(hd.y) + "; "); }
+                prev = sub;
+                if (amt > maxAmt) maxAmt = amt;
+                float d = amt - prevAmt; int nd = d > 1e-5f ? 1 : (d < -1e-5f ? -1 : 0); if (nd != 0) { if (dir != 0 && nd != dir) reversals++; dir = nd; }
+                prevAmt = amt;
+            }
+            yield return WaitFrames(60);
+            Say("dive eye=" + F(eyeH, "F2") + " frames=" + frames + " flipsOn=" + flipsOn + " flipsOff=" + flipsOff + " maxAmount=" + F(maxAmt) + " amountDirectionReversals=" + reversals);
+            Say("transitions " + transitions);
+            Say("after  " + Fog() + " amount=" + Var("amount"));
+            Say("EXACT_RESTORE=" + (before == Fog()));
+            Say("overlayActive=" + OverlayOn());
+        }
+
+        // render cost at the first pose: overlay and underside on vs off (render + GPU sync, editor numbers)
+        static IEnumerator PerfJob(int w, int h)
+        {
+            var p = _poses[0];
+            PlaceHead(p.x, p.z, p.headY, p.yaw);
+            int guard = 0;
+            while (guard++ < 600 && Var("amount") < 0.999f) yield return WaitFrames(1);
+            yield return WaitFrames(10);
+            var overlay = FindInactive(RootName + "/Overlay"); var surf = Underside();
+            var cam = GetCam(w, h);
+            cam.transform.SetPositionAndRotation(new Vector3(p.x, p.headY, p.z), Quaternion.Euler(p.pitch, p.yaw, 0));
+            var tex = new Texture2D(1, 1, TextureFormat.RGB24, false);
+            var samples = new[] { new List<double>(), new List<double>() };
+            for (int rep = 0; rep < 8; rep++)
+            {
+                for (int v = 0; v < 2; v++)
+                {
+                    overlay.SetActive(v == 0); surf.SetActive(v == 0);
+                    cam.Render();
+                    var sw = System.Diagnostics.Stopwatch.StartNew(); int n = 10;
+                    for (int i = 0; i < n; i++)
+                    {
+                        cam.Render();
+                        var prev = RenderTexture.active; RenderTexture.active = _rt; tex.ReadPixels(new Rect(0, 0, 1, 1), 0, 0); RenderTexture.active = prev;
+                    }
+                    sw.Stop(); samples[v].Add(sw.Elapsed.TotalMilliseconds / n);
+                }
+                yield return WaitFrames(2);
+            }
+            overlay.SetActive(true); surf.SetActive(true);
+            Object.Destroy(tex);
+            for (int v = 0; v < 2; v++)
+            {
+                samples[v].Sort();
+                Say((v == 0 ? "overlay+underside ON " : "overlay+underside OFF") + " at " + w + "x" + h + " 4xMSAA: median "
+                    + samples[v][samples[v].Count / 2].ToString("F2", Inv) + " ms, min " + samples[v][0].ToString("F2", Inv) + " ms per render+GPU sync");
+            }
+        }
+
+        // slow descent / rise of the head through the surface by changing the eye height (player stands still on the bed)
+        static IEnumerator SweepJob()
+        {
+            if (_surface - _deepBed < 0.45f) Say("WARNING max depth " + F(_surface - _deepBed, "F2") + " m: the lowest eye height may not reach 20 cm under the surface");
+            var lp = Networking.LocalPlayer;
+            yield return Surface();
+            var before = Fog();
+            PlaceHead(_deep.x, _deep.y, _surface + 0.10f, 0f);
+            yield return WaitFrames(40);
+            var surf = Underside();
+            for (int dirn = 0; dirn < 2; dirn++)
+            {
+                int drained = 0, sw = 0; float firstOn = float.NaN, firstOff = float.NaN; bool prev = Var("submerged") > 0.5f;
+                for (int i = 0; i <= 120; i++)
+                {
+                    float target = dirn == 0 ? _surface + 0.10f - 0.0025f * i : _surface - 0.20f + 0.0025f * i; // 2.5 mm per step, 5 frames per step
+                    lp.SetAvatarEyeHeightByMeters(Mathf.Max(0.2f, (target - _deepBed - 0.02f) / _ratio));
+                    yield return WaitFrames(5);
+                    float hy = Head().y; bool s = Var("submerged") > 0.5f;
+                    if (s != prev) { sw++; if (s) firstOn = hy; else firstOff = hy; prev = s; }
+                    if (hy < _surface && !surf.activeSelf) drained++;
+                }
+                Say((dirn == 0 ? "descent" : "rise") + ": switches=" + sw + " firstOn head=" + F(firstOn, "F4") + " firstOff head=" + F(firstOff, "F4")
+                    + " (surface " + F(_surface, "F4") + ") drainedFrames=" + drained);
+            }
+            yield return Surface();
+            Say("restore exact=" + (before == Fog()) + " after " + Fog());
+        }
+
+        // head bobbed through the surface (surface + A sin, 0.7 Hz, 6 s per amplitude) by teleporting the feet each frame.
+        // Above ~4 cm gravity drops the feet between frames, so counts there are harness artefacts, not flicker.
+        static IEnumerator BobJob()
+        {
+            var lp = Networking.LocalPlayer;
+            yield return Surface();
+            var before = Fog();
+            PlaceHead(_deep.x, _deep.y, _surface - 0.25f, 0f);
+            yield return WaitFrames(30);
+            float off = Head().y - lp.GetPosition().y;
+            var surf = Underside();
+            foreach (float amp in new[] { 0.01f, 0.02f, 0.025f, 0.04f, 0.05f })
+            {
+                int sw = 0, drained = 0, frames = 0; bool prev = Var("submerged") > 0.5f; float lo = float.MaxValue, hi = float.MinValue; float t0 = Time.realtimeSinceStartup;
+                while (Time.realtimeSinceStartup - t0 < 6f)
+                {
+                    float target = _surface + amp * Mathf.Sin((Time.realtimeSinceStartup - t0) * 2f * Mathf.PI * 0.7f);
+                    lp.TeleportTo(new Vector3(_deep.x, target - off, _deep.y), Quaternion.Euler(0, 0, 0));
+                    yield return WaitFrames(1);
+                    float hy = Head().y; lo = Mathf.Min(lo, hy); hi = Mathf.Max(hi, hy); frames++;
+                    bool s = Var("submerged") > 0.5f; if (s != prev) { sw++; prev = s; }
+                    if (hy < _surface && !surf.activeSelf) drained++;
+                }
+                Say("bob amp=" + F(amp * 100f, "F1") + "cm frames=" + frames + " head " + F(lo) + ".." + F(hi) + " switches=" + sw + " drainedFrames(head under the surface, no underside)=" + drained);
+            }
+            yield return Surface();
+            Say("restore exact=" + (before == Fog()) + " before " + before + " after " + Fog());
+        }
+
+        // muffle check: every scene AudioSource with a low-pass filter, surfaced / submerged / surfaced
+        static IEnumerator AudioJob()
+        {
+            var p = _poses[0];
+            Say("audio sources with a filter: " + System.Array.FindAll(Object.FindObjectsOfType<AudioSource>(), s => s.GetComponent<AudioLowPassFilter>() != null).Length);
+            yield return Surface();
+            AudioReport("surfaced before");
+            PlaceHead(p.x, p.z, p.headY, p.yaw);
+            { int g = 0; while (g++ < 900 && Var("amount") < 0.999f) yield return WaitFrames(1); }
+            yield return WaitFrames(5);
+            AudioReport("submerged");
+            yield return Surface();
+            AudioReport("surfaced after");
+        }
+
+        static void AudioReport(string tag)
+        {
+            foreach (var s in Object.FindObjectsOfType<AudioSource>())
+            {
+                var lp = s.GetComponent<AudioLowPassFilter>(); if (lp == null) continue;
+                Say(tag + ": " + s.name + " filterEnabled=" + lp.enabled + " cutoff=" + lp.cutoffFrequency.ToString("R", Inv) + " volume=" + s.volume.ToString("R", Inv));
+            }
+        }
+    }
+}

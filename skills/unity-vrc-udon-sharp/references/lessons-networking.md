@@ -25,3 +25,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **Bridge third-party minigames to a shared currency at each game's single money-backend class, keep the purse object's exact name, and make game resets clear bets only** — the whole game follows that one class, and shared-currency scripts often find the purse with `GameObject.Find`.
 - **Keep SmartObjectSync (≥ 3.10.0) rather than migrating to LightSync; reset its example pickups to proximity 0.1 and toggle grabbability through `SmartObjectSync.pickupable`** — the example prefabs ship proximity 2, and writing `VRC_Pickup.pickupable` directly is overwritten by the ownership logic.
 - **Format in-world numbers by converting to integers and joining with a literal `"."`, never by handing floats to `string.Format`** — Udon runs under each player's locale with no InvariantCulture, so some players see `3:02,412`.
+
+## Local render effects
+
+- **Run a head-in-water effect (the kit's `.omp/templates/underwater/`) on an asymmetric switch, on at depth > 0 and off ~3 cm above, in the world's own fog mode (Exp ρ = 5.54/d, ExpSq 2.355/d; Exp worlds ~1.6× d), with `_Udon`-prefixed globals only and play-mode proof renders** — a symmetric switch showed a drained pond, a forced fog mode is stripped from builds, other global names are refused, VRChat worlds have no depth texture, and edit-mode water can render black after a reopen.
