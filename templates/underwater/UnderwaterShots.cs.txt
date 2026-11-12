@@ -26,6 +26,11 @@ namespace AWDK.Underwater
     ///   Start("splash", outDir, w, h) the local player drops into the water from 1.2 m: one splash ring (ringsPushed +1,
     ///                           amplitude near 1), then the head goes under next to it and frames look up at the ring
     ///                           as it spreads (_splash_<age>.png) plus a calm frame; logs the ring globals
+    ///   Start("jump", outDir, w, h, volume, posesJson) hand jump-ins: per pose the player drops at (dropX, dropZ) from dropH m above the
+    ///                           surface (0.1 step in, 0.5 jump from the bank, 0.8 jump from a bridge), then the head goes to the pose; frames at
+    ///                           0.5 / 1.2 / 2.2 s after the splash, Subtle and Strong (jump_<name>_<preset>_<age>.png)
+    ///   Start("udon" / "udonmove", outDir) Udon cost of the script's Update (stopwatch per frame, 240 frames) with the players present;
+    ///                           spawn a crowd first with VRC.SDK3.ClientSim.ClientSimMain.SpawnRemotePlayer(); udonmove walks them through the surface
     /// volume = index of the water volume to test (-1 = the deepest). posesJson (optional, shots/perf):
     ///   {"poses":[{"name":"A","x":0,"z":0,"headY":-0.6,"yaw":90,"pitch":2}]}  (world metres and degrees)
     /// Default poses are measured at the deepest point: across, up at the surface, toward the shore, down at the bed.
@@ -35,10 +40,15 @@ namespace AWDK.Underwater
     {
         const string RootName = "UnderwaterFX";
         static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+
+        /// <summary>Seas: the deepest-point search only considers beds at most this deep (m under the surface; 0 = no limit), so the test spot is a wading-depth shelf and not the 30 m deep.</summary>
+        public static float MaxDepth = 0f;
+        /// <summary>Optional (xMin, xMax, zMin, zMax) to keep the deepest-point search inside (all zero = the whole volume).</summary>
+        public static Vector4 TestRegion = Vector4.zero;
         // Player, PlayerLocal, and the two ClientSim layers (local avatar robot, menu): never ground, never in the frames
         const int PlayerLayers = (1 << 9) | (1 << 10) | (1 << 18) | (1 << 19);
 
-        [System.Serializable] public class Pose { public string name; public float x, z, headY, yaw, pitch; }
+        [System.Serializable] public class Pose { public string name; public float x, z, headY, yaw, pitch, dropX, dropZ, dropH; }
         [System.Serializable] class PoseList { public Pose[] poses; }
 
         static bool _running; static string _name = "idle";
@@ -85,7 +95,9 @@ namespace AWDK.Underwater
             else if (mode == "bob") job = BobJob();
             else if (mode == "sweep") job = SweepJob();
             else if (mode == "splash") job = SplashJob(outDir, w, h);
-            else return "ERROR unknown mode " + mode + " (sweep, bob, dive, shots, perf, audio, splash)";
+            else if (mode == "jump") job = JumpJob(outDir, w, h);
+            else if (mode == "udon" || mode == "udonmove") job = UdonCostJob(mode == "udonmove");
+            else return "ERROR unknown mode " + mode + " (sweep, bob, dive, shots, perf, audio, splash, jump, udon, udonmove)";
 
             Log.Clear(); _name = mode; _running = true;
             Say("volume=" + _vol + " surface=" + F(_surface) + " deepest bed=" + F(_deepBed) + " at (" + F(_deep.x, "F2") + ", " + F(_deep.y, "F2") + ")"
@@ -164,8 +176,10 @@ namespace AWDK.Underwater
                 for (float x = c.x - e.x + step * 0.5f; x < c.x + e.x; x += step)
                     for (float z = c.z - e.z + step * 0.5f; z < c.z + e.z; z += step)
                     {
+                        if (TestRegion != Vector4.zero && (x < TestRegion.x || x > TestRegion.y || z < TestRegion.z || z > TestRegion.w)) continue;
                         float y = Ground(x, z, surf + 0.5f);
                         if (float.IsNaN(y) || y > surf - 0.05f) continue;
+                        if (MaxDepth > 0f && y < surf - MaxDepth) continue;
                         if (y < bestBed) { bestBed = y; best = i; bestXZ = new Vector2(x, z); bestSurf = surf; }
                     }
             }
@@ -420,6 +434,70 @@ namespace AWDK.Underwater
                 Shoot(new Vector3(cam.x, headY, cam.y), yaw, pitch, Path.Combine(outDir, "splash_" + F(age, "F1") + "s.png"), w, h);
             }
             Say("ringsPushed after the frames=" + Var("ringsPushed") + " (more than one after the splash = wake rings from the head placement)");
+        }
+
+        // hand jump-ins: per pose the local player is dropped at (dropX, dropZ) from dropH metres above the surface (0.1 = a step in
+        // from the bank, 0.75 = a jump from a bridge, 1.2 = the splash job), then its head goes to the pose (x, headY, z, yaw, pitch)
+        // and frames at 0.5 / 1.2 / 2.2 s after the splash show the rings from below, Subtle and Strong (jump_<name>_<preset>_<age>.png)
+        static IEnumerator JumpJob(string outDir, int w, int h)
+        {
+            var lp = Networking.LocalPlayer;
+            foreach (var p in _poses)
+            {
+                if (p.dropH <= 0f) continue;
+                for (int pr = 0; pr < 2; pr++)
+                {
+                    SetPreset(pr);
+                    yield return Surface();
+                    float before = Var("ringsPushed");
+                    lp.TeleportTo(new Vector3(p.dropX, _surface + p.dropH, p.dropZ), Quaternion.Euler(0, p.yaw, 0));
+                    float t0 = Time.time;
+                    while (Var("ringsPushed") <= before && Time.time - t0 < 4f) yield return WaitFrames(1);
+                    float tSplash = Time.time;
+                    Say(p.name + (pr == 0 ? " subtle" : " strong") + ": drop (" + F(p.dropX, "F2") + ", " + F(p.dropZ, "F2") + ") from " + F(p.dropH, "F2") + " m: ringsPushed "
+                        + before + " -> " + Var("ringsPushed") + " after " + F(tSplash - t0, "F2") + " s");
+                    PlaceHead(p.x, p.z, p.headY, p.yaw);
+                    int g = 0; while (g++ < 600 && Var("amount") < 0.999f) yield return WaitFrames(1);
+                    foreach (float age in new[] { 0.5f, 1.2f, 2.2f })
+                    {
+                        while (Time.time - tSplash < age) yield return WaitFrames(1);
+                        Say("  frame age=" + F(Time.time - tSplash, "F2") + " s head=" + Head().ToString("F3") + " amount=" + F(Var("amount")) + " ringBoost=" + F(Var("_ringBoost")));
+                        Shoot(new Vector3(p.x, p.headY, p.z), p.yaw, p.pitch, Path.Combine(outDir, "jump_" + p.name + (pr == 0 ? "_subtle_" : "_strong_") + F(age, "F1") + "s.png"), w, h);
+                    }
+                }
+            }
+            SetPreset(0);
+            yield return Surface();
+        }
+
+        // Udon cost of the script's Update with the players present (ClientSimMain.SpawnRemotePlayer first for a crowd): the stopwatch
+        // wraps one extra _update call per editor frame, 240 frames. udonmove also bobs every ClientSim remote player through the water
+        // surface (their transforms are moved directly: VRCPlayerApi.TeleportTo does nothing on ClientSim remote players) so the ring code runs.
+        static IEnumerator UdonCostJob(bool move)
+        {
+            yield return Surface();
+            var fx = Fx();
+            int total = VRCPlayerApi.GetPlayerCount();
+            var remote = new List<Transform>();
+            foreach (var t in Object.FindObjectsOfType<Transform>())
+                if (t.name.EndsWith("Remote Player")) { remote.Add(t); var rb = t.GetComponent<Rigidbody>(); if (rb != null) rb.isKinematic = true; }
+            double sum = 0, max = 0; int n = 240; float r0 = Var("ringsPushed");
+            for (int i = 0; i < n; i++)
+            {
+                if (move)
+                    for (int k = 0; k < remote.Count; k++)
+                    {
+                        float phase = i * 0.08f + k * 0.37f;
+                        remote[k].position = new Vector3(_deep.x + (k % 10) * 0.6f - 3f, _surface + Mathf.Sin(phase) * 0.25f, _deep.y + (k / 10) * 0.6f - 3f);
+                    }
+                yield return null;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                fx.SendCustomEvent("_update");
+                sw.Stop();
+                double ms = sw.Elapsed.TotalMilliseconds; sum += ms; if (ms > max) max = ms;
+            }
+            Say("udon _update with " + total + " players (" + remote.Count + " remote)" + (move ? " bobbing through the surface" : " static") + ": mean " + (sum / n).ToString("F4", Inv)
+                + " ms, max " + max.ToString("F3", Inv) + " ms over " + n + " frames, ringsPushed +" + (Var("ringsPushed") - r0));
         }
 
         // render cost at the first pose: overlay and underside on vs off (render + GPU sync, editor numbers)

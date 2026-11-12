@@ -299,6 +299,68 @@ namespace AWDK.Underwater
             return sb.ToString();
         }
 
+        /// <summary>
+        /// A rotated rectangular water body (a pool): volumes are axis-aligned boxes, so the rectangle is covered by up to `slabs`
+        /// inscribed slabs along x (no volume overhangs the pool: the head is never "under water" beside it), and every slab's underside
+        /// quad is the exact rotated rectangle. corners = the four corners in order (p0 -> p1 -> p2 -> p3, x/z in metres).
+        /// Appends to the scene's UnderwaterFX. bedY (the caustics plane of its volumes) defaults to the measured median bed.
+        /// </summary>
+        public static string InstallRect(Vector2[] corners, float surfaceY, float bottomY, int slabs = 4, float bedY = float.NaN)
+        {
+            if (corners == null || corners.Length != 4) return "ERROR want the 4 corners of the rectangle";
+            Vector2 c = (corners[0] + corners[1] + corners[2] + corners[3]) * 0.25f;
+            Vector2 u = corners[1] - corners[0], v = corners[3] - corners[0];
+            float xmin = float.MaxValue, xmax = float.MinValue;
+            foreach (var p in corners) { xmin = Mathf.Min(xmin, p.x); xmax = Mathf.Max(xmax, p.x); }
+            var feet = new List<Vector4>();
+            float area = 0f, polyArea = u.magnitude * v.magnitude;
+            for (int s = 0; s < Mathf.Max(slabs, 1); s++)
+            {
+                float xa = Mathf.Lerp(xmin, xmax, (float)s / slabs), xb = Mathf.Lerp(xmin, xmax, (float)(s + 1) / slabs);
+                float lo = float.MinValue, hi = float.MaxValue; bool ok = true;
+                foreach (var x in new[] { xa, xb })
+                {
+                    float zl, zh;
+                    if (!Section(corners, Mathf.Clamp(x, xmin + 0.002f, xmax - 0.002f), out zl, out zh)) { ok = false; break; }
+                    lo = Mathf.Max(lo, zl); hi = Mathf.Min(hi, zh);
+                }
+                if (!ok) continue;
+                lo -= RectOverhang; hi += RectOverhang;     // pool rims: a few cm of volume past the water edge does no harm
+                if (hi - lo < 0.3f || xb - xa < 0.1f) continue;
+                feet.Add(new Vector4(xa, xb, lo, hi)); area += (xb - xa) * (hi - lo);
+            }
+            if (feet.Count == 0) return "ERROR no slab fits inside the rectangle";
+            var res = Install(feet.ToArray(), surfaceY, bottomY, true);
+            if (!res.StartsWith("OK")) return res;
+            var fx = FindFx();
+            float yaw = Mathf.Atan2(-u.y, u.x) * Mathf.Rad2Deg;
+            for (int i = fx.surfaces.Length - feet.Count; i < fx.surfaces.Length; i++)
+            {
+                var t = fx.surfaces[i].transform;
+                t.SetPositionAndRotation(new Vector3(c.x, surfaceY - 0.001f, c.y), Quaternion.Euler(0f, yaw, 0f));
+                t.localScale = new Vector3(u.magnitude, 1f, v.magnitude);
+                if (!float.IsNaN(bedY)) fx.bedY[i] = bedY;
+                EditorUtility.SetDirty(t);
+            }
+            UdonSharpEditorUtility.CopyProxyToUdon(fx);
+            EditorUtility.SetDirty(fx);
+            return res + " | rect slabs=" + feet.Count + " coverage=" + (100f * area / polyArea).ToString("F0", Inv) + "% yaw=" + yaw.ToString("F1", Inv);
+        }
+
+        // z range of the convex polygon at x (false when x is outside it)
+        static bool Section(Vector2[] poly, float x, out float zlo, out float zhi)
+        {
+            zlo = float.MaxValue; zhi = float.MinValue;
+            for (int i = 0; i < poly.Length; i++)
+            {
+                Vector2 a = poly[i], b = poly[(i + 1) % poly.Length];
+                if ((a.x - x) * (b.x - x) > 0f || Mathf.Approximately(a.x, b.x)) continue;
+                float z = a.y + (b.y - a.y) * (x - a.x) / (b.x - a.x);
+                zlo = Mathf.Min(zlo, z); zhi = Mathf.Max(zhi, z);
+            }
+            return zhi > zlo;
+        }
+
         // ---- per-world look -----------------------------------------------------------------------------------------
 
         /// <summary>Colours (and optionally the fog distance) of one preset, 0 Subtle / 1 Strong, on this scene's UnderwaterFX.</summary>
@@ -322,6 +384,17 @@ namespace AWDK.Underwater
             r[volume] = Mathf.Max(0f, multiplier);
             fx.volumeRipple = r;
             return Commit(fx, "OK volume " + volume + " ripple x" + r[volume].ToString("F2", Inv));
+        }
+
+        /// <summary>Grows the underside quad of one water body to its volume plus `margin` metres per side (seas: reach what is visible from inside, up to where the world's water ends or the fog is opaque).</summary>
+        public static string SetUndersideMargin(int volume, float margin)
+        {
+            var fx = FindFx();
+            if (fx == null || fx.volumes == null || fx.surfaces == null || volume < 0 || volume >= fx.volumes.Length || volume >= fx.surfaces.Length) return "ERROR no " + RootName + " or no volume " + volume;
+            var vs = fx.volumes[volume].lossyScale; var s = fx.surfaces[volume].transform;
+            s.localScale = new Vector3(vs.x + 2f * margin, 1f, vs.z + 2f * margin);
+            EditorUtility.SetDirty(s);
+            return Commit(fx, "OK volume " + volume + " underside quad " + s.localScale.x.ToString("F0", Inv) + " x " + s.localScale.z.ToString("F0", Inv) + " m");
         }
 
         /// <summary>The preset the world ships with: 0 Subtle (default), 1 Strong.</summary>
@@ -372,6 +445,47 @@ namespace AWDK.Underwater
             return msg + " | save the scene";
         }
 
+        /// <summary>Caustics plane (Strong) of one water body, metres: use it when the median bed of a sea or a pool is not where players see the bed.</summary>
+        public static string SetBedY(int volume, float y)
+        {
+            var fx = FindFx();
+            if (fx == null || fx.volumes == null || volume < 0 || volume >= fx.volumes.Length) return "ERROR no " + RootName + " or no volume " + volume;
+            var b = new float[fx.volumes.Length];
+            for (int i = 0; i < b.Length; i++) b[i] = fx.bedY != null && i < fx.bedY.Length ? fx.bedY[i] : y;
+            b[volume] = y;
+            fx.bedY = b;
+            return Commit(fx, "OK volume " + volume + " bedY=" + y.ToString("F2", Inv));
+        }
+
+        /// <summary>
+        /// Re-collects the scene's AudioSources into the muffle list without rebuilding anything (run it after ambience, waves or video
+        /// were added to a scene that already has its UnderwaterFX). Same rules as Install: a disabled low-pass filter per source;
+        /// sources with their own active or tuned low-pass filter are skipped and reported.
+        /// </summary>
+        public static string RefreshAudio()
+        {
+            var fx = FindFx();
+            if (fx == null) return "ERROR no " + RootName + " in the open scene: Install first";
+            var scene = EditorSceneManager.GetActiveScene();
+            var root = fx.gameObject;
+            var srcs = new List<AudioSource>(); var filters = new List<AudioLowPassFilter>(); var skipped = new List<string>();
+            foreach (var a in Object.FindObjectsOfType<AudioSource>(true))
+            {
+                if (a.gameObject.scene != scene || a.transform.IsChildOf(root.transform)) continue;
+                var lp = a.GetComponent<AudioLowPassFilter>();
+                bool ours = lp != null && fx.mutedFilters != null && System.Array.IndexOf(fx.mutedFilters, lp) >= 0;
+                if (lp != null && !ours && (lp.enabled || lp.cutoffFrequency < 21999f)) { skipped.Add(a.name); continue; }
+                if (lp == null) lp = a.gameObject.AddComponent<AudioLowPassFilter>();
+                lp.enabled = false; lp.cutoffFrequency = 22000f;
+                srcs.Add(a); filters.Add(lp);
+            }
+            fx.mutedSources = srcs.ToArray(); fx.mutedFilters = filters.ToArray();
+            var sb = new StringBuilder("OK audioSources=" + srcs.Count + ":");
+            foreach (var s in srcs) sb.Append(" " + s.name);
+            if (skipped.Count > 0) sb.Append(" skippedAudio(own low-pass)=" + string.Join(",", skipped));
+            return Commit(fx, sb.ToString());
+        }
+
         // ---- helpers ------------------------------------------------------------------------------------------------
 
         static GameObject FindRoot(UnityEngine.SceneManagement.Scene scene)
@@ -393,16 +507,29 @@ namespace AWDK.Underwater
             return Physics.Raycast(new Vector3(x, fromY, z), Vector3.down, out h, 500f, ~0, QueryTriggerInteraction.Ignore) ? h.point.y : float.NaN;
         }
 
-        // median bed height over the 1 m grid cells of the footprint whose floor is under the water (the caustics' plane)
+        // grid step of the bed measurements: 1 m, coarser on seas so a call stays under ~40k rays
+        static float GridStep(Vector4 f) { return Mathf.Max(1f, Mathf.Max(f.y - f.x, f.w - f.z) / 200f); }
+
+        /// <summary>Wet cells deeper than this (m under the surface) are ignored by the caustics' bed plane: on a sea the plane should sit at the beds players walk on, not the deep.</summary>
+        public static float CausticsMaxDepth = 6f;
+
+        /// <summary>InstallRect: how far (m) a slab volume may reach past the rectangle's edge in z (pool rims).</summary>
+        public static float RectOverhang = 0.1f;
+
+        // median bed height over the grid cells of the footprint whose floor is under the water (the caustics' plane)
         static float MedianBed(Vector4 f, float surfaceY)
         {
-            var ys = new List<float>();
-            for (float x = f.x + 0.5f; x < f.y; x += 1f)
-                for (float z = f.z + 0.5f; z < f.w; z += 1f)
+            var ys = new List<float>(); var shallow = new List<float>();
+            float st = GridStep(f);
+            for (float x = f.x + st * 0.5f; x < f.y; x += st)
+                for (float z = f.z + st * 0.5f; z < f.w; z += st)
                 {
                     float y = Ground(x, z, surfaceY + 30f);
-                    if (!float.IsNaN(y) && y < surfaceY - 0.05f) ys.Add(y);
+                    if (float.IsNaN(y) || y >= surfaceY - 0.05f) continue;
+                    ys.Add(y);
+                    if (y > surfaceY - CausticsMaxDepth) shallow.Add(y);
                 }
+            if (shallow.Count > 0) ys = shallow;
             if (ys.Count == 0) return surfaceY - 1f;
             ys.Sort();
             return ys[ys.Count / 2];
@@ -411,8 +538,9 @@ namespace AWDK.Underwater
         static float LowestBed(Vector4 f, float surfaceY)
         {
             float low = float.NaN;
-            for (float x = f.x + 0.5f; x < f.y; x += 1f)
-                for (float z = f.z + 0.5f; z < f.w; z += 1f)
+            float st = GridStep(f);
+            for (float x = f.x + st * 0.5f; x < f.y; x += st)
+                for (float z = f.z + st * 0.5f; z < f.w; z += st)
                 {
                     float y = Ground(x, z, surfaceY + 30f);
                     if (!float.IsNaN(y) && y < surfaceY - 0.05f && (float.IsNaN(low) || y < low)) low = y;

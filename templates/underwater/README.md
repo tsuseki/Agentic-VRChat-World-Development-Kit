@@ -83,6 +83,18 @@ sits inside an assembly definition, the `Editor/` scripts need an Editor-only as
    report; 0.5 for a sheltered pond, 1.5 for open water, 0 for mirror-calm; default 1).
 6. Save the scene, then run the proof below.
 
+   More installer calls (all `UnderwaterKit.*`, all return a text report; save the scene afterwards):
+
+   | Call | Use |
+   |---|---|
+   | `InstallRect(corners, surfaceY, bottomY, slabs, bedY)` | a rotated rectangular pool: four corners in order (x/z); covered by up to `slabs` inscribed axis-aligned slab volumes (`RectOverhang` 0.1 m), every slab's underside is the exact rotated rectangle. Appends. Axis-aligned pools: `slabs` 1 |
+   | `SetUndersideMargin(volume, margin)` | grows the underside quad of a sea to its volume + margin per side (reach what is visible from inside, up to where the world's water ends) |
+   | `SetBedY(volume, y)` | caustics plane of one body (the median bed of beds shallower than `CausticsMaxDepth` 6 m is used by default) |
+   | `RefreshAudio()` | re-collect the scene's AudioSources into the muffle list after ambience/video was added to a scene that already has its `UnderwaterFX` |
+
+   Only the underside quad of the volume the head is in is shown, so bodies at several heights (sea + pools) do not float each other's undersides in the air. `Install` measures beds on a grid of at most ~200 steps per side, so a call on a km-wide sea stays short. For seas set `UnderwaterShots.MaxDepth` (e.g. 2.2) and `UnderwaterShots.TestRegion` (xMin, xMax, zMin, zMax) before `Start(..)`, so the proof's "deepest point" is a wading-depth shelf near a shore and not the deep. Extra proof jobs: `jump` (poses with `dropX`, `dropZ`, `dropH`: hand jump-ins seen from below), `udon` / `udonmove` (Udon cost of `_update`; spawn a crowd first with `VRC.SDK3.ClientSim.ClientSimMain.SpawnRemotePlayer()`; ClientSim remote players are moved by their transforms, not by `TeleportTo`).
+
+
 ### Defaults
 
 | | Subtle (0, default) | Strong (1) |

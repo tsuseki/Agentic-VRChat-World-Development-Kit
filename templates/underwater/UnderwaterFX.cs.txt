@@ -118,6 +118,7 @@ public class UnderwaterFX : UdonSharpBehaviour
     private float _ripple, _rippleScale, _rippleSpeed, _refraction, _ringWobble;
     private float _worldFogStart, _worldFogEnd, _floorY, _surfY, _curTop, _ringBoost;
     private int _curVolume = -1;
+    private int _shown = -1;                         // the volume whose underside quad is active (only that one: the others' surfaces are at other heights)
     private int _waveVolume = -2;                    // volume whose ripple multiplier is in _UdonUW_Wave
 
     // volumes, cached for the player tracking (static water)
@@ -287,6 +288,7 @@ public class UnderwaterFX : UdonSharpBehaviour
         }
 
         if (!_active) _SetObjects(true);
+        else if (submerged && _curVolume != _shown) _ShowSurface(_curVolume);
         _ringBoost = _RingBoost(now, head);
         _Apply(amount * amount * (3f - 2f * amount));
     }
@@ -422,10 +424,18 @@ public class UnderwaterFX : UdonSharpBehaviour
     {
         _active = on;
         if (overlay != null) overlay.SetActive(on);
+        if (on) { _ShowSurface(_curVolume); return; }
+        _ShowSurface(-1);
+    }
+
+    // the underside of volume vi only (-1: none)
+    private void _ShowSurface(int vi)
+    {
+        _shown = vi;
         if (surfaces == null) return;
         for (int i = 0; i < surfaces.Length; i++)
         {
-            if (surfaces[i] != null) surfaces[i].SetActive(on);
+            if (surfaces[i] != null) surfaces[i].SetActive(i == vi);
         }
     }
 
