@@ -76,12 +76,13 @@ namespace AWDK.Underwater
 
             var so = Shader.Find("World/UnderwaterOverlay");
             var ss = Shader.Find("World/UnderwaterSurface");
-            if (so == null || ss == null)
-                return "ERROR shader missing (copy both .shader files and let Unity import them): overlay=" + (so != null) + " surface=" + (ss != null);
+            var sd = Shader.Find("World/UnderwaterDome");
+            if (so == null || ss == null || sd == null)
+                return "ERROR shader missing (copy the three .shader files and let Unity import them): overlay=" + (so != null) + " surface=" + (ss != null) + " dome=" + (sd != null);
             var inc = Path.GetDirectoryName(AssetDatabase.GetAssetPath(so)).Replace('\\', '/') + "/UnderwaterRipples.cginc";
-            if (!File.Exists(inc)) return "ERROR " + inc + " missing (copy UnderwaterRipples.cginc next to both shaders)";
-            if (ShaderUtil.ShaderHasError(so) || ShaderUtil.ShaderHasError(ss))
-                return "ERROR shader compile errors: overlay=" + ShaderUtil.ShaderHasError(so) + " surface=" + ShaderUtil.ShaderHasError(ss) + " (see the shader inspector)";
+            if (!File.Exists(inc)) return "ERROR " + inc + " missing (copy UnderwaterRipples.cginc next to the shaders)";
+            if (ShaderUtil.ShaderHasError(so) || ShaderUtil.ShaderHasError(ss) || ShaderUtil.ShaderHasError(sd))
+                return "ERROR shader compile errors: overlay=" + ShaderUtil.ShaderHasError(so) + " surface=" + ShaderUtil.ShaderHasError(ss) + " dome=" + ShaderUtil.ShaderHasError(sd) + " (see the shader inspector)";
 
             if (AssetDatabase.LoadAssetAtPath<Mesh>(dir + "Meshes/UnderwaterOverlayQuad.asset") == null)
             {
@@ -107,6 +108,17 @@ namespace AWDK.Underwater
             }
             if (EnsureMat(dir + "Materials/UnderwaterOverlay.mat", so)) sb.Append(" overlayMat=created");
             if (EnsureMat(dir + "Materials/UnderwaterSurface.mat", ss)) sb.Append(" surfaceMat=created");
+            if (AssetDatabase.LoadAssetAtPath<Mesh>(dir + "Meshes/UnderwaterDomeCube.asset") == null)
+            {
+                // dome: a cube of half-extent 1 (the shader centres it on the camera and scales it by the object's scale); huge bounds so it is never culled
+                var dc = new Mesh { name = "UnderwaterDomeCube" };
+                dc.vertices = new[] { new Vector3(-1, -1, -1), new Vector3(1, -1, -1), new Vector3(1, 1, -1), new Vector3(-1, 1, -1), new Vector3(-1, -1, 1), new Vector3(1, -1, 1), new Vector3(1, 1, 1), new Vector3(-1, 1, 1) };
+                dc.triangles = new[] { 0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 0, 1, 5, 0, 5, 4, 3, 7, 6, 3, 6, 2, 0, 4, 7, 0, 7, 3, 1, 2, 6, 1, 6, 5 };
+                dc.bounds = new Bounds(Vector3.zero, new Vector3(4000, 4000, 4000));
+                CreateAsset(dc, dir + "Meshes/UnderwaterDomeCube.asset");
+                sb.Append(" domeMesh=created");
+            }
+            if (EnsureMat(dir + "Materials/UnderwaterDome.mat", sd)) sb.Append(" domeMat=created");
 
             if (UdonSharpEditorUtility.GetUdonSharpProgramAsset(typeof(UnderwaterFX)) == null)
             {
@@ -239,7 +251,7 @@ namespace AWDK.Underwater
 
             bool created = fx == null;
             if (created) fx = root.AddUdonSharpComponent<UnderwaterFX>();
-            fx.volumes = volumes.ToArray(); fx.surfaces = surfaces.ToArray(); fx.overlay = root.transform.Find("Overlay").gameObject;
+            fx.volumes = volumes.ToArray(); fx.surfaces = surfaces.ToArray(); fx.overlay = root.transform.Find("Overlay").gameObject; fx.dome = EnsureDome(root);
             fx.mutedSources = srcs.ToArray(); fx.mutedFilters = filters.ToArray(); fx.bedY = bed.ToArray(); fx.volumeRipple = ripple.ToArray();
             var fogNote = "";
             if (created)
@@ -487,6 +499,38 @@ namespace AWDK.Underwater
         }
 
         // ---- helpers ------------------------------------------------------------------------------------------------
+
+        // the far dome child of the root (created when missing): half-extent DomeSize m around the camera, inactive on land
+        public static float DomeSize = 100f;
+
+        static GameObject EnsureDome(GameObject root)
+        {
+            var t = root.transform.Find("Dome");
+            if (t != null) return t.gameObject;
+            var dir = Dir();
+            var mesh = AssetDatabase.LoadAssetAtPath<Mesh>(dir + "Meshes/UnderwaterDomeCube.asset");
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(dir + "Materials/UnderwaterDome.mat");
+            if (mesh == null || mat == null) return null;
+            var dome = Child(root, "Dome");
+            Visual(dome, mesh, mat);
+            dome.transform.localScale = Vector3.one * DomeSize;
+            dome.SetActive(false);
+            return dome;
+        }
+
+        /// <summary>Adds the far dome (and the dome assets) to a scene whose UnderwaterFX was installed before the dome existed, and re-syncs the component's new fields.</summary>
+        public static string AddDome()
+        {
+            var fx = FindFx();
+            if (fx == null) return "ERROR no " + RootName + " in the open scene: Install first";
+            var prep = Prepare();
+            if (prep.StartsWith("ERROR")) return prep;
+            fx.dome = EnsureDome(fx.gameObject);
+            if (fx.dome == null) return "ERROR dome assets missing: " + prep;
+            if (fx.ringGain == null || fx.ringGain.Length < 2) fx.ringGain = new[] { 1f, 2f };
+            if (fx.ringGlow == null || fx.ringGlow.Length < 2) fx.ringGlow = new[] { 0f, 1f };
+            return Commit(fx, "OK dome " + fx.dome.name + " scale " + fx.dome.transform.localScale.x.ToString("F0", Inv) + " ringGain=" + fx.ringGain[0].ToString("F1", Inv) + "/" + fx.ringGain[1].ToString("F1", Inv));
+        }
 
         static GameObject FindRoot(UnityEngine.SceneManagement.Scene scene)
         {

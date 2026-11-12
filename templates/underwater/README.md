@@ -22,6 +22,7 @@ It is a world default, like jumping: every body of water players can enter gets 
 |---|---|---|
 | `UnderwaterFX.cs.txt` | `<folder>/UnderwaterFX.cs` | UdonSharp runtime, sync None: head-vs-volume test, fades, fog swap, muffle, exact restore, splash-ring tracking of all players |
 | `UnderwaterOverlay.shader.txt` | `<folder>/Shaders/UnderwaterOverlay.shader` | `World/UnderwaterOverlay`: one full-screen draw with a GrabPass, stereo-instanced safe |
+| `UnderwaterDome.shader.txt` | `<folder>/Shaders/UnderwaterDome.shader` | `World/UnderwaterDome`: camera-following cube in the fog colour that fills what no geometry covers (far-clip gap, sky below the horizon) |
 | `UnderwaterSurface.shader.txt` | `<folder>/Shaders/UnderwaterSurface.shader` | `World/UnderwaterSurface`: underside quad, `Cull Front`, unlit, alpha-blended, fogged |
 | `UnderwaterRipples.cginc.txt` | `<folder>/Shaders/UnderwaterRipples.cginc` | the surface slope (swell, chop, rings) both shaders share; a world's own water shader may include it |
 | `UnderwaterKit.cs.txt` | `<folder>/Editor/UnderwaterKit.cs` | installer `AWDK.Underwater.UnderwaterKit`, menu `Tools/AWDK/Underwater` |
@@ -30,7 +31,7 @@ It is a world default, like jumping: every body of water players can enter gets 
 `<folder>` is `Assets/<World>/Underwater/`, or a shared folder such as `Assets/_World/Shared/Underwater/`
 when several worlds in one project use it. Copy each template once per project; two copies of
 `UnderwaterFX` don't compile. The installer creates everything else itself, the first time it runs:
-`Meshes/UnderwaterOverlayQuad.asset`, `Meshes/UnderwaterSurfaceQuad.asset`, `Materials/UnderwaterOverlay.mat`,
+`Meshes/UnderwaterOverlayQuad.asset`, `Meshes/UnderwaterSurfaceQuad.asset`, `Meshes/UnderwaterDomeCube.asset`, `Materials/UnderwaterOverlay.mat`,
 `Materials/UnderwaterSurface.mat` and the U# program asset `UnderwaterFX.asset`. They go in the folder of
 `UnderwaterFX.cs`, or under `UnderwaterKit.AssetFolder` if you set it.
 
@@ -88,6 +89,7 @@ sits inside an assembly definition, the `Editor/` scripts need an Editor-only as
    | Call | Use |
    |---|---|
    | `InstallRect(corners, surfaceY, bottomY, slabs, bedY)` | a rotated rectangular pool: four corners in order (x/z); covered by up to `slabs` inscribed axis-aligned slab volumes (`RectOverhang` 0.1 m), every slab's underside is the exact rotated rectangle. Appends. Axis-aligned pools: `slabs` 1 |
+   | `AddDome()` | scenes installed before the far dome existed: creates the dome assets and the `Dome` child, assigns `fx.dome`, fills `ringGain` / `ringGlow` when empty and re-syncs the Udon program (save the scene afterwards). `Install` does this by itself on new installs |
    | `SetUndersideMargin(volume, margin)` | grows the underside quad of a sea to its volume + margin per side (reach what is visible from inside, up to where the world's water ends) |
    | `SetBedY(volume, y)` | caustics plane of one body (the median bed of beds shallower than `CausticsMaxDepth` 6 m is used by default) |
    | `RefreshAudio()` | re-collect the scene's AudioSources into the muffle list after ambience/video was added to a scene that already has its `UnderwaterFX` |
@@ -157,7 +159,8 @@ Globals, readable by any shader (only `_Udon*` names can be set from Udon):
 |---|---|
 | `_UdonUW_Wave` | x swell/chop tilt, y swell scale (1/m), z swell speed, w refraction |
 | `_UdonUW_RingCfg` | x ring speed (m/s), y life (s), z wavelength (m), w now (Udon `Time.time`, updated while a ring lives) |
-| `_UdonUW_Rings[8]` | x, z world position, start time (same clock), amplitude 0..1 (0 = empty) |
+| `_UdonUW_Rings[8]` | x, z world position, start time (same clock), amplitude 0..1 (0 = empty; Strong pushes up to `ringGain` x that) |
+| `_UdonUW_RingGlow` | ring highlight weight of the active preset (`ringGlow[preset]`): the underside shader adds bright glints on the rings' own slope |
 
 The rings are tracked even while the local head is dry. A world's own top-surface water shader can show them:
 `#include "UnderwaterRipples.cginc"` (relative path from that shader) and add `UW_Rings(worldPos.xz)` to its
@@ -216,6 +219,11 @@ state arrays are allocated once in `Start`. Not measured yet: measure `perf` and
   shader that applies Unity fog. Shaders that fog from their own uniforms (radial fog, see
   `.omp/knowledge/notes/fog-must-be-radial-and-shader-driven-for-mirrors.md`) ignore the swap unless you drive
   those uniforms too. The skybox is not fogged; it shows only through the Snell window, tinted by the overlay.
+  Everything else it would show is covered by the **far dome** (`UnderwaterDome.shader.txt`, child `Dome` of the
+  root, `fx.dome`): a 100 m cube that follows the camera, in the current scene fog colour, drawn before the
+  skybox and after the opaque geometry, so only pixels no geometry covers are filled (the underside quad ends at the
+  far clip plane and a sea has no bed past its last tile: without the dome the unfogged sky and the far
+  headlands show below the horizon "like glass"). The Snell cone (above ~38° elevation) is left open.
 - **The Snell window is approximated:** a smoothstep on the view angle (window up to ~48° from vertical), bent by
   a screen-space shift of the grabbed image instead of real refraction, and no reflections. Strong's caustics are
   projected on one flat plane at the median bed height, so over shallow boulders they lie flat and slide as the

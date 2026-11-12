@@ -34,6 +34,8 @@ public class UnderwaterFX : UdonSharpBehaviour
     public GameObject[] surfaces;
     [Tooltip("Full-screen overlay (World/UnderwaterOverlay), enabled while submerged")]
     public GameObject overlay;
+    [Tooltip("Far dome (World/UnderwaterDome): fills what no geometry covers (sky, past the world's far edge) with the fog colour while submerged")]
+    public GameObject dome;
 
     [Header("World audio sources to muffle (their AudioLowPassFilter, same index). Voices are never in this list")]
     public AudioSource[] mutedSources;
@@ -79,6 +81,10 @@ public class UnderwaterFX : UdonSharpBehaviour
     public float[] refraction = { 0.03f, 0.05f };
     [Tooltip("Extra overlay wobble (x the preset wobble) while a fresh ring is within 4 m of the head")]
     public float[] ringWobble = { 1.0f, 0.5f };
+    [Tooltip("Splash ring amplitude gain: Strong's dark mirror band hides rings, so its rings are pushed harder (slope x2 = glints x4)")]
+    public float[] ringGain = { 1.0f, 2.0f };
+    [Tooltip("Splash ring highlight added by the underside shader (0 = none): the ring reads as bright glints, not just dark outlines")]
+    public float[] ringGlow = { 0.0f, 1.0f };
 
     [Header("Splash rings (every player's feet crossing a surface; local only)")]
     public float ringSpeed = 1.2f;
@@ -110,12 +116,13 @@ public class UnderwaterFX : UdonSharpBehaviour
     private float _worldFogDensity;
     private float[] _baseVolume;
 
-    private int _idParams, _idTint, _idMurk, _idFloor, _idWave, _idRingCfg, _idRings;
+    private int _idParams, _idTint, _idMurk, _idFloor, _idWave, _idRingCfg, _idRings, _idRingGlow;
+    private float _ringGlow;
 
     // active preset, cached
     private Color _tint, _fogColor, _murkColor;
     private float _desat, _fogDensity, _fogEndUW, _murk, _wobble, _wobbleSpeed, _caustics, _lowpass, _gain;
-    private float _ripple, _rippleScale, _rippleSpeed, _refraction, _ringWobble;
+    private float _ripple, _rippleScale, _rippleSpeed, _refraction, _ringWobble, _ringGain;
     private float _worldFogStart, _worldFogEnd, _floorY, _surfY, _curTop, _ringBoost;
     private int _curVolume = -1;
     private int _shown = -1;                         // the volume whose underside quad is active (only that one: the others' surfaces are at other heights)
@@ -146,6 +153,7 @@ public class UnderwaterFX : UdonSharpBehaviour
         _idWave = VRCShader.PropertyToID("_UdonUW_Wave");
         _idRingCfg = VRCShader.PropertyToID("_UdonUW_RingCfg");
         _idRings = VRCShader.PropertyToID("_UdonUW_Rings");
+        _idRingGlow = VRCShader.PropertyToID("_UdonUW_RingGlow");
 
         _worldFog = RenderSettings.fog;
         _worldFogMode = RenderSettings.fogMode;
@@ -221,6 +229,8 @@ public class UnderwaterFX : UdonSharpBehaviour
         _rippleSpeed = rippleSpeed[p];
         _refraction = refraction[p];
         _ringWobble = ringWobble[p];
+        _ringGain = (ringGain != null && p < ringGain.Length) ? ringGain[p] : 1f;
+        _ringGlow = (ringGlow != null && p < ringGlow.Length) ? ringGlow[p] : 0f;
     }
 
     /// <summary>Takes the current volume of every muffled source as its dry volume. Call it (SendCustomEvent or a U#
@@ -243,6 +253,7 @@ public class UnderwaterFX : UdonSharpBehaviour
         float mul = 1f;
         if (vi >= 0 && volumeRipple != null && vi < volumeRipple.Length) mul = volumeRipple[vi];
         VRCShader.SetGlobalVector(_idWave, new Vector4(_ripple * mul, _rippleScale, _rippleSpeed, _refraction));
+        VRCShader.SetGlobalFloat(_idRingGlow, _ringGlow);
     }
 
     void Update()
@@ -388,7 +399,7 @@ public class UnderwaterFX : UdonSharpBehaviour
 
     private void _PushRing(float x, float z, float now, float a)
     {
-        _rings[_ringNext] = new Vector4(x, z, now, a);
+        _rings[_ringNext] = new Vector4(x, z, now, a * _ringGain);
         _ringNext = (_ringNext + 1) & 7;
         VRCShader.SetGlobalVectorArray(_idRings, _rings);
         float until = now + ringLife;
@@ -424,6 +435,7 @@ public class UnderwaterFX : UdonSharpBehaviour
     {
         _active = on;
         if (overlay != null) overlay.SetActive(on);
+        if (dome != null) dome.SetActive(on);
         if (on) { _ShowSurface(_curVolume); return; }
         _ShowSurface(-1);
     }

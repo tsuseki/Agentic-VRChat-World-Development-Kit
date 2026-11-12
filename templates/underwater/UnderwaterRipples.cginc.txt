@@ -69,11 +69,18 @@ float2 UW_Rings(float2 xz)
     return g * 0.6;
 }
 
-// the full surface slope (x, z) at world position xz; t = _Time.y
-float2 UW_SurfaceSlope(float2 xz, float t, float chopFade)
+// the full surface slope (x, z) at world position xz; t = _Time.y. rings = the splash rings' part of it (for a ring highlight)
+float2 UW_SurfaceSlopeRings(float2 xz, float t, float chopFade, out float2 rings)
 {
     float2 s = UW_Swell(xz * _UdonUW_Wave.y, t * _UdonUW_Wave.z) + UW_Chop(xz, t) * chopFade;
-    return s * _UdonUW_Wave.x + UW_Rings(xz);
+    rings = UW_Rings(xz);
+    return s * _UdonUW_Wave.x + rings;
+}
+
+float2 UW_SurfaceSlope(float2 xz, float t, float chopFade)
+{
+    float2 rings;
+    return UW_SurfaceSlopeRings(xz, t, chopFade, rings);
 }
 
 #endif

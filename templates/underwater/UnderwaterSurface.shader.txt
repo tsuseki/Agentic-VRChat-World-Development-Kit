@@ -41,6 +41,7 @@ Shader "World/UnderwaterSurface"
             fixed4 _MirrorColor;
             float _WindowAlpha;
             float _RippleGlow;
+            float _UdonUW_RingGlow;
 
             struct appdata
             {
@@ -73,7 +74,8 @@ Shader "World/UnderwaterSurface"
                 UNITY_SETUP_STEREO_EYE_INDEX_POST_VERTEX(i);
 
                 float chopFade = UW_ChopFade(i.worldPos.xz);
-                float2 slope = UW_SurfaceSlope(i.worldPos.xz, _Time.y, chopFade);
+                float2 rings;
+                float2 slope = UW_SurfaceSlopeRings(i.worldPos.xz, _Time.y, chopFade, rings);
 
                 float3 view = normalize(UnityWorldSpaceViewDir(i.worldPos));
                 // surface normal as seen from below (points down), tilted by the ripples
@@ -89,6 +91,11 @@ Shader "World/UnderwaterSurface"
                 float glint = saturate(dot(slope, slope) * 18.0);
                 float3 col = lerp(_Color.rgb, _MirrorColor.rgb, mirror);
                 col += _RippleGlow * glint * _Color.rgb;
+
+                // splash ring highlight (a preset whose mirror band hides the rings sets _UdonUW_RingGlow > 0): rings read as bright as the swell's glints
+                float ringGlint = saturate(dot(rings, rings) * 40.0) * _UdonUW_RingGlow;
+                col += ringGlint * _Color.rgb * 1.2;
+                alpha = max(alpha, ringGlint * 0.9);
 
                 fixed4 c = fixed4(col, alpha);
                 UNITY_APPLY_FOG(i.fogCoord, c);
