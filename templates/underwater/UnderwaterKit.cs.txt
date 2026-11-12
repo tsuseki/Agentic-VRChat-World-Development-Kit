@@ -275,6 +275,7 @@ namespace AWDK.Underwater
             sb.Append(" fogMode=" + RenderSettings.fogMode + " fogEnd=" + fx.fogEnd[0].ToString("F1", Inv) + "/" + fx.fogEnd[1].ToString("F1", Inv) + fogNote);
             if (skipped.Count > 0) sb.Append(" skippedAudio(own low-pass)=" + string.Join(",", skipped));
             if (!RenderSettings.fog) sb.Append(" WARNING: scene fog is OFF; builds then contain no fog variants and the underwater fog will not render: turn fog on (any mode) first");
+            sb.Append(" | " + ScanTransparents());
             sb.Append(" | save the scene");
             return sb.ToString();
         }
@@ -516,6 +517,38 @@ namespace AWDK.Underwater
             dome.transform.localScale = Vector3.one * DomeSize;
             dome.SetActive(false);
             return dome;
+        }
+
+        /// <summary>Sets the per-preset splash ring look of the scene's UnderwaterFX (ringGain / ringGlow, index 0 = Subtle, 1 = Strong) and re-syncs the Udon program.</summary>
+        public static string SetRings(float gainSubtle, float gainStrong, float glowSubtle, float glowStrong)
+        {
+            var fx = FindFx();
+            if (fx == null) return "ERROR no " + RootName + " in the open scene: Install first";
+            fx.ringGain = new[] { gainSubtle, gainStrong };
+            fx.ringGlow = new[] { glowSubtle, glowStrong };
+            return Commit(fx, "OK rings gain " + gainSubtle.ToString("F2", Inv) + "/" + gainStrong.ToString("F2", Inv) + " glow " + glowSubtle.ToString("F2", Inv) + "/" + glowStrong.ToString("F2", Inv));
+        }
+
+        /// <summary>Lists what the underside (queue Transparent+50) cannot cover: renderers with a render queue above 3050 (they draw after it, unfogged, and show crisp through the water view), and the world-space canvases that are covered (queue 3000, UI/Default has no fog keywords).</summary>
+        public static string ScanTransparents()
+        {
+            var late = new List<string>(); int canvases = 0;
+            var own = FindRootTransform();
+            foreach (var r in UnityEngine.Object.FindObjectsOfType<Renderer>())
+            {
+                if (r.gameObject.scene.name == null || (own != null && r.transform.IsChildOf(own))) continue;
+                foreach (var m in r.sharedMaterials)
+                    if (m != null && m.renderQueue > 3050) { late.Add(r.transform.name + "(" + m.shader.name + " q" + m.renderQueue + ")"); break; }
+            }
+            foreach (var c in UnityEngine.Object.FindObjectsOfType<Canvas>())
+                if (c.renderMode == RenderMode.WorldSpace && c.isRootCanvas) canvases++;
+            return "worldSpaceCanvases=" + canvases + " (covered by the underside) renderersAfterUnderside=" + late.Count + (late.Count > 0 ? ": " + string.Join(", ", late.ToArray(), 0, Mathf.Min(late.Count, 12)) : "");
+        }
+
+        static Transform FindRootTransform()
+        {
+            var r = FindRoot(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            return r != null ? r.transform : null;
         }
 
         /// <summary>Adds the far dome (and the dome assets) to a scene whose UnderwaterFX was installed before the dome existed, and re-syncs the component's new fields.</summary>

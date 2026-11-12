@@ -18,7 +18,9 @@ Shader "World/UnderwaterSurface"
     }
     SubShader
     {
-        Tags { "Queue"="Transparent-10" "RenderType"="Transparent" "IgnoreProjector"="True" "ForceNoShadowCasting"="True" }
+        // Transparent+50: after the world's own transparents (world-space UI canvases such as an entry board: UI/Default has no fog
+        // keywords) so the underside covers them like any fogged opaque object, and before the overlay (Transparent+100, GrabPass)
+        Tags { "Queue"="Transparent+50" "RenderType"="Transparent" "IgnoreProjector"="True" "ForceNoShadowCasting"="True" }
 
         Pass
         {

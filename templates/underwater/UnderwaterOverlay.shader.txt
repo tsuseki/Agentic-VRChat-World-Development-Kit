@@ -134,7 +134,9 @@ Shader "World/UnderwaterOverlay"
                         float dist = min(floorH / max(-dir.y, 0.05), 40.0);
                         float2 p = (_WorldSpaceCameraPos.xz + dir.xz * dist) * 3.2;
                         float ca = Caustic(p, _Time.y * 0.9);
-                        c += float3(0.55, 0.95, 0.9) * ca * _UdonUW_Params.w * saturate(floorH / 0.3) * smoothstep(0.0, 0.5, down) * exp(-dist * 0.15);
+                        // the plane is flat: where the real bed is far from it (a steep coast) the net would float over open water,
+                        // so it fades out between 2 and 4 m from the eye
+                        c += float3(0.55, 0.95, 0.9) * ca * _UdonUW_Params.w * saturate(floorH / 0.3) * smoothstep(0.0, 0.5, down) * exp(-dist * 0.15) * (1.0 - smoothstep(2.0, 4.0, dist));
                     }
                 }
 

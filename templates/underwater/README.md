@@ -89,9 +89,11 @@ sits inside an assembly definition, the `Editor/` scripts need an Editor-only as
    | Call | Use |
    |---|---|
    | `InstallRect(corners, surfaceY, bottomY, slabs, bedY)` | a rotated rectangular pool: four corners in order (x/z); covered by up to `slabs` inscribed axis-aligned slab volumes (`RectOverhang` 0.1 m), every slab's underside is the exact rotated rectangle. Appends. Axis-aligned pools: `slabs` 1 |
-   | `AddDome()` | scenes installed before the far dome existed: creates the dome assets and the `Dome` child, assigns `fx.dome`, fills `ringGain` / `ringGlow` when empty and re-syncs the Udon program (save the scene afterwards). `Install` does this by itself on new installs |
+   | `AddDome()` | scenes installed before the far dome existed: creates the dome assets and the `Dome` child, assigns `fx.dome`, fills `ringGain` / `ringGlow` when empty and re-syncs the Udon program (save the scene afterwards). `Install` does this by itself on new installs. Older scenes keep their serialized `ringGain` / `ringGlow`: set the current defaults with `SetRings` |
    | `SetUndersideMargin(volume, margin)` | grows the underside quad of a sea to its volume + margin per side (reach what is visible from inside, up to where the world's water ends) |
    | `SetBedY(volume, y)` | caustics plane of one body (the median bed of beds shallower than `CausticsMaxDepth` 6 m is used by default) |
+   | `SetRings(gainSubtle, gainStrong, glowSubtle, glowStrong)` | per-preset splash ring look (defaults 1.5 / 2 and 0.35 / 1): Subtle's ring reads for ~2-3 s of its 3 s life, Strong's bold; re-syncs the Udon program |
+   | `ScanTransparents()` | lists renderers whose material queue is above 3050 (they would draw over the underside) and counts the world-space canvases |
    | `RefreshAudio()` | re-collect the scene's AudioSources into the muffle list after ambience/video was added to a scene that already has its `UnderwaterFX` |
 
    Only the underside quad of the volume the head is in is shown, so bodies at several heights (sea + pools) do not float each other's undersides in the air. `Install` measures beds on a grid of at most ~200 steps per side, so a call on a km-wide sea stays short. For seas set `UnderwaterShots.MaxDepth` (e.g. 2.2) and `UnderwaterShots.TestRegion` (xMin, xMax, zMin, zMax) before `Start(..)`, so the proof's "deepest point" is a wading-depth shelf near a shore and not the deep. Extra proof jobs: `jump` (poses with `dropX`, `dropZ`, `dropH`: hand jump-ins seen from below), `udon` / `udonmove` (Udon cost of `_update`; spawn a crowd first with `VRC.SDK3.ClientSim.ClientSimMain.SpawnRemotePlayer()`; ClientSim remote players are moved by their transforms, not by `TeleportTo`).
@@ -227,7 +229,13 @@ state arrays are allocated once in `Start`. Not measured yet: measure `perf` and
 - **The Snell window is approximated:** a smoothstep on the view angle (window up to ~48° from vertical), bent by
   a screen-space shift of the grabbed image instead of real refraction, and no reflections. Strong's caustics are
   projected on one flat plane at the median bed height, so over shallow boulders they lie flat and slide as the
-  head moves.
+  head moves; they fade out between 2 and 4 m from the eye (where the real bed can be far from the plane, e.g. a
+  steep coast, the net would otherwise float over open water).
+- **Sort order:** the underside quad is queue Transparent+50 (after world transparents, before the overlay at
+  Transparent+100). A world-space UI canvas (UI/Default: queue 3000, no fog keywords, e.g. an entry board) is
+  therefore covered by the underside like any fogged opaque object. A renderer with a custom queue above 3050
+  would still draw crisp over the water view: `Install` ends with `ScanTransparents()` (also callable alone) that
+  lists such renderers and the number of world-space canvases.
 - **Rings are not physical:** one ring per entry, no spray or foam, no interaction between rings, flat-water
   speed everywhere; with more than 8 entries within 3 s the oldest rings vanish early. Feet crossing the surface
   are sampled every ~0.05–0.1 s, so a player who touches the water for less than that can be missed.

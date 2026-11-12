@@ -82,9 +82,9 @@ public class UnderwaterFX : UdonSharpBehaviour
     [Tooltip("Extra overlay wobble (x the preset wobble) while a fresh ring is within 4 m of the head")]
     public float[] ringWobble = { 1.0f, 0.5f };
     [Tooltip("Splash ring amplitude gain: Strong's dark mirror band hides rings, so its rings are pushed harder (slope x2 = glints x4)")]
-    public float[] ringGain = { 1.0f, 2.0f };
+    public float[] ringGain = { 1.5f, 2.0f };
     [Tooltip("Splash ring highlight added by the underside shader (0 = none): the ring reads as bright glints, not just dark outlines")]
-    public float[] ringGlow = { 0.0f, 1.0f };
+    public float[] ringGlow = { 0.35f, 1.0f };
 
     [Header("Splash rings (every player's feet crossing a surface; local only)")]
     public float ringSpeed = 1.2f;
