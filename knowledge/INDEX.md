@@ -4,7 +4,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## Topics
 
-- [lighting-baking](#lighting-baking) (82)
+- [lighting-baking](#lighting-baking) (83)
 - [probes-reflection-and-light](#probes-reflection-and-light) (27)
 - [materials-textures-shaders](#materials-textures-shaders) (50)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (34)
@@ -39,6 +39,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Aim spot/wash lights with LookRotation at a target, not hand-written Euler angles](notes/aim-lights-at-a-target-not-with-euler-angles.md) — A hand-typed Euler rotation can point a light 180 degrees away from its target and nothing catches it until a full bake later.
 - [Animate decor by vertex offset so it stays lightmapped](notes/animate-decor-by-vertex-offset-to-stay-lightmapped.md) — Transform/Animator motion forces a prop non-static and probe-lit, so it reads off next to baked neighbours; keep it static and move vertices in the shader instead.
 - [Async shader compilation bakes the cyan placeholder into Bakery albedo](notes/bakery-albedo-async-shader-placeholder-cyan.md) — With editor async shader compilation on, Bakery's albedo pass can render not-yet-compiled materials with Unity's cyan placeholder (or black), tinting whole lightmap groups cyan or killing their bounce; bake with ShaderUtil.allowAsyncCompilation off (or shaders warmed) and check the uvalbedo atlases before accepting.
+- [BC6H lightmap blocks straddling a bright and a dark chart turn the bright texels green](notes/bc6h-lightmap-block-straddle-green-blobs.md) — Coloured blobs on bright cushions that survive re-bakes can come from BC6H compression, not the bake; equalise chroma per chart inside each 4x4 block (luminance kept) instead of re-baking.
 - [Bakery SSS on a big fabric roof turns its underside into an area light](notes/bakery-sss-turns-large-roofs-into-emitters.md) — Per-group Bakery SSS on a large canopy can make the shaded underside brighter than sunlit ground and erase every contact shadow beneath it; scale it down with sssColor, not samples.
 - [Bakery bakes the shared material emission and ignores MaterialPropertyBlocks](notes/bakery-bakes-material-emission-not-property-blocks.md) — MaterialPropertyBlock overrides never reach the material asset, so they have zero effect on a Bakery bake; baking a "fixtures off" variant means editing the material assets and restoring them afterwards.
 - [Bakery gives small props 0-3 texel charts and negative scale-offsets when the chart rect is under 2 × padding](notes/bakery-chart-rect-narrower-than-padding-goes-negative.md) — Bakery's default atlas packer subtracts 3 texels of padding from each side of every chart rect, so a prop whose rect is under ~6 texels bakes to 0-3 texels or a negative (mirrored) scale-offset; raise Scale In Lightmap per renderer, not the mesh scale, and audit with abs(so).
