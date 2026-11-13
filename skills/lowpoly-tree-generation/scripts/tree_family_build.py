@@ -355,6 +355,18 @@
 #       and `rise` as above, above minz; placed after every other card with their own random sequence, so no other
 #       card moves (BanyanGrove v3.2, review banyan_v3_1 nit 3: the rising leader bare through the crown gap).
 #       Off = identical builds.
+#   crown stem_cover=dict(n=24, t=(0.4, 0.97), lean=(8, 20), dir=1, size=0.6, seed=8011,
+#       leader=dict(n=3, len=0.6, lean=(3, 10), size=1.0)) (sprig, opt-in; hang_side conifers, Norway spruce 2026-11-13):
+#       every hang_side card lies along its limb and points away from the trunk, so from any side the upper stem shows
+#       as a bare pole between the cards (they are edge-on where a limb points at the eye) and the leader ends as a bare
+#       rod (final-reviewer promo F1). n cards per stem (depth 0, top above minz), stratified over the stem's arc
+#       fractions t, golden-angle headings, each rooted on the stem axis and lying along it: d = dir x UP tipped `lean`
+#       deg out toward its heading (dir 1 up, -1 hanging down), length = crown size x size_top as for every card x
+#       `size`; hang_side rolls them (card face across the heading, +u side out). leader: n cards rooted `len` m below
+#       the top of every stem, pointing up (`lean` deg out, headings evenly round), length x `size`: an upright needled
+#       leader instead of a bare rod. Exact directions (no tilt / upbias draw) and max_rise / max_fall don't apply to
+#       these cards. LOD1 subset / far levels keep every card (twins); a plain LOD1 scales n by lod1_cards (leader kept).
+#       Own random sequence (seed), placed last: every other card stays put. Off = identical builds.
 #   lianas=dict(n, z=(lo, hi), r=(lo, hi), twist, segs)   thin vine stems climbing the trunk from the waterline
 #   leaf_cluster (None) m, leaf_crown_mix (0.35)   per-clump leaf normals (tree_normals cluster mode) instead
 #       of one crown dome; use with matte foliage so crowns do not shade as one bubble with a bright rim
@@ -1853,7 +1865,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     CHAIN_UP = {id(x.cont): x for x in branches if getattr(x, "cont", None) is not None}  # floor_base: merged chain heads
     FBN = [0]  # floor_base: cards levelled
     KIND = ["tip"]  # which loop places the card (crown roles: tip / main / fill / low / hang)
-    def place(b, t, d0, hang=False, nrm=None, exact=True, ub=None, aim=None):
+    def place(b, t, d0, hang=False, nrm=None, exact=True, ub=None, aim=None, free=False):
         UB = C["upbias"] if ub is None else ub  # ub: per-card upbias (tip_upbias on ground-stem tips)
         A, r, d = point_at(b, t)
         sz = size * rng.uniform(0.85, 1.15)
@@ -1866,14 +1878,14 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
             for k in range(12):  # reroute (then shrink): a card may not reach into a keep-out volume
                 if k == 8: sz *= 0.6
                 if k == 10: sz *= 0.6
-                d = ((-UP * 1.0 + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * UB)).normalized()
+                d = d0.normalized() if free else ((-UP * 1.0 + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * UB)).normalized()
                 e1 = d.orthogonal().normalized(); e2 = d.cross(e1)  # the card is sz wide in an unknown roll
                 if not any(in_clear(A + d * sz * f + e * sz * 0.5) for f in (0.0, 0.35, 0.7, 1.0)
                            for e in (Vector(), e1, -e1, e2, -e2, (e1 + e2) * 0.7072, (e1 - e2) * 0.7072,
                                      (e2 - e1) * 0.7072, -(e1 + e2) * 0.7072)): ok = True; break
             if not ok: return False
         else:
-            d = ((-UP + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * UB)).normalized()
+            d = d0.normalized() if free else ((-UP + rand_unit(rng) * 0.35) if hang else (d0 + rand_unit(rng) * C["tilt"] + UP * UB)).normalized()
         roll, cell = nrm if nrm is not None else rand_unit(rng), rng.choice(hang_cells if hang and hang_cells else cards_cells)
         if C.get("cell_scale"):  # opt-in (sprig): the drawn cell's Cards.json "scale" (card length multiplier, default 1)
             sz *= cell.get("scale", 1.0)  # so a cell drawn with bigger leaves builds the same leaf size in metres; no draws
@@ -1881,8 +1893,8 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
         if fl:  # flat (sprig): cards lie toward horizontal with their face toward the sky (layered flat crowns)
             if Vector((d.x, d.y, 0.0)).length > 1e-6: d = Vector((d.x, d.y, d.z * (1.0 - fl))).normalized()
             roll = roll.lerp(UP, fl).normalized()
-        MR = C.get("max_rise") if C["mode"] == "sprig" and not hang else None
-        MF = C.get("max_fall") if C["mode"] == "sprig" and not hang else None
+        MR = C.get("max_rise") if C["mode"] == "sprig" and not hang and not free else None  # free: stem_cover exact directions
+        MF = C.get("max_fall") if C["mode"] == "sprig" and not hang and not free else None
         for lim, bad in ((MR, MR is not None and d.z > math.sin(math.radians(MR or 0.0))),
                          (None if MF is None else -MF, MF is not None and d.z < -math.sin(math.radians(MF or 0.0)))):
             if not bad: continue  # opt-in: card tip clamped to <= max_rise / >= -max_fall deg, heading kept
@@ -1924,7 +1936,7 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
                 w = roll if roll.dot(g) >= 0.0 else -roll  # the card is two-sided: start from the face nearer the normal
                 t = w.lerp(g.normalized(), FO.get("k", 0.8))
                 if (t - d * t.dot(d)).length > 1e-3: roll = t.normalized()
-        if HS and not hang:  # opt-in hang_side: the cell's hanging side faces world down, shoots lean toward the limb tip
+        if HS and not hang and not (free and nrm is not None):  # opt-in hang_side (stem_cover curtain cards keep their roll)
             if HS.get("out", True):  # a heading back toward the trunk is mirrored outward (radial part flipped)
                 rr = Vector((A.x, A.y, 0.0))
                 if rr.length > 1e-3:
@@ -2207,6 +2219,43 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
                 if point_at(b, t)[0].z < C["minz"]: continue
                 az = rng.uniform(0.0, 2 * math.pi)
                 place(b, t, Vector((math.cos(az), math.sin(az), SM.get("rise", 0.4))).normalized())
+    SCV = C.get("stem_cover") if C["mode"] == "sprig" else None
+    if SCV:  # opt-in (header: crown stem_cover): cards along the upper stem and an upright leader, placed last
+        KIND[0] = "main"
+        rng = random.Random(SCV.get("seed", 8011))  # own sequence, placed last: every card above is unchanged
+        base = size; GA = math.radians(137.50776)
+        k = SCV.get("n", 0) if (keep is not None or not lod1) else max(1, int(SCV.get("n", 0) * CFG.get("lod1_cards", 0.6))) if SCV.get("n") else 0
+        lo, hi = SCV.get("t", (0.4, 0.97)); LD = SCV.get("leader"); CU = SCV.get("curtain")
+        for b in branches:
+            if b.depth != 0 or b.pts[-1].z < C["minz"]: continue
+            Lb = sum((b.pts[i + 1] - b.pts[i]).length for i in range(len(b.pts) - 1))
+            az0 = rng.uniform(0.0, 2 * math.pi); jobs = []
+            for i in range(k):
+                jobs.append((lo + (hi - lo) * (i + rng.uniform(0.0, 1.0)) / k, az0 + i * GA + rng.uniform(-0.3, 0.3),
+                             SCV.get("dir", 1), rng.uniform(*SCV.get("lean", (8.0, 20.0))), SCV.get("size", 0.6)))
+            if LD:
+                tl = max(0.0, 1.0 - LD.get("len", 0.6) / max(Lb, 1e-6)); nl = LD.get("n", 3)
+                for i in range(nl):
+                    jobs.append((tl, az0 + i * 2 * math.pi / nl + rng.uniform(-0.2, 0.2), 1,
+                                 rng.uniform(*LD.get("lean", (3.0, 10.0))), LD.get("size", 1.0)))
+            for t, az, dr, ln, sm in jobs:
+                if point_at(b, t)[0].z < C["minz"]: continue
+                e = math.radians(ln); size = base * sm
+                place(b, t, UP * (dr * math.cos(e)) + Vector((math.cos(az), math.sin(az), 0.0)) * math.sin(e), free=True)
+        if CU:  # curtain: vertical hanging-shoot cards under the inner limbs, face turned out along the limb heading
+            kc = CU["n"] if (keep is not None or not lod1) else max(1, int(CU["n"] * CFG.get("lod1_cards", 0.6)))
+            zl, zh = CU.get("z", (0.45, 0.98))
+            hosts = sorted((b for b in branches if b.depth == 1 and zl * CFG["height"] <= b.pts[0].z <= zh * CFG["height"]
+                            and b.pts[0].z >= C["minz"] and len(b.pts) > 1), key=lambda b: (b.pts[0].z, b.pts[0].x, b.pts[0].y))
+            for i in range(kc if hosts else 0):
+                b = hosts[min(len(hosts) - 1, int((i + rng.uniform(0.0, 1.0)) / kc * len(hosts)))]
+                Lb = sum((b.pts[j + 1] - b.pts[j]).length for j in range(len(b.pts) - 1))
+                t = min(0.9, rng.uniform(*CU.get("reach", (0.15, 0.45))) / max(Lb, 1e-6))
+                A = point_at(b, t)[0]; h = Vector((A.x, A.y, 0.0))
+                h = h.normalized() if h.length > 1e-6 else Vector((1.0, 0.0, 0.0))
+                e = math.radians(rng.uniform(*CU.get("lean", (0.0, 8.0)))); size = base * CU.get("size", 1.0)
+                place(b, t, UP * (CU.get("dir", -1) * math.cos(e)) + h * math.sin(e), nrm=h * (1.0 if rng.random() < 0.5 else -1.0), free=True)
+        size = base
     if C.get("floor_base") and probe is None: print(f"STAT floor_base {'lod1' if lod1 else 'lod0'} levelled {FBN[0]}")
     return [c for c in cards if c[0] is not None]
 
