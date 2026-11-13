@@ -52,6 +52,7 @@ Shader "World/UnderwaterOverlay"
             {
                 float4 pos : SV_POSITION;
                 float3 viewRay : TEXCOORD0;
+                float eyeU : TEXCOORD1; // 0..1 across THIS eye (pixel x is double-wide in single-pass stereo)
                 UNITY_VERTEX_OUTPUT_STEREO
             };
 
@@ -65,6 +66,7 @@ Shader "World/UnderwaterOverlay"
                 // the mesh is a quad of vertices at +-0.5: stretch it over the whole viewport
                 float2 ndc = v.vertex.xy * 2.0;
                 o.pos = float4(ndc, UNITY_NEAR_CLIP_VALUE, 1.0);
+                o.eyeU = v.vertex.x + 0.5;
 
                 // world-space ray of this corner (stereo-safe: unity_CameraInvProjection and UNITY_MATRIX_I_V are per eye)
                 float4 vp = mul(unity_CameraInvProjection, float4(ndc.x, ndc.y * _ProjectionParams.x, 1.0, 1.0));
@@ -89,7 +91,9 @@ Shader "World/UnderwaterOverlay"
 
                 float amount = _UdonUW_Params.x;
                 // pixel position -> texture coordinate of the grabbed copy (same pixel grid, same orientation)
-                float2 uv = i.pos.xy * (_ScreenParams.zw - 1.0);
+                // x from the interpolant, not SV_POSITION: in single-pass (double-wide) stereo the right eye's pixel x runs
+                // width..2*width, which pushed its UVs off the texture (a solid clamped colour over the whole right eye)
+                float2 uv = float2(i.eyeU, i.pos.y * (_ScreenParams.w - 1.0));
                 float t = _Time.y * _UdonUW_Params.z;
 
                 // gentle wobble: slow sine layers that depend on the screen row only. Both eyes of an HMD share rows, so a
