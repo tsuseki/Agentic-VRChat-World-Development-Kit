@@ -12,14 +12,7 @@ Editor through [MCP for Unity](https://github.com/CoplayDev/unity-mcp).
 
 ## Pipeline
 
-```mermaid
-flowchart LR
-  A[A Concept: setup, interview, shell blockouts + concept art, Design Lock] --> B[B Blueprint: floor plan, greybox]
-  B --> C[C Build: Build-out loop per area, interactions]
-  C --> D[D Finish: lighting, performance, ship, retro]
-  C -- next pass --> C
-  D -- change needed --> C
-```
+![AWDK pipeline: Concept, Layout, Build, Finish; every step loops plan, build, review until ship it](docs/images/pipeline.png)
 
 You decide the concept and style up front and the final upload; agents build the rest. Every
 design and build stage ends at a reviewer agent's verdict (layout, dressing, final), and

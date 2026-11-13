@@ -2,6 +2,42 @@
 
 Semantic versioning, one git tag `vX.Y.Z` per release; the current version is in `VERSION`.
 
+## 0.4.0 — 2026-11-13
+
+### Rules
+
+- **World sounds** (RULES 13): every world gets an idle playlist (video player) or matching looping
+  ambience, with an off/quieter control at spawn saved with Persistence; loops must be seamless
+  (crossfaded, zero-crossing cut, wrap proof).
+- **Player options persist** with VRChat PlayerData; PlayerData setter signature fixed in the
+  UdonSharp docs and template.
+- **Shells always modelled in Blender** as merged, welded meshes, never Unity blocks (rule 10,
+  blender-modeler shell section).
+- **Bake GPU gate**: one bake on the machine at a time (`scripts/gpu_bake_gate.py`).
+- perf-optimizer: the part-off table at the worst view is the mandatory first deliverable;
+  CPU drill threshold and regression bisect procedure.
+
+### Underwater effect kit (new)
+
+`templates/underwater/` with installer and docs, a C.2 default for every enterable water body:
+surface ripples and splash rings from all players, refraction, caustics with distance fade, far dome,
+current-volume underside, seas with adaptive grids, proof jobs (sweep, dive, jump, splash, Udon);
+per-eye UV fix for single-pass stereo.
+
+### Trees, materials, tools
+
+- `tree_family_build`: crown `hang_side`, `unstack` (card roll pass, far levels replay LOD1 rolls,
+  `view=` pass), `stem_cover` for hanging conifers, buttress tip/dive keys.
+- materials-shaders: window glass recipe and `AWDK/WindowGlass` shader.
+- Default `openai` image model: GPT Image 2.6 Sunburst.
+- Knowledge: BC6H block-straddle lightmap blobs, scoped Bakery group bakes darkening volumes,
+  async shader compilation baking cyan into Bakery albedo.
+
+### README
+
+- The pipeline diagram is now an image (`docs/images/pipeline.png`): four phases with their steps and
+  the plan → build → review loop every step runs until the reviewer says SHIP IT.
+
 ## 0.3.0 — 2026-11-05
 
 ### User decisions and picked art (new)
