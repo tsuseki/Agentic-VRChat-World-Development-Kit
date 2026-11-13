@@ -4,7 +4,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## Topics
 
-- [lighting-baking](#lighting-baking) (81)
+- [lighting-baking](#lighting-baking) (82)
 - [probes-reflection-and-light](#probes-reflection-and-light) (27)
 - [materials-textures-shaders](#materials-textures-shaders) (50)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (34)
@@ -33,6 +33,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [A lightmap group's atlas size drives upload size; size it from the texels it needs](notes/bake-atlas-size-drives-bundle-size.md) — Size a lightmap group's atlas from the summed chart texels it actually needs: an 8192 group holding 17.1 M needed texels in 67 M allocated cost ~47 MB of upload against 4096.
 - [A prop added after the last bake reads blue - check lightmapIndex before re-tinting](notes/unbaked-props-read-blue.md) — lightmapIndex -1 means no baked data, so a new prop falls back to skybox ambient and reads cold next to an identical baked one; do not re-tint the material.
 - [A refused selected-groups render raises a modal dialog that freezes the editor](notes/bake-refused-selected-render-freezes-editor-on-a-modal.md) — Bakery's 'Scene geometry/layout changed since last full bake' refusal is a modal DisplayDialog: the editor main thread blocks and every MCP call times out until someone presses Enter.
+- [A scoped Bakery group bake re-renders every volume without the rest of the scene](notes/bakery-scoped-group-bake-rewrites-volumes-dark.md) — Bakery's "Render Selected Groups" re-renders all Bakery volumes from only the selected groups' geometry, leaving them far too dark; restore the volume assets from the last full bake (md5-verified) after any scoped bake.
 - [A sealed-light audit needs to skip directional lights, inactive geometry, and lights on a face](notes/sealed-baked-light-audit-needs-three-filters.md) — A naive bounds.Contains test for lights sealed inside geometry double-counts; skip directional and inactive objects and require a margin so escaped lights on a face are not re-flagged.
 - [After a world bake, run the post-bake steps in one fixed order](notes/bake-post-bake-sequence-in-order.md) — Wait for Bakery's finished line, re-bake reflection probes, restore the shared global storage, run the world's bake-dependent rebuilds, verify counts and bindings, then do a guarded save; skipping or reordering steps ships stale probes or broken bindings.
 - [Aim spot/wash lights with LookRotation at a target, not hand-written Euler angles](notes/aim-lights-at-a-target-not-with-euler-angles.md) — A hand-typed Euler rotation can point a light 180 degrees away from its target and nothing catches it until a full bake later.

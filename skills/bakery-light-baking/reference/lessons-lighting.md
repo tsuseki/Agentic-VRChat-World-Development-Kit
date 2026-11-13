@@ -83,3 +83,4 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 
 - **For day/night or lights-off switches, bake twice with identical atlas packing, append bake B to `storage.maps`, and offset `Renderer.lightmapIndex` from Udon** — these setters are exposed to Udon and Bakery rebinds lightmaps at runtime. Adding or removing a light mesh between the two bakes repacks the atlas.
 - **Bake with `ShaderUtil.allowAsyncCompilation` off and check the `uvalbedo_*` atlases (no pure cyan, no all-zero group) before accepting** — async compilation bakes the cyan placeholder into Bakery albedo, tinting groups cyan or killing their bounce.
+- **After a scoped "Render Selected Groups" bake, restore the Bakery volumes and Light Volume atlas from the last full bake and md5-verify** — the scoped bake re-renders every volume from the selected groups only, leaving them far too dark.
