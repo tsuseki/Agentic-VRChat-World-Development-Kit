@@ -25,7 +25,13 @@ def shot(pg, name): pg.screenshot(path=os.path.join(SD, name)); print("shot", na
 def open_ctx(p):
     return p.chromium.launch_persistent_context(profile, channel="chrome", headless=True, args=["--disable-blink-features=AutomationControlled", "--headless=new"],
                                                 user_agent=UA, viewport={"width": 1440, "height": 900})
-def goto(pg, wait=15000): pg.goto(URL, wait_until="domcontentloaded"); pg.wait_for_timeout(wait)
+def dismiss(pg):                                                                  # promo modals ("Maybe Later") block every click
+    for _ in range(3):
+        later = pg.get_by_text("Maybe Later", exact=True)
+        if later.count() and later.first.is_visible(): later.first.click(); pg.wait_for_timeout(1200); continue
+        if pg.locator("div.bg-black-80[data-state=open]").count() == 0: return
+        pg.keyboard.press("Escape"); pg.wait_for_timeout(1200)
+def goto(pg, wait=15000): pg.goto(URL, wait_until="domcontentloaded"); pg.wait_for_timeout(wait); dismiss(pg)
 with sync_playwright() as p:
     ctx = open_ctx(p); pg = ctx.new_page()
     if step == "generate":
@@ -47,7 +53,7 @@ with sync_playwright() as p:
         from PIL import Image
         row = Image.new("RGB", (4 * 560, 560))
         for k, (x, y) in enumerate(TAKE_POS, 1):
-            pg.mouse.click(x, y); pg.wait_for_timeout(6000); shot(pg, "take%d.png" % k)
+            dismiss(pg); pg.mouse.click(x, y); pg.wait_for_timeout(6000); dismiss(pg); shot(pg, "take%d.png" % k)
             row.paste(Image.open(os.path.join(SD, "take%d.png" % k)).convert("RGB").crop((330, 60, 1130, 860)).resize((560, 560)), ((k - 1) * 560, 0))
         row.save(os.path.join(SD, "takes.png"))
     elif step == "views":
@@ -55,7 +61,7 @@ with sync_playwright() as p:
         from PIL import Image
         grid = Image.new("RGB", (4 * 400, 4 * 400))
         for k, (x, y) in enumerate(TAKE_POS, 1):
-            pg.mouse.click(x, y); pg.wait_for_timeout(6000)
+            dismiss(pg); pg.mouse.click(x, y); pg.wait_for_timeout(6000); dismiss(pg)
             pg.mouse.click(1105, 108); pg.wait_for_timeout(2500)                  # clay/solid shading
             for j in range(4):
                 shot(pg, "view_t%d_%d.png" % (k, j))
@@ -79,6 +85,9 @@ with sync_playwright() as p:
         x, y = TAKE_POS[int(extra[0]) - 1]; out = os.path.join(run, "gen"); os.makedirs(out, exist_ok=True)
         goto(pg); pg.mouse.click(x, y); pg.wait_for_timeout(9000)
         pg.get_by_text("Export", exact=True).last.click(); pg.wait_for_timeout(3500)
+        if not pg.get_by_text("Blender", exact=True).count():                     # dialog remembers the last format (GLB came back once)
+            pg.mouse.click(972, 653); pg.wait_for_timeout(1500); pg.get_by_text("FBX", exact=True).last.click(); pg.wait_for_timeout(1500)
+        pg.get_by_text("Blender", exact=True).last.click(); pg.wait_for_timeout(800)
         with pg.expect_download(timeout=120000) as d: pg.mouse.click(1033, 796)   # dialog Export button (FBX, Blender preset, 2K)
         dl = d.value; path = os.path.join(out, "studio_export_" + dl.suggested_filename); dl.save_as(path)
         ex = os.path.join(out, "export"); os.makedirs(ex, exist_ok=True)
