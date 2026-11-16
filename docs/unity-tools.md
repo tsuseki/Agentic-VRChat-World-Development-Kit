@@ -172,14 +172,15 @@ current build target with no clicks. Scene list: `"Assets/a.unity;Assets/b.unity
 needs `"scene|thumb.png"` (existing worlds keep their image and name).
 
 1. `WorldUploader.Plan(list)`: read-only; login, build target, each scene's blueprint ID.
-2. **Ownership check, once.** `BuildAndUpload` opens the SDK's "Copyright ownership agreement"
-   modal for every blueprint not agreed in this editor session and awaits a click; driven by an
-   agent nobody clicks and the upload hangs forever. Ask the owner once in chat (VRChat's text,
-   the world list); only after their OK, `WorldUploader.Agree(list)` records it through the SDK's
-   own `VRCCopyrightAgreement.Agree` (server consent + session list), so the SDK check passes.
-   Session-scoped: after an editor restart, ask and `Agree` again.
-3. `WorldUploader.Start(list)`: refuses on a dirty open scene, `__*__` rig objects or not logged in;
-   opens each scene, opens the SDK panel, `BuildAndUpload`. Poll `Status()`; `Cancel()` stops
-   before the next world. MCP calls time out while the build blocks the editor: re-poll, never re-start.
+2. `WorldUploader.Start(list)`: refuses on a dirty open scene, `__*__` rig objects or not logged in;
+   opens each scene, opens the SDK panel, records the ownership agreement, `BuildAndUpload`. Poll
+   `Status()`; `Cancel()` stops before the next world. MCP calls time out while the build blocks the
+   editor: re-poll, never re-start.
+
+**Ownership check.** `BuildAndUpload` opens the SDK's "Copyright ownership agreement" modal for every
+blueprint not agreed in this editor session and awaits a click; driven by an agent, nobody clicks and
+the upload hangs forever. The owner's request to upload is the ownership confirmation (no separate
+question), so `Start` records it first through the SDK's own `VRCCopyrightAgreement.Agree` (server
+consent + session list) and the SDK's check passes.
 
 Platform switches (Android) are not chained: switch once, then run the whole list per platform.

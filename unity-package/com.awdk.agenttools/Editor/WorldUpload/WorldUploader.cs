@@ -23,18 +23,16 @@ namespace AWDK.AgentTools
     /// anatawa12's Continuous Avatar Uploader. Every call returns at once (MCP gives up after ~10 s);
     /// the upload runs on the editor's main-thread sync context and is polled with <see cref="Status"/>.
     ///
-    /// Why it hung before: <c>BuildAndUpload</c> calls <c>VRCCopyrightAgreement.CheckCopyrightAgreement</c>,
+    /// Ownership check: <c>BuildAndUpload</c> calls <c>VRCCopyrightAgreement.CheckCopyrightAgreement</c>,
     /// which opens a modal ("Copyright ownership agreement") and awaits a click whenever this editor
-    /// session has no agreement recorded for the blueprint. Nobody clicks, so the task waits forever.
-    /// <see cref="Agree"/> records the owner's agreement through the SDK's own path (server consent +
-    /// session list) for every listed world, once, after the owner has confirmed it in chat; the
-    /// SDK's check then passes without a modal. Agreement is per editor session (SessionState):
-    /// after an editor restart call Agree again.
+    /// session has no agreement recorded for the blueprint; nobody clicks, so an agent upload hangs.
+    /// The owner's upload request is the ownership confirmation (BoothAssets S-0068), so before each
+    /// build this records the agreement through the SDK's own <c>VRCCopyrightAgreement.Agree</c>
+    /// (server consent + session list) and the SDK check passes without a modal.
     ///
     /// Usage (execute_code): <c>return AWDK.AgentTools.WorldUploader.Plan("Assets/a.unity;Assets/b.unity");</c>
-    /// → owner confirms ownership → <c>WorldUploader.Agree(same list)</c> → <c>WorldUploader.Start(same list)</c>
-    /// → poll <c>WorldUploader.Status()</c>. Thumbnail: optional "scene|thumb.png" entries; existing worlds
-    /// keep their image when none is given.
+    /// → <c>WorldUploader.Start(same list)</c> → poll <c>WorldUploader.Status()</c>. Thumbnail: optional
+    /// "scene|thumb.png" entries; existing worlds keep their image when none is given.
     /// </summary>
     public static class WorldUploader
     {
@@ -71,32 +69,14 @@ namespace AWDK.AgentTools
             return sb.ToString();
         }
 
-        /// <summary>Records the copyright/ownership agreement for every listed world that already has a
-        /// blueprint ID. Only call after the owner confirmed in chat that they hold the rights to
-        /// everything in these worlds. Async; result lands in <see cref="Status"/>.</summary>
-        public static string Agree(string list)
-        {
-            if (Busy) return "BUSY " + current;
-            var ids = Parse(list).Select(e => ReadBlueprintId(e.Scene)).Where(id => !string.IsNullOrEmpty(id)).Distinct().ToList();
-            if (!APIUser.IsLoggedIn) return "ERROR not logged in to the VRChat SDK";
-            Log.Clear();
-            running = AgreeAll(ids);
-            return "agreeing for " + ids.Count + " worlds: " + string.Join(", ", ids);
-        }
-
-        static async Task AgreeAll(List<string> ids)
+        static async Task AgreeOne(string id)
         {
             var agree = typeof(VRCCopyrightAgreement).GetMethod("Agree", BindingFlags.NonPublic | BindingFlags.Static);
-            if (agree == null) { Line("ERROR VRCCopyrightAgreement.Agree not found (SDK changed)"); return; }
-            foreach (var id in ids)
-            {
-                current = "agree " + id;
-                var ok = await (Task<bool>)agree.Invoke(null, new object[] { id });
-                Line((ok ? "AGREED " : "AGREE FAILED ") + id);
-            }
-            current = "idle";
+            if (agree == null) throw new Exception("VRCCopyrightAgreement.Agree not found (SDK changed)");
+            if (!await (Task<bool>)agree.Invoke(null, new object[] { id }))
+                throw new Exception("ownership agreement was not accepted by the API for " + id);
+            Line("AGREED " + id);
         }
-
         /// <summary>Opens each scene in turn and builds + uploads it for the current build target.
         /// Refuses to start if the open scene has unsaved changes.</summary>
         public static string Start(string list)
@@ -174,7 +154,12 @@ namespace AWDK.AgentTools
                 if (e.Thumb == null) throw new Exception("new world needs a thumbnail: 'scene|thumb.png'");
                 world = new VRCWorld { Name = Path.GetFileNameWithoutExtension(e.Scene), Tags = new List<string>() };
                 Line("CREATE " + e.Scene + " as new world '" + world.Name + "'");
+                // Assign the ID now (as BuildAndUpload would) so the agreement can be recorded for it.
+                Undo.RecordObject(pms[0], "Assigning a new ID");
+                pms[0].AssignId(PipelineManager.ContentType.world);
+                id = pms[0].blueprintId;
             }
+            await AgreeOne(id);
 
             current = "build+upload " + e.Scene;
             EventHandler<(string status, float percentage)> onProg = (_, p) => { current = "upload " + e.Scene + " " + p.status; percent = p.percentage; };
