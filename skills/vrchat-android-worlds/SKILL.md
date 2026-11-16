@@ -134,6 +134,10 @@ PC defaults in `perf-optimizer` "Default budgets" still govern the PC build.
 | Red "iOS is not supported as a build target" | The account has no iOS upload permission | Skip iOS; the Android fallback covers it |
 | Phone players can't use the UI | Small world-space buttons, VR-only gestures | Large targets, VRC_UIShape, optional screen-space menu; detect `VRCInputMethod.Touch` |
 | Requested pickup behaves differently on Quest | A `PickupPlatformOverride` changed its settings | Overrides must keep proximity 0.1 and AutoHold No |
+| A build-time strip script (`IProcessSceneWithReport`) works in the editor preview but the real build ships blobs, unsplit merges, huge placeholders | Unity's static batching runs before scene-process callbacks, so the script sees already-batched combined meshes | Turn static batching off for Android only and merge in the strip script; make the script fail on batched meshes |
+| `error CS0246` after switching to Android (e.g. VizVid `PointLightVolume`), editor tools vanish | Scripting defines are per platform; the Android list lacks defines Standalone has (`VRC_LIGHT_VOLUMES*`) | Copy the Standalone defines to Android (minus foreign ones), recompile before anything else |
+| MCP "instance not found" / timeouts for minutes during a platform switch | Reimport + domain reload; a cached second switch still takes ~5–10 min | Queue the switch via `EditorApplication.delayCall`; wait on `Editor.log` "Asset Pipeline Refresh … Total", not MCP polling |
+| User told to upload Android, editor on Windows | The close-out's PC verification switched back to Windows | Switch to Android again (and confirm the target) before handing over the Android upload |
 
 ## 6. Sign-off
 
