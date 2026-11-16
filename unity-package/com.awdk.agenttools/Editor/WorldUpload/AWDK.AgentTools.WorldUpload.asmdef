@@ -1,0 +1,28 @@
+{
+    "name": "AWDK.AgentTools.WorldUpload",
+    "rootNamespace": "AWDK.AgentTools",
+    "references": [
+        "AWDK.AgentTools.Editor",
+        "VRC.SDKBase.Editor",
+        "VRC.SDK3.Editor"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [
+        "AWDK_VRC_WORLDS"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.vrchat.worlds",
+            "expression": "3.8.0",
+            "define": "AWDK_VRC_WORLDS"
+        }
+    ],
+    "noEngineReferences": false
+}

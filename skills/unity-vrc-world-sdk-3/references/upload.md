@@ -2,6 +2,9 @@
 
 Complete upload procedure and best practices.
 
+Agent-driven (no clicks, several worlds in a row): `AWDK.AgentTools.WorldUploader` in `com.awdk.agenttools`;
+the owner confirms the ownership agreement once per editor session (`.omp/docs/unity-tools.md` "WorldUploader").
+
 ## Table of Contents
 
 - [Pre-Upload Checklist](#pre-upload-checklist)

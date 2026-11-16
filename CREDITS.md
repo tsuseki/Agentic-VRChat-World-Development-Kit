@@ -261,3 +261,4 @@ Other research references:
 
 Material without a listed source comes from the maintainers' own production experience and
 word-of-mouth from other creators.
+- **Continuous Avatar Uploader** — [anatawa12/ContinuousAvatarUploader](https://github.com/anatawa12/ContinuousAvatarUploader): model for `WorldUploader` (batch build + upload, copyright-agreement handling)

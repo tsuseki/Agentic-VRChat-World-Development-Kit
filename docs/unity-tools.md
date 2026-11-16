@@ -2,7 +2,8 @@
 
 An Editor-only UPM package in [.omp/unity-package/com.awdk.agenttools/](../unity-package/com.awdk.agenttools/).
 Install: [bootstrap.md §3](bootstrap.md#3-wire-it). No hard dependency on the VRChat SDK (VRC types
-are resolved by name via reflection), so it compiles in any 2022.3 project.
+are resolved by name via reflection; WorldUploader has its own asmdef that only compiles with the
+worlds SDK), so it compiles in any 2022.3 project.
 
 ## Conventions
 
@@ -162,3 +163,23 @@ Two prop colliders are allowed, both recognised by name:
   informational `[SOLID_FURNITURE_COLLIDERS]` line. A disabled or inactive one, a trigger, or a
   non-Box collider with that name is a `PROP_COLLIDERS` finding. The audit can't tell big furniture
   from small; the dressing-reviewer checks that.
+
+## WorldUploader: batch build + upload of worlds
+
+`Editor/WorldUpload/` (own asmdef, compiles only when `com.vrchat.worlds` ≥ 3.8 is installed). The
+world counterpart of the Continuous Avatar Uploader: uploads several scenes of one project for the
+current build target with no clicks. Scene list: `"Assets/a.unity;Assets/b.unity"`; a new world
+needs `"scene|thumb.png"` (existing worlds keep their image and name).
+
+1. `WorldUploader.Plan(list)`: read-only; login, build target, each scene's blueprint ID.
+2. **Ownership check, once.** `BuildAndUpload` opens the SDK's "Copyright ownership agreement"
+   modal for every blueprint not agreed in this editor session and awaits a click; driven by an
+   agent nobody clicks and the upload hangs forever. Ask the owner once in chat (VRChat's text,
+   the world list); only after their OK, `WorldUploader.Agree(list)` records it through the SDK's
+   own `VRCCopyrightAgreement.Agree` (server consent + session list), so the SDK check passes.
+   Session-scoped: after an editor restart, ask and `Agree` again.
+3. `WorldUploader.Start(list)`: refuses on a dirty open scene, `__*__` rig objects or not logged in;
+   opens each scene, opens the SDK panel, `BuildAndUpload`. Poll `Status()`; `Cancel()` stops
+   before the next world. MCP calls time out while the build blocks the editor: re-poll, never re-start.
+
+Platform switches (Android) are not chained: switch once, then run the whole list per platform.
