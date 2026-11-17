@@ -204,6 +204,16 @@
 #       (tip, main, fill, low) after face_out and overrides surface / roll_tilt / face_out rolls; U-mirror is off for
 #       these cards (it would turn the hanging side up) and floor_base keeps the roll. Card direction otherwise comes
 #       from tilt / upbias / max_rise / max_fall as before. No draws when unset: off = identical builds.
+#   crown mound=dict(h, r, open=0.25, lobes=4, amp=0.22, holes=7, hole_size=0.45, hole_scale=0.45, tol=0.05,
+#       c=(0, 0, 0), seed=6151) (sprig, opt-in; K-H chenopod mounds: saltbush, bluebush, ruby saltbush): the cards dress a
+#       LOBED, HOLED half-ellipsoid dome of half-height h and radius r on the ground at c instead of a smooth ball. The
+#       outline radius is r x (1 + amp x (0.6 cos(lobes az + p1) + 0.4 cos((lobes + 1) az + p2))) (`lobes` 3-6: an
+#       irregular plan). Holes: a smooth field of `holes` random bumps (angular size hole_size rad) on the dome directions,
+#       thresholded so that `open` of the dome (0.15-0.35) is gaps showing twigs and ground: a card whose middle lies in a
+#       gap is skipped (and redrawn elsewhere by the count loops), a tip / low_tips card is kept at hole_scale x its size
+#       so no twig end goes bare. Every card is then shrunk (x0.8, up to 6 times) until its corners lie within 1 + tol of
+#       the lobed dome; a card still outside is skipped (tip / low cards keep the smallest size). Prostrate mats: h << r.
+#       Setup draws come from its own sequence (`seed`); no per-card draws. Prints STAT mound. Off = identical builds.
 #   crown fill up=0.6, minz=<crown minz>, t=(0.35, 0.97) (opt-in): the fill cards' up lean (d*0.4 + to_axis*inward +
 #       UP*up; < 0 leans them down over the limbs), the lowest fill root and the arc-fraction range along each limb (a
 #       wide fork's bare limb roots: BanyanGrove t 0.15). Defaults = the old fixed values: off = identical builds.
@@ -1865,6 +1875,30 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
     CHAIN_UP = {id(x.cont): x for x in branches if getattr(x, "cont", None) is not None}  # floor_base: merged chain heads
     FBN = [0]  # floor_base: cards levelled
     KIND = ["tip"]  # which loop places the card (crown roles: tip / main / fill / low / hang)
+    MD = C.get("mound") if C["mode"] == "sprig" else None  # opt-in K-H: lobed, holed chenopod dome (see header)
+    MDN = [0, 0, 0]  # mound: cards skipped in gaps, tip/low cards shrunk in gaps, cards skipped outside the outline
+    if MD:
+        mrng = random.Random(MD.get("seed", 6151))  # own sequence: setup only, no per-card draws
+        mph = (mrng.uniform(0.0, 2 * math.pi), mrng.uniform(0.0, 2 * math.pi))
+        mc0 = Vector(MD.get("c", (0.0, 0.0, 0.0))); ML = MD.get("lobes", 4); MA = MD.get("amp", 0.22)
+        mhc = []
+        for _ in range(MD.get("holes", 7)):  # bump centres, area-uniform on the upper unit hemisphere
+            z, a = mrng.uniform(0.0, 0.95), mrng.uniform(0.0, 2 * math.pi); q = math.sqrt(1.0 - z * z)
+            mhc.append(Vector((q * math.cos(a), q * math.sin(a), z)))
+        mhs2 = MD.get("hole_size", 0.45) ** 2
+        def m_norm(p):  # (radius in lobed-dome units, unit direction) of a point
+            q = p - mc0; az = math.atan2(q.y, q.x)
+            R = MD["r"] * (1.0 + MA * (0.6 * math.cos(ML * az + mph[0]) + 0.4 * math.cos((ML + 1) * az + mph[1])))
+            v = Vector((q.x / R, q.y / R, max(q.z, 0.0) / MD["h"])); s = v.length
+            return s, (v / s if s > 1e-9 else UP)
+        m_field = lambda u: sum(math.exp(-(1.0 - u.dot(c)) / mhs2) for c in mhc)
+        mthr = None
+        if MD.get("open", 0.25) > 0.0:  # threshold: `open` of a Fibonacci grid of hemisphere directions is gap
+            ga, fv = math.pi * (3.0 - math.sqrt(5.0)), []
+            for i in range(2000):
+                z = (i + 0.5) / 2000; q = math.sqrt(1.0 - z * z)
+                fv.append(m_field(Vector((q * math.cos(i * ga), q * math.sin(i * ga), z))))
+            fv.sort(); mthr = fv[min(len(fv) - 1, int(len(fv) * (1.0 - MD.get("open", 0.25))))]
     def place(b, t, d0, hang=False, nrm=None, exact=True, ub=None, aim=None, free=False):
         UB = C["upbias"] if ub is None else ub  # ub: per-card upbias (tip_upbias on ground-stem tips)
         A, r, d = point_at(b, t)
@@ -1961,6 +1995,18 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
                 if d.z < 0.0 and Vector((d.x, d.y, 0.0)).length > 1e-6: d = Vector((d.x, d.y, 0.0)).normalized()
                 roll = (UP - d * UP.dot(d)).normalized() if (UP - d * UP.dot(d)).length > 1e-3 and not HS else roll
                 FB = min(h.pts[0].z, A.z - 0.01); FBN[0] += 1
+        if MD and not hang:  # opt-in K-H mound: gaps in the dome, lobed outline (header: crown mound)
+            keep_tip = KIND[0] in ("tip", "low")
+            if mthr is not None and m_field(m_norm(A + d * (sz * 0.5))[1]) >= mthr:
+                if not keep_tip:
+                    MDN[0] += 1; return False
+                sz *= MD.get("hole_scale", 0.45); MDN[1] += 1
+            for _ in range(6):
+                if max(m_norm(x)[0] for x in sprig_card(bm, uvl, A, d, roll, sz, fold, cell, dry=True)) <= 1.0 + MD.get("tol", 0.05): break
+                sz *= 0.8
+            else:
+                if not keep_tip:
+                    MDN[2] += 1; return False
         def fits(cl, s, m=False):  # the card's real surface must stay out of keep-out volumes and above `ground` (shrunk)
             if exact and CFG.get("clear"):  # the real card surface (its back overhang and corners too) must stay out of the volumes
                 q = sprig_card(bm, uvl, A, d, roll, s, fold, cl, dry=True, mirror=m)
@@ -2257,6 +2303,9 @@ def sprig_crown(bm, uvl, branches, rng, count, size, fold, lod1=False, keep=None
                 place(b, t, UP * (CU.get("dir", -1) * math.cos(e)) + h * math.sin(e), nrm=h * (1.0 if rng.random() < 0.5 else -1.0), free=True)
         size = base
     if C.get("floor_base") and probe is None: print(f"STAT floor_base {'lod1' if lod1 else 'lod0'} levelled {FBN[0]}")
+    if MD and probe is None:
+        print(f"STAT mound {'lod1' if lod1 else 'lod0'} gap_skipped {MDN[0]} gap_tips_shrunk {MDN[1]} "
+              f"outline_skipped {MDN[2]} open {MD.get('open', 0.25)} lobes {MD.get('lobes', 4)}")
     return [c for c in cards if c[0] is not None]
 
 def frond(bm, uvl, A, axis, rad, L, tilt, droop, twist, fold, cell, C, lod=None, bark=None):

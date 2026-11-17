@@ -13,9 +13,13 @@ channels by DEFRINGE_THR (while its other key channel is not below them: brown t
 tips on magenta, takes the colour of the nearest clean opaque texel; alpha is unchanged. Off = identical output.
 Bark: make tileable (half-offset + edge-weighted blend), resize to 1024, derive a tangent-space
 OpenGL normal map from the blurred luminance.
+--albedo-cap N (opt-in, sRGB 0-255; white bark K-W, e.g. ghost gum 225): the albedo's brightest channel is rolled off
+with a soft shoulder from N - 30 up to N (never above N), hue and saturation kept (RGB scaled together), so chalk-white
+bark keeps its markings and never clips to flat white under a low sun. The normal map is derived from the capped albedo.
+Off = byte-identical output.
 
   python process_gpt_textures.py leaf <src.png> <dst_RGBA.png> <magenta|green|cyan|blue|yellow> [triple] [--edge-despill] [--defringe]
-  python process_gpt_textures.py bark <src.png> <dst_albedo.png> <dst_normal.png> <strength>
+  python process_gpt_textures.py bark <src.png> <dst_albedo.png> <dst_normal.png> <strength> [--albedo-cap N]
 """
 import sys
 import numpy as np
@@ -122,10 +126,23 @@ def tileable(a):
     return a * wgt + sh * (1 - wgt)
 
 
-def bark(src, dst_a, dst_n, strength):
+def albedo_cap(rgb, cap, knee=30.0):
+    """Soft shoulder on the brightest channel: below cap - knee unchanged, above it rolled off toward cap
+    (exponential, never reaching it), RGB scaled together so hue and saturation stay. rgb: float32 0-255."""
+    m = rgb.max(-1); k0 = cap - knee
+    mc = np.where(m > k0, k0 + knee * (1.0 - np.exp(-(m - k0) / knee)), m)
+    return rgb * (mc / np.maximum(m, 1e-6))[..., None]
+
+
+def bark(src, dst_a, dst_n, strength, cap=None):
     a = np.array(Image.open(src).convert("RGB")).astype(np.float32)
     t = tileable(a)
     alb = Image.fromarray(np.clip(t, 0, 255).astype(np.uint8)).resize((1024, 1024), Image.LANCZOS)
+    if cap is not None:  # opt-in K-W white bark: soft shoulder at `cap` (header)
+        f = np.asarray(alb).astype(np.float32); before = int(f.max())
+        alb = Image.fromarray(np.clip(np.round(albedo_cap(f, float(cap))), 0, 255).astype(np.uint8))
+        print("ALBEDOCAP", dst_a, "cap", cap, "max before", before, "after", int(np.asarray(alb).max()),
+              "p99 lum", round(float(np.percentile(np.asarray(alb.convert('L')), 99)), 1))
     alb.save(dst_a)
     hgt = np.array(alb.convert("L").filter(ImageFilter.GaussianBlur(1.2))).astype(np.float32) / 255.0
     dx = (np.roll(hgt, -1, 1) - np.roll(hgt, 1, 1)) * strength
@@ -141,4 +158,5 @@ if __name__ == "__main__":
         leaf(sys.argv[2], sys.argv[3], sys.argv[4], "triple" in sys.argv[5:],
              edge_despill=EDGE_DESPILL if "--edge-despill" in sys.argv else 0, defringe="--defringe" in sys.argv)
     else:
-        bark(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]))
+        cap = float(sys.argv[sys.argv.index("--albedo-cap") + 1]) if "--albedo-cap" in sys.argv else None
+        bark(sys.argv[2], sys.argv[3], sys.argv[4], float(sys.argv[5]), cap)
