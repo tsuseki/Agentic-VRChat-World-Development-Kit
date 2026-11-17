@@ -14,6 +14,7 @@ by the FBX exporter; Unity must import them with ModelImporter normals = Import.
 """
 import bpy, bmesh
 from mathutils import Vector
+DOME_C, DOME_UP = 0.35, 0.35  # proxy "dome": ellipsoid centre height share of the leaf bounds, up bias of the normals
 
 
 def _leaf_points(ob):
@@ -158,6 +159,22 @@ def transfer_crown_normals(ob, kind, inflate=1.05, cluster=None, crown_mix=0.35,
         hi = Vector((max(q.x for q in pts), max(q.y for q in pts), max(q.z for q in pts)))
         c, r = (lo + hi) / 2, (hi - lo) / 2
         nf = _cone_fn(c, r)
+        align_card_winding(ob, None, nf)
+        return _analytic(ob, nf, cluster, crown_mix, tuple(round(2 * x, 2) for x in r))
+    if kind == "dome":  # opt-in (K-H ground mounds: saltbush, bluebush): analytic like the cone, no proxy mesh
+        # an ellipsoid centred LOW in the leaf bounds (DOME_C x the height above the bottom, top radius to the leaf top)
+        # with an up bias: on a mound sitting on the ground the mid-height ellipsoid centre turned the side and back
+        # normals horizontal / downward and those cards rendered near-black (Saltbush review, Main 2026-11-17)
+        vids, pts = _leaf_points(ref or ob)
+        lo = Vector((min(q.x for q in pts), min(q.y for q in pts), min(q.z for q in pts)))
+        hi = Vector((max(q.x for q in pts), max(q.y for q in pts), max(q.z for q in pts)))
+        c = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z + DOME_C * (hi.z - lo.z)))
+        r = Vector((max((hi.x - lo.x) / 2, 1e-3), max((hi.y - lo.y) / 2, 1e-3), max(hi.z - c.z, 1e-3)))
+
+        def nf(q):
+            d = q - c; g = Vector((d.x / r.x ** 2, d.y / r.y ** 2, d.z / r.z ** 2))
+            n = g.normalized() if g.length > 1e-9 else Vector((0.0, 0.0, 1.0))
+            return (n + Vector((0.0, 0.0, DOME_UP))).normalized()
         align_card_winding(ob, None, nf)
         return _analytic(ob, nf, cluster, crown_mix, tuple(round(2 * x, 2) for x in r))
     proxy = make_proxy(ob, kind, inflate, ref)

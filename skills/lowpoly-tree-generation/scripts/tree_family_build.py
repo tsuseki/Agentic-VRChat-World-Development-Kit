@@ -387,7 +387,9 @@
 #   conifers: levels[i] whorl=k (k limbs per height, evenly around the parent), ang_end=(lo, hi) (angle range at
 #       at[1]; `ang` holds at at[0]: drooping low limbs, rising top ones), up_end (up bias ramps from `up` to it
 #       along each limb: drooping tips); crown size_top (card size x this at `height`, spire), ground (m, hanging
-#       cards shrink/skip to stay above it); proxy="cone"
+#       cards shrink/skip to stay above it); proxy="cone"; proxy="dome" (opt-in, ground mounds): ellipsoid normals
+#       centred at 0.35 of the leaf height with an up bias (tree_normals DOME_C / DOME_UP), so the side and back
+#       cards of a mound shade grey, not black; other proxies unchanged
 #   bend (0.0)   upward pull per stem segment (a leaning palm trunk curving up), stem_segs (6) segments per stem
 #   stem_curve=dict(keys=[(f, deg), ...], foot_split=2)   opt-in, replaces `bend` for the stems: each stem's tilt from
 #       vertical follows the keys (f = arc fraction 0..1, smoothstep between keys), scaled per stem by its drawn lean
