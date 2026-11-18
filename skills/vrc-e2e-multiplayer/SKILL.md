@@ -49,10 +49,10 @@ description: Autonomous multi-client tests of a VRChat world in local Build & Te
 ## Run
 
 ```
-# Editor (MCP): AWDK.E2E.E2EBuild.Start() (queue it with EditorApplication.delayCall: the build
-# outlives the MCP timeout). Done when Status() says "OK <vrcw>" or a new *.vrcw appears in
-# %LOCALAPPDATA%Low\VRChat\VRChat\Worlds (~5-7 min). With several editors open, Editor.log may
-# belong to another instance; don't rely on it.
+# Editor (MCP): AWDK.E2E.E2EBuild.Start(). The call times out after ~30 s but the build goes on
+# (an EditorApplication.delayCall wrapper never fired in an unfocused editor). Done when Status()
+# says "OK <vrcw>" or a new *.vrcw appears in %LOCALAPPDATA%Low\VRChat\VRChat\Worlds (~5-7 min).
+# With several editors open, Editor.log may belong to another instance; don't rely on it.
 cd <project>
 python ../.omp/scripts/e2e/vrc_e2e.py launch --vrcw <path> -n 2 --profiles 0,0
 python ../.omp/scripts/e2e/vrc_e2e.py tp 0 S1B_MirrorB      # client 0 to a waypoint (name or index)
