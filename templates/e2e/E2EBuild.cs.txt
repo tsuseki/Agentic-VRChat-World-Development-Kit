@@ -1,0 +1,156 @@
+// AWDK E2E test build (Editor only). Builds a LOCAL test world (.vrcw, no upload) with the
+// E2EHarness injected into the build copy of the open scene. The open scene is never changed.
+//
+//   E2EBuild.Start()  -> starts the build (async); poll E2EBuild.Status()
+//   result: STATE=idle + "OK <vrcw path>"; manifest: <project>/E2E/manifest.json
+//
+// Waypoints: every root object named POI_* plus <project>/E2E/waypoints.json
+//   [{"name":"A_near","pos":[x,y,z],"yaw":90}, ...]
+// Targets: every UdonBehaviour in the scene whose program exports _interact.
+// The inject flag lives in SessionState, is set only for the duration of Start()'s own build and
+// is cleared in finally, so an SDK upload never carries the harness.
+#if UNITY_EDITOR
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using UnityEditor;
+using UnityEditor.Build;
+using UnityEditor.Build.Reporting;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+using VRC.SDK3.Editor;
+using VRC.SDKBase.Editor;
+using VRC.Udon;
+
+namespace AWDK.E2E
+{
+    public static class E2EBuild
+    {
+        public const string InjectKey = "AWDK.E2E.Inject";
+        public const string ProgramPath = "Assets/AWDK/E2E/E2EHarness.asset";
+        static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
+        static Task running;
+        static readonly StringBuilder Log = new StringBuilder();
+        static string current = "idle";
+
+        public static string ProjectRoot => Path.GetDirectoryName(Application.dataPath);
+        public static string ManifestPath => Path.Combine(ProjectRoot, "E2E", "manifest.json");
+
+        public static bool Busy => running != null && !running.IsCompleted;
+        public static string Status() => (Busy ? "STATE=running " + current : "STATE=idle") + "\n" + Log;
+
+        public static string Start()
+        {
+            if (Busy) return "busy";
+            if (EditorApplication.isPlaying) return "exit play mode first";
+            if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(ProgramPath) == null) return "missing " + ProgramPath;
+            Log.Clear();
+            running = Run();
+            return "started";
+        }
+
+        static void Line(string s)
+        {
+            var l = DateTime.Now.ToString("HH:mm:ss", Inv) + " " + s;
+            Log.AppendLine(l);
+            Debug.Log("[E2EBuild] " + l);
+        }
+
+        static async Task Run()
+        {
+            SessionState.SetBool(InjectKey, true);
+            try
+            {
+                current = "builder";
+                if (VRCSdkControlPanel.window == null) EditorApplication.ExecuteMenuItem("VRChat SDK/Show Control Panel");
+                IVRCSdkWorldBuilderApi b = null;
+                for (int i = 0; i < 300 && !VRCSdkControlPanel.TryGetBuilder(out b); i++) await Task.Delay(100);
+                if (b == null) throw new Exception("SDK world builder not available (control panel open, logged in?)");
+                current = "build";
+                string path = await b.Build();
+                Line("OK " + path);
+            }
+            catch (Exception e) { Line("FAIL " + e.GetType().Name + ": " + e.Message); }
+            finally { SessionState.SetBool(InjectKey, false); current = "idle"; }
+        }
+
+        [Serializable] class Wp { public string name; public float[] pos; public float yaw; }
+        [Serializable] class WpList { public Wp[] items; }
+
+        internal static void Inject(Scene scene)
+        {
+            var prog = AssetDatabase.LoadAssetAtPath<AbstractUdonProgramSource>(ProgramPath);
+            var root = new GameObject("E2EHarness");
+            SceneManager.MoveGameObjectToScene(root, scene);
+
+            var wpT = new List<Transform>(); var wpN = new List<string>();
+            foreach (var g in scene.GetRootGameObjects().Where(g => g.name.StartsWith("POI_", StringComparison.Ordinal)))
+                AddWp(root, g.name, g.transform.position, g.transform.eulerAngles.y, wpT, wpN);
+            var jf = Path.Combine(ProjectRoot, "E2E", "waypoints.json");
+            if (File.Exists(jf))
+                foreach (var w in JsonUtility.FromJson<WpList>("{\"items\":" + File.ReadAllText(jf) + "}").items)
+                    AddWp(root, w.name, new Vector3(w.pos[0], w.pos[1], w.pos[2]), w.yaw, wpT, wpN);
+
+            var tgt = new List<UdonBehaviour>(); var tgtN = new List<string>();
+            foreach (var ub in scene.GetRootGameObjects().SelectMany(g => g.GetComponentsInChildren<UdonBehaviour>(true)))
+            {
+                var p = ub.programSource != null ? ub.programSource.SerializedProgramAsset?.RetrieveProgram() : null;
+                if (p == null || !p.EntryPoints.HasExportedSymbol("_interact")) continue;
+                tgt.Add(ub); tgtN.Add(PathOf(ub.transform));
+            }
+
+            var h = root.AddComponent<UdonBehaviour>();
+            h.programSource = prog;
+            // OnValidate never runs for a component added during the build, so link the compiled
+            // program by hand; without it the client logs "Could not load the program".
+            typeof(UdonBehaviour).GetField("serializedProgramAsset", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                .SetValue(h, prog.SerializedProgramAsset);
+            h.publicVariables.TryAddVariable(new VRC.Udon.Common.UdonVariable<Transform[]>("waypoints", wpT.ToArray()));
+            h.publicVariables.TryAddVariable(new VRC.Udon.Common.UdonVariable<string[]>("waypointNames", wpN.ToArray()));
+            h.publicVariables.TryAddVariable(new VRC.Udon.Common.UdonVariable<UdonBehaviour[]>("targets", tgt.ToArray()));
+            h.publicVariables.TryAddVariable(new VRC.Udon.Common.UdonVariable<string[]>("targetNames", tgtN.ToArray()));
+
+            var sb = new StringBuilder("{\n  \"scene\": \"" + Esc(scene.path) + "\",\n  \"built\": \"" + DateTime.Now.ToString("s", Inv) + "\",\n  \"waypoints\": [");
+            for (int i = 0; i < wpT.Count; i++)
+            {
+                var p = wpT[i].position;
+                sb.Append(i == 0 ? "\n" : ",\n").Append(string.Format(Inv, "    {{\"index\": {0}, \"name\": \"{1}\", \"pos\": [{2:0.###}, {3:0.###}, {4:0.###}], \"yaw\": {5:0.#}}}",
+                    i + 1, Esc(wpN[i]), p.x, p.y, p.z, wpT[i].eulerAngles.y));
+            }
+            sb.Append("\n  ],\n  \"targets\": [");
+            for (int i = 0; i < tgt.Count; i++)
+                sb.Append(i == 0 ? "\n" : ",\n").Append(string.Format(Inv, "    {{\"index\": {0}, \"path\": \"{1}\"}}", i + 1, Esc(tgtN[i])));
+            sb.Append("\n  ]\n}\n");
+            Directory.CreateDirectory(Path.GetDirectoryName(ManifestPath));
+            File.WriteAllText(ManifestPath, sb.ToString());
+            Debug.Log(string.Format(Inv, "[E2EBuild] injected harness: {0} waypoints, {1} targets -> {2}", wpT.Count, tgt.Count, ManifestPath));
+        }
+
+        static void AddWp(GameObject root, string name, Vector3 pos, float yaw, List<Transform> t, List<string> n)
+        {
+            var g = new GameObject("WP_" + name);
+            g.transform.SetParent(root.transform, false);
+            g.transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
+            t.Add(g.transform); n.Add(name);
+        }
+
+        static string PathOf(Transform t) { var s = t.name; for (var p = t.parent; p != null; p = p.parent) s = p.name + "/" + s; return s; }
+        static string Esc(string s) => s.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    class E2EInjector : IProcessSceneWithReport
+    {
+        public int callbackOrder => 10000;
+        public void OnProcessScene(Scene scene, BuildReport report)
+        {
+            if (!BuildPipeline.isBuildingPlayer && report == null) return; // play mode / editor scene load
+            if (!SessionState.GetBool(E2EBuild.InjectKey, false)) return;
+            E2EBuild.Inject(scene);
+        }
+    }
+}
+#endif

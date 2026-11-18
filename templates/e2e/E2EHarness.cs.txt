@@ -1,0 +1,208 @@
+// AWDK E2E harness (TEST BUILDS ONLY). Injected into the build copy of the scene by E2EBuild
+// (Editor) when an agent builds a local test world; never saved in a scene, never uploaded.
+//
+// Command channel: the unmodified VRChat client's official OSC input (/input/Vertical,
+// /input/Horizontal). Real controls send 0 or +-1 (keyboard) or analog values (gamepad, VR
+// stick), so a fractional value would be ambiguous in a real world: that is why this script
+// must never ship. In a test client driven only by OSC the values arrive as sent:
+//   /input/Vertical  a/100  -> latch argument a (1..98)
+//   /input/Horizontal o/100 -> run opcode o (on the rising edge from 0) with the latched argument
+// Opcodes: 9 set index page (a-1; ops 10/11 address index page*98 + a, for lists > 98);
+//          10 teleport to waypoint; 11 interact target; 12 log state now;
+//          13 list waypoints and targets; 14 yaw in place to (a-1)*5 degrees; 15 respawn;
+//          16 log the screen and photo camera settings (VRCCameraSettings; Camera.allCameras is
+//             not exposed to Udon, and the personal mirror has no Udon handle);
+//          17 screen camera: player-layer cull distance a metres (layers Player, PlayerLocal,
+//             MirrorReflection) + occlusion on, then log; 18 screen camera far clip a metres, then log;
+//          19 restore the screen camera settings captured at start, then log;
+//          20 screen camera far clip a*10 metres (up to 980 m), then log.
+// Every result is a "[E2E]" line in the client's output_log, read by .omp/scripts/e2e/.
+using UdonSharp;
+using UnityEngine;
+using VRC.SDKBase;
+using VRC.SDK3.Rendering;
+using VRC.Udon;
+using VRC.Udon.Common;
+
+[UdonBehaviourSyncMode(BehaviourSyncMode.None)]
+public class E2EHarness : UdonSharpBehaviour
+{
+    public Transform[] waypoints;
+    public string[] waypointNames;
+    public UdonBehaviour[] targets;
+    public string[] targetNames;
+    public float stateInterval = 2f;
+
+    private const string Tag = "[E2E] ";
+    private int arg;
+    private int lastOp;
+    private float lastRawH, lastRawV;
+    private bool holding, moved;
+    private Vector3 holdPos;
+    private Quaternion holdRot;
+    private float nextState;
+    private int page;
+    private float startFar;
+    private bool startOccl;
+
+    private void Start()
+    {
+        VRCPlayerApi lp = Networking.LocalPlayer;
+        Debug.Log(Tag + "ready pid=" + (lp != null ? lp.playerId : -1)
+            + " name=" + (lp != null ? lp.displayName : "?")
+            + " waypoints=" + (waypoints == null ? 0 : waypoints.Length)
+            + " targets=" + (targets == null ? 0 : targets.Length));
+        nextState = Time.time + stateInterval;
+        startFar = VRCCameraSettings.ScreenCamera.FarClipPlane;
+        startOccl = VRCCameraSettings.ScreenCamera.UseOcclusionCulling;
+        LogCameras("start");
+    }
+
+    private void Update()
+    {
+        if (Time.time < nextState) return;
+        nextState = Time.time + stateInterval;
+        LogState("tick");
+    }
+
+    // While a command is on the axes the player is immobilised, and afterwards put back where the
+    // command started (unless the command itself moved the player): a fractional OSC axis would
+    // otherwise walk the player forward a little with every command.
+    public override void InputMoveVertical(float value, UdonInputEventArgs args)
+    {
+        lastRawV = value;
+        if (IsCode(value)) { Hold(); arg = Mathf.RoundToInt(Mathf.Abs(value) * 100f); }
+        else Release();
+    }
+
+    public override void InputMoveHorizontal(float value, UdonInputEventArgs args)
+    {
+        lastRawH = value;
+        if (!IsCode(value)) { lastOp = 0; Release(); return; }
+        Hold();
+        int op = Mathf.RoundToInt(Mathf.Abs(value) * 100f);
+        if (op == lastOp) return;
+        lastOp = op;
+        Run(op, arg);
+    }
+
+    private void Hold()
+    {
+        if (holding) return;
+        VRCPlayerApi lp = Networking.LocalPlayer;
+        holding = true;
+        moved = false;
+        holdPos = lp.GetPosition();
+        holdRot = lp.GetRotation();
+        lp.Immobilize(true);
+    }
+
+    private void Release()
+    {
+        if (!holding || IsCode(lastRawV) || IsCode(lastRawH)) return;
+        holding = false;
+        VRCPlayerApi lp = Networking.LocalPlayer;
+        lp.Immobilize(false);
+        if (!moved) lp.TeleportTo(holdPos, holdRot);
+    }
+
+    private bool IsCode(float v)
+    {
+        float a = Mathf.Abs(v);
+        return a > 0.005f && a < 0.985f;
+    }
+
+    private void Run(int op, int a)
+    {
+        VRCPlayerApi lp = Networking.LocalPlayer;
+        int i = page * 98 + a - 1; // ops 10/11 index = page*98 + a
+        if (op == 9) { page = a - 1; Debug.Log(Tag + "page " + page); return; }
+        if (op == 10)
+        {
+            if (waypoints == null || i < 0 || i >= waypoints.Length) { Debug.Log(Tag + "err tp index=" + a); return; }
+            lp.TeleportTo(waypoints[i].position, waypoints[i].rotation);
+            moved = true;
+            Debug.Log(Tag + "tp " + waypointNames[i] + " -> " + waypoints[i].position.ToString("F2"));
+        }
+        else if (op == 11)
+        {
+            if (targets == null || i < 0 || i >= targets.Length || targets[i] == null) { Debug.Log(Tag + "err interact index=" + a); return; }
+            targets[i].SendCustomEvent("_interact");
+            Debug.Log(Tag + "interact " + targetNames[i]);
+        }
+        else if (op == 12) LogState("cmd");
+        else if (op == 13)
+        {
+            for (int w = 0; w < waypoints.Length; w++) Debug.Log(Tag + "wp " + (w + 1) + " " + waypointNames[w] + " " + waypoints[w].position.ToString("F2"));
+            for (int t = 0; t < targets.Length; t++) Debug.Log(Tag + "target " + (t + 1) + " " + targetNames[t]);
+        }
+        else if (op == 14)
+        {
+            lp.TeleportTo(holdPos, Quaternion.Euler(0f, (a - 1) * 5f, 0f));
+            moved = true;
+            Debug.Log(Tag + "yaw " + ((a - 1) * 5));
+        }
+        else if (op == 15)
+        {
+            lp.Respawn();
+            moved = true;
+            Debug.Log(Tag + "respawn");
+        }
+        else if (op == 16) LogCameras("log");
+        else if (op == 17)
+        {
+            VRCCameraSettings c = VRCCameraSettings.ScreenCamera;
+            float[] d = new float[32];
+            d[9] = a; d[10] = a; d[18] = a;
+            c.LayerCullDistances = d;
+            c.LayerCullSpherical = true;
+            c.UseOcclusionCulling = true;
+            LogCameras("cull=" + a);
+        }
+        else if (op == 18) { VRCCameraSettings.ScreenCamera.FarClipPlane = a; LogCameras("far=" + a); }
+        else if (op == 20) { VRCCameraSettings.ScreenCamera.FarClipPlane = a * 10f; LogCameras("far=" + (a * 10)); }
+        else if (op == 19)
+        {
+            VRCCameraSettings c = VRCCameraSettings.ScreenCamera;
+            c.LayerCullDistances = new float[32];
+            c.LayerCullSpherical = false;
+            c.FarClipPlane = startFar;
+            c.UseOcclusionCulling = startOccl;
+            LogCameras("restore");
+        }
+        else Debug.Log(Tag + "err op=" + op + " arg=" + a);
+    }
+
+    private void LogCameras(string why)
+    {
+        LogCam("screen " + why, VRCCameraSettings.ScreenCamera);
+        LogCam("photo", VRCCameraSettings.PhotoCamera);
+    }
+
+    private void LogCam(string label, VRCCameraSettings c)
+    {
+        if (c == null) { Debug.Log(Tag + "cam " + label + " null"); return; }
+        float[] l = c.LayerCullDistances;
+        Debug.Log(Tag + "cam " + label + " active=" + c.Active + " mode=" + c.CameraMode
+            + " near=" + c.NearClipPlane.ToString("F3") + " far=" + c.FarClipPlane.ToString("F1")
+            + " mask=0x" + ((int)c.CullingMask).ToString("X8") + " occl=" + c.UseOcclusionCulling
+            + " lcd9=" + (l != null ? l[9].ToString("F0") : "-") + " lcd18=" + (l != null ? l[18].ToString("F0") : "-")
+            + " spherical=" + c.LayerCullSpherical);
+    }
+
+    private void LogState(string why)
+    {
+        VRCPlayerApi[] players = new VRCPlayerApi[VRCPlayerApi.GetPlayerCount()];
+        VRCPlayerApi.GetPlayers(players);
+        VRCPlayerApi lp = Networking.LocalPlayer;
+        string s = Tag + "state " + why + " t=" + Time.time.ToString("F1") + " me=" + lp.playerId
+            + " pos=" + lp.GetPosition().ToString("F2") + " yaw=" + lp.GetRotation().eulerAngles.y.ToString("F0")
+            + " players=" + players.Length;
+        for (int p = 0; p < players.Length; p++)
+        {
+            if (players[p] == null) continue;
+            s += " | " + players[p].playerId + (players[p].isLocal ? "*" : "") + " " + players[p].GetPosition().ToString("F1");
+        }
+        Debug.Log(s);
+    }
+}
