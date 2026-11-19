@@ -2,6 +2,31 @@
 
 Semantic versioning, one git tag `vX.Y.Z` per release; the current version is in `VERSION`.
 
+## 0.5.0 — 2026-11-19
+
+### Lighting
+
+- **Lightmap vs Light Volume is decided by a test** (look and VRAM) per complex object; a bad UV2
+  can still win on volumes. Measured case: low-poly trees with a clean UV2 stayed lightmapped
+  (8.1 MB lightmap vs +17.7 MB volume, worse trunks); trunks and thin parts lose shading on any
+  volume (lightmap-allocation lessons, new note).
+- **Light Volume atlas packing**: read the generated atlas size, not box voxels; the greedy packer
+  leaves 30–45 % empty and swings ~±1 MB between similar layouts (new note).
+- **End-of-world lightmap pass**: drop lightmaps with 0 renderers and repack big atlases tightly at
+  the same texel density (new note); isolate experiment bakes from other lightmaps (Bakery lessons).
+
+### Since 0.4.0
+
+- E2E multi-client test scaffold (harness, build hook, driver, mirror scenarios, skill) and knowledge
+  notes on the personal-mirror Player-layer sky wall, island fly-in guard and tiny-player detection.
+- WorldUploader: agent batch world upload with a one-time ownership agreement; the upload request is
+  the confirmation.
+- lowpoly-tree-generation: crown mound, bark `--albedo-cap`, `bloom_atlas.py`, opt-in "dome"
+  crown-normal proxy for ground mounds.
+- Android skill gotchas: static batching before strip callbacks, per-platform defines, platform-switch
+  MCP dropouts, re-switch before Android upload.
+- fumo-plushie: `tripo_studio.py` dismisses promo modals and forces FBX export.
+
 ## 0.4.0 — 2026-11-13
 
 ### Rules

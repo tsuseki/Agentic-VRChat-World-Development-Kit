@@ -19,6 +19,7 @@ Distilled from the knowledge notes for this topic; grep .omp/knowledge/notes/ fo
 - **After a bake, run the post-bake steps in order: finished line → reflection probes → restore the shared `ftGlobalStorage` → world re-samples of baked data → verify counts, bindings and lights → guarded save** — reordering ships stale probes, a modified project-wide storage file or derived tables from the previous bake (see SKILL.md §Post-bake sequence).
 - **Use a full Render whenever geometry, layout or atlas settings changed or the scene never had its own full bake; when MCP calls all time out ~40 s after a selected-groups render, look for Bakery's modal refusal and send Enter to it** — the refusal is a modal `DisplayDialog` that freezes the editor main thread (10 minutes lost once), also in scenes sharing another scene's lightmaps.
 - **Run Bakery's hardware tests from PowerShell in the Bakery folder (exit 0 = works) and write the `runs*` / `foundCompatibleSetup` fields into `ftGlobalStorage`, instead of the Detect optimal settings menu** — the menu ends in a modal dialog an MCP-driven editor can't answer, and `execute_code` refuses `Process.Start`.
+- **In a lighting experiment, bake only the group under test or restore the other lightmap files before measuring memory** — an exterior-only experiment bake also grew an unrelated atlas 1024 → 2048 (+3 MB) and polluted the comparison.
 
 ## Lightmap groups, atlas share and texel density
 
