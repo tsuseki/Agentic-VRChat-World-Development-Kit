@@ -384,6 +384,9 @@
 #   bark_macro=dict(scale, amount)   low-frequency value variation baked into the vertex colour of the bark
 #       (multiply in the bark shader; leaves get white); breaks the tiling over big trunks
 #   levels[i] segs (4 on the first level, else 3): segments per limb (fewer = cheaper bark on many-limbed conifers)
+#   levels[i] golden=<deg> (opt-in): limb (or whorl) j leaves at golden + j x 137.5 deg around its parent instead of a
+#       random azimuth (the random draws are kept, so every other draw is unchanged): one limb per height (`whorl` 1)
+#       then never leaves a 90 deg sector empty over several limbs (Park Linden P1 "stacked pads", 2026-11-20)
 #   conifers: levels[i] whorl=k (k limbs per height, evenly around the parent), ang_end=(lo, hi) (angle range at
 #       at[1]; `ang` holds at at[0]: drooping low limbs, rising top ones), up_end (up bias ramps from `up` to it
 #       along each limb: drooping tips); crown size_top (card size x this at `height`, spire), ground (m, hanging
@@ -802,6 +805,7 @@ def axis_gap(p, pts, radii):
     return best
 
 AVOID_STATS = {}  # CFG avoid: per skeleton build, what the clash avoidance changed (STAT avoid)
+GOLDEN = math.pi * (3 - math.sqrt(5))  # golden angle, 137.5 deg (levels golden)
 
 def _axis_samples(pts, radii, ds):
     """(point, radius, arc length) every <= ds m along the polyline, both ends included"""
@@ -1255,6 +1259,8 @@ def build_skeleton(seed):
                         w = j // wk
                         fw = P["at"][0] + (P["at"][1] - P["at"][0]) * (w / max(1, nw - 1)) if nw > 1 else P["at"][1]
                         fw = min(1.0, fw + rng.uniform(-0.02, 0.02)); azw = rng.uniform(0, 2 * math.pi)
+                        if P.get("golden") is not None:  # opt-in: whorl w turned golden-angle steps from `golden` deg
+                            azw = math.radians(P["golden"]) + w * GOLDEN  # (the draw kept), so no sector stays empty
                     f = fw; p, r, d = point_at(b, f)
                     az = azw + 2 * math.pi * (j % wk) / wk + rng.uniform(-0.25, 0.25)
                 else:
@@ -1262,6 +1268,7 @@ def build_skeleton(seed):
                     f = min(1.0, f + rng.uniform(-0.04, 0.04))
                     p, r, d = point_at(b, f)
                     az = rng.uniform(0, 2 * math.pi) if n > 3 else (j / n) * 2 * math.pi + rng.uniform(-0.6, 0.6)
+                    if P.get("golden") is not None: az = math.radians(P["golden"]) + j * GOLDEN  # opt-in (draws kept)
                 def mk_perp(azx):
                     outw = Vector((p.x, p.y, 0))
                     if wk and P.get("fan") is not None and lv == 0 and outw.length > 0.05:
