@@ -60,6 +60,28 @@ in that world's `WORLD.md` Decisions log, and then `WORLD.md` wins.
 
 Full table with reasons and settings: [references/reception-and-density.md](references/reception-and-density.md) §1.
 
+### Lightmap or Light Volume: decide by look, measured by texels per chart
+
+Light Volumes win on **look**, not memory: for small props both cost ~0.1 MB in total, and anything
+inside an existing room volume adds no Light Volume memory at all. The predictor of a scuffed bake is
+**lightmap texels per UV2 chart** at the density the bake actually gives the object (a chart under
+~4 × 4 texels cannot hold a gradient).
+
+Move a static object to P only when all hold:
+1. small: largest side ≤ ~0.5 m;
+2. complex UV2: ≥ 8 charts or mostly curved charts;
+3. botched at its baked density: < 16 texels per chart with ≥ half its charts under 4 texels across,
+   or broken UV2 (fill < 0.05, or > 10 % of charts overlapping).
+
+Never move: objects whose look depends on their own shadowing (slats, shelves and cavities, tree
+crowns: volumes leak light through them at 0.25–0.5 m), soft goods, furniture and fixture bodies,
+books in shelves; fix their UV2 or raise their scale instead. Leafy plants are exempt from the
+chart test (they bake fine on the lightmap despite tiny charts). Fine on the lightmap: < 8 flat
+charts, or ≥ 50 texels per chart with < 25 % of charts under 4 texels. Objects that move look as
+clean at 0.25–0.5 m voxels as at 0.1 m. A new volume of its own needs the memory sum: lightmap
+share A·d²·b/fill against voxels × 24 B; at 0.1 m almost nothing has enough surface per m³ to win.
+Grey zone → same-camera play-mode look test.
+
 ## 2. Budget and density
 
 - **Density targets** (effective texels/m, 1 unit = 1 m):

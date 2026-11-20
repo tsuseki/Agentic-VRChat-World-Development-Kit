@@ -2,6 +2,16 @@
 
 Semantic versioning, one git tag `vX.Y.Z` per release; the current version is in `VERSION`.
 
+## 0.6.0 — 2026-11-20
+
+### Lighting
+
+- **Lightmap or Light Volume rule** (lightmap-allocation SKILL §1): volumes win on look, not memory;
+  move a small (≤ ~0.5 m), complex-UV2 static object to a Light Volume when its UV2 is botched at
+  its baked density (< 16 texels per chart, ≥ half its charts under 4 texels); never move
+  self-shadowing objects (slats, shelves, tree crowns), soft goods, furniture bodies or books;
+  0.25–0.5 m voxels suffice. From a 16-object lab bake (new note, checklist line).
+
 ## 0.5.0 — 2026-11-19
 
 ### Lighting

@@ -4,7 +4,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 
 ## Topics
 
-- [lighting-baking](#lighting-baking) (84)
+- [lighting-baking](#lighting-baking) (85)
 - [probes-reflection-and-light](#probes-reflection-and-light) (27)
 - [materials-textures-shaders](#materials-textures-shaders) (50)
 - [geometry-meshes-uvs](#geometry-meshes-uvs) (34)
@@ -64,6 +64,7 @@ One lesson per file in `notes/`. Each has front matter (`title`, `topic`, `tags`
 - [Green/pink lightmap blotches: fix atlas starvation before blaming denoise or compression](notes/bakery-chroma-patches-atlas-starvation-recipe.md) — Chroma blobs and bleed gradients on hero surfaces came from one hidden mesh eating 68% of the atlas; audit chart share, demote hogs, use fixed groups, pad, and bake at GI 32 / 4 bounces.
 - [Invisible ShadowsOnly proxy boxes must float and match object height, and only for things that never move](notes/baked-shadow-proxy-boxes-float-and-match-height.md) — A ShadowsOnly proxy resting on the ground bakes a black slab, one shorter than the object hides its shadow underneath, and anything a player can move should get no baked shadow at all.
 - [Lamp too bright' usually means the spill; the fixture's own glow is a separate knob](notes/lamp-brightness-spill-vs-fixture-are-separate-knobs.md) — A lamp's spill on the room (baked emitter intensity) and the fixture's own appearance (shade emission/colour) are independent; 'too bright' and 'too dark' can both be true of one lamp, and fixing it moves the two knobs in opposite directions.
+- [Light Volumes win on botched-UV2 objects, not on memory; texels per chart predicts the scuffed bake](notes/light-volume-wins-on-botched-uv2-not-memory.md) — In a 16-object lab bake, objects with a botched UV2 (few texels per chart) looked scuffed on the lightmap and clean on a Light Volume at any voxel size, while self-shadowing objects looked better on the lightmap; memory differed by only ~0.1 MB for small props.
 - [Lighting wall art: spot geometry traps and the self-lit canvas alternative](notes/lighting-wall-art-with-spots-or-self-lit-canvas.md) — A spot aimed at a painting's centre still puts its hot spot above the art and two overlapping cones never blend; move the light out from the wall, use one cone per work, or in a dark room make the canvas self-emissive.
 - [Lightmap EXRs land on disk after the bake's completion signals](notes/lightmap-files-are-written-after-isrunning-goes-false.md) — Lightmapping.isRunning == false and the PathTracer completion line do not mean the output is on disk; hashing in that window makes a good bake look like it produced nothing.
 - [Lightmap UV overlap warnings at draft resolution may be harmless; check crops at final resolution first](notes/draft-lightmap-uv-overlap-warnings-check-final-res.md) — Draft bakes warned of overlapping lightmap UVs on almost every renderer (Smart-UV trees with margin 0.01 and generated walls alike), yet the final-resolution bake with 3× lightmap scale on near trees showed no blotches or bleeding; inspect final-res crops before changing UV2 margins.
