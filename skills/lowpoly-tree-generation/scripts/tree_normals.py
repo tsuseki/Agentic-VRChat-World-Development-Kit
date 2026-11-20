@@ -145,7 +145,46 @@ def _cone_fn(c, r):
     return nf
 
 
+BARK_DOWN_Z, BARK_DOWN_K = -0.4, 0.25  # bark corner normals below z -0.4 are compressed toward horizontal (z -1 -> -0.55)
+
+
+def lift_bark_normals(ob):
+    """Bark (material 0) corner normals pointing steeply down (twig / limb bases, the undersides of near-horizontal
+    limbs) shade as crisp near-black wedges under a high sun (AU1 r2 R9, the 'dark rhombus'). Every bark loop with
+    z < BARK_DOWN_Z gets z' = BARK_DOWN_Z + (z - BARK_DOWN_Z) * BARK_DOWN_K, its horizontal direction kept (straight-down
+    loops take their face's horizontal, else the vertex's outward direction from the trunk axis). Loops at or above
+    BARK_DOWN_Z and every leaf loop are written back unchanged. Returns the number of loops changed."""
+    me = ob.data
+    loops = [n.vector.copy() for n in me.corner_normals]
+    k = 0
+    for p in me.polygons:
+        if p.material_index != 0:
+            continue
+        for li in p.loop_indices:
+            n = loops[li]
+            if n.z >= BARK_DOWN_Z:
+                continue
+            h = Vector((n.x, n.y, 0.0))
+            if h.length < 0.05:
+                h = Vector((p.normal.x, p.normal.y, 0.0))
+            if h.length < 0.05:
+                co = me.vertices[me.loops[li].vertex_index].co; h = Vector((co.x, co.y, 0.0))
+            h = h.normalized() if h.length > 1e-6 else Vector((1.0, 0.0, 0.0))
+            z = BARK_DOWN_Z + (n.z - BARK_DOWN_Z) * BARK_DOWN_K
+            loops[li] = (h * (1.0 - z * z) ** 0.5 + Vector((0.0, 0.0, z))).normalized(); k += 1
+    if k:
+        me.normals_split_custom_set(loops)
+    return k
+
+
 def transfer_crown_normals(ob, kind, inflate=1.05, cluster=None, crown_mix=0.35, ref=None):
+    """Crown-proxy normals on the leaf cards (_transfer_crown_normals), then lift_bark_normals on the bark."""
+    dims = _transfer_crown_normals(ob, kind, inflate, cluster, crown_mix, ref)
+    lift_bark_normals(ob)
+    return dims
+
+
+def _transfer_crown_normals(ob, kind, inflate=1.05, cluster=None, crown_mix=0.35, ref=None):
     """Apply proxy normals to leaf cards of `ob`; returns the proxy dimensions for reporting.
     cluster (m, ellipsoid/capsule/cone only): cards are binned into cells of that size and each leaf vertex's
     normal points out of ITS cell's card centroid, mixed with crown_mix of the crown proxy and a little
